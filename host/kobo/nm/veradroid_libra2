@@ -1,0 +1,4 @@
+# NickelMenu entry for VeraDroid on Kobo Libra 2.
+# Copy to /mnt/onboard/.adds/nm/veradroid_libra2 to launch from Nickel.
+menu_item:main:VeraDroid (Android):cmd_spawn:/bin/sh /mnt/onboard/.adds/veradroid-libra2/boot/veradroid.sh home
+menu_item:main:VeraDroid Stop:cmd_spawn:/bin/sh /mnt/onboard/.adds/veradroid-libra2/boot/stop.sh

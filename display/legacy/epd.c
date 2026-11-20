@@ -616,7 +616,9 @@ static void set_wfm(FBInkConfig *c, int mode, WFM_MODE_INDEX_T auto_wfm)
     }
     if (c->wfm_mode == WFM_REAGL && no_reagl) c->wfm_mode = WFM_GL16;
     if (c->wfm_mode == WFM_REAGL) c->is_flashing = true;
+#ifndef FBINK_FOR_KOBO
     if (c->wfm_mode == WFM_REAGL && g_color && !g_cfa) c->wfm_mode = WFM_GLRC16;   /* still FULL, as the driver wants it */
+#endif
     if (c->wfm_mode == WFM_AUTO) c->dithering_mode = HWD_PASSTHROUGH;
 }
 static void push_region(int x0, int y0, int x1, int y1, int mode);
@@ -701,6 +703,11 @@ static int open_fb(void)
     if (fbink_init(fbfd, &cfg) < 0) { fprintf(stderr, "epd: fbink_init failed\n"); return -1; }
     FBInkState st;
     fbink_get_state(&cfg, &st);
+#ifdef FBINK_FOR_KOBO
+    g_is_mtk = 0;
+    g_cfa = 0;
+    g_color = 0;
+#else
     g_is_mtk = st.is_mtk;
     /* Oasis 2 / Oasis 3 (FBInk platform "Zelda", i.MX7D EPDC + PxP): any HW dithering request (ordered, quant 7 for
        GC16 / REAGL, 1 for DU) turns the whole update black - Oasis 3 user: 灰度最准 "a big black area"; the KO3 and Oasis 2
@@ -720,6 +727,7 @@ static int open_fb(void)
             fprintf(stderr, "epd: fb id '%.16s' is MTK hwtcon but FBInk does not know this device: refreshing with the MTK ioctl ourselves\n", fix.id);
         }
     }
+#endif
     if (g_cfa) fprintf(stderr, "epd: color panel at 32bpp: refreshing with SKIP_CFA ourselves\n");
     if (!g_is_mtk) {
         /* MXCFB_GET_WAVEFORM_TYPE _IOR('F', 0x39, u32): WAVEFORM_TYPE_4BIT 1 / 5BIT 2 (include/linux/mxcfb.h of the 3.x / 4.x
@@ -729,7 +737,7 @@ static int open_fb(void)
         fprintf(stderr, "epd: waveform type %u%s\n", wt, no_reagl ? " (4-bit: REAGL -> GL16)" : "");
     }
     fprintf(stderr, "epd: %s (%s/%s) %ux%u %ubpp mtk=%d\n", st.device_name, st.device_codename, st.device_platform,
-            st.screen_width, st.screen_height, st.bpp, st.is_mtk);
+            st.screen_width, st.screen_height, st.bpp, g_is_mtk);
     fprintf(stderr, "epd: anim_mode=%d dir=%d steps=%d min=%d%%\n", anim_mode, anim_dir, anim_steps, anim_min_pct);
     if (g_rot) fprintf(stderr, "epd: rotate %d: logical %dx%d on panel %dx%d (visible width %d)\n", g_rot, LW, LH, W, H, VW);
     return 0;
@@ -919,7 +927,10 @@ static int push_y8(const uint8_t *buf, int x, int y, int w, int h, int mode)
         busy_add(x, y, w, h, t0);
         {   /* quality pass bookkeeping: REAGL (sent FULL) and the GC16 FULL flash are full quality; GL16 FULL is full quality
                only where it stands in for REAGL (4-bit i.MX). 1-bit, swipes and collisions count as low quality. */
-            int fullq = c.is_flashing && (c.wfm_mode == WFM_GC16 || c.wfm_mode == WFM_REAGL || c.wfm_mode == WFM_GLRC16 ||
+            int fullq = c.is_flashing && (c.wfm_mode == WFM_GC16 || c.wfm_mode == WFM_REAGL ||
+#ifndef FBINK_FOR_KOBO
+                                          c.wfm_mode == WFM_GLRC16 ||
+#endif
                                           c.wfm_mode == WFM_GL16);
             int lowq = c.wfm_mode == WFM_DU || c.wfm_mode == WFM_A2 || c.is_animated || coll;   /* AUTO picks a 16-gray waveform for gray content itself */
             qp_note(buf, x, y, w, h, fullq && !c.is_animated, lowq, t0);

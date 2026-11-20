@@ -144,6 +144,9 @@ static char G_BACK_EXCLUDE[512] = "";
 static char G_CORNERS[24] = "all";   /* corners whose long press is a gesture ("tl,bl", "" = none, "all"); others stay Android's */
 /* rotation (see the header): ROT_ON = --rotate was given at all; PW/PH = panel size in pixels; W/H become the logical size */
 static int ROT = 0, ROT_ON = 0, PW = 0, PH = 0, VW = 0;   /* FLAGF exists -> gestures are off (only bottom-edge back stays) */
+static int SWAP_XY = 0, FLIP_X = 0, FLIP_Y = 0;          /* raw touchscreen axis transform (e.g. Kobo Libra 2 Elan: --swap-xy) */
+static const char *KEYDEV = NULL, *SLEEP_FLAG = NULL;    /* optional hardware key device (Kobo gpio-keys) + sleep gate */
+static int keyfd = -1, KEY_SWAP = 0, KEY_MAP_PAGE = 0;   /* KEY_MAP_PAGE: 0 = volume keys (default), 1 = page keys */
 static volatile sig_atomic_t quit = 0, want_release = 0, want_grab = 0;
 static int paused = 0;
 static int hw_slot = 0;          /* protocol B: the slot the panel's next events refer to (it only sends ABS_MT_SLOT on change) */
@@ -413,7 +416,11 @@ static void resync_slots(int after_drop)
     RS(EV_SYN, SYN_REPORT, 0);
 #undef RS
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
+#ifdef input_event_sec
+    for (int i = 0; i < n; i++) { fr[i].input_event_sec = ts.tv_sec; fr[i].input_event_usec = ts.tv_nsec / 1000; }
+#else
     for (int i = 0; i < n; i++) { fr[i].time.tv_sec = ts.tv_sec; fr[i].time.tv_usec = ts.tv_nsec / 1000; }
+#endif
     resync_lifts += lifted;
     logf_("resync (%s): %d stuck finger(s) lifted, %d still down", after_drop == 1 ? "events dropped" : after_drop == 2 ? "watchdog" : "new touch", lifted, left);
     handle_frame(fr, n);
@@ -656,10 +663,38 @@ static void clamp_event(struct input_event *e)
         if (e->value < sy_min) e->value = sy_min; else if (e->value > sy_max) e->value = sy_max;
     }
 }
+/* raw panel axis transform (e.g. Kobo Libra 2 Elan Touchscreen: raw X=0..1680, raw Y=0..1264 -> portrait X=raw_Y, Y=raw_X).
+   Applied before rot_event() so panel coordinates are always upright 0..PW-1 x 0..PH-1. */
+static void xform_event(struct input_event *e)
+{
+    if ((!SWAP_XY && !FLIP_X && !FLIP_Y) || e->type != EV_ABS) return;
+    int isx = e->code == ABS_MT_POSITION_X || e->code == ABS_X;
+    int isy = e->code == ABS_MT_POSITION_Y || e->code == ABS_Y;
+    if (!isx && !isy) return;
+    int mt = e->code == ABS_MT_POSITION_X || e->code == ABS_MT_POSITION_Y;
+    int cx = mt ? ABS_MT_POSITION_X : ABS_X, cy = mt ? ABS_MT_POSITION_Y : ABS_Y;
+    if (SWAP_XY) {
+        e->code = isx ? cy : cx;
+        int tmp = isx; isx = isy; isy = tmp;
+    }
+    if (isx && FLIP_X) e->value = PW - 1 - e->value;
+    if (isy && FLIP_Y) e->value = PH - 1 - e->value;
+    int lim = isx ? PW - 1 : PH - 1;
+    if (e->value < 0) e->value = 0;
+    else if (e->value > lim) e->value = lim;
+}
 static void rot_frame(struct input_event *fr, int n)
 {
     if (md == IDLE) gconf_load();          /* a live 0 <-> 180 switch takes effect between touches (only stats the file) */
-    if (!ROT) { for (int i = 0; i < n; i++) clamp_event(&fr[i]); return; }
+    if (SWAP_XY || FLIP_X || FLIP_Y) {
+        for (int i = 0; i < n; i++) xform_event(&fr[i]);
+    }
+    if (!ROT) {
+        if (!SWAP_XY && !FLIP_X && !FLIP_Y) {
+            for (int i = 0; i < n; i++) clamp_event(&fr[i]);
+        }
+        return;
+    }
     for (int i = 0; i < n; i++) rot_event(&fr[i]);
 }
 
@@ -1010,8 +1045,9 @@ static int setup_uinput_touch(void)
         if (codes[i] == ABS_MT_PRESSURE && ai.maximum > ai.minimum && ai.maximum > 0) out_pres_max = ai.maximum;
         ioctl(ufd, UI_SET_ABSBIT, codes[i]);
         dev.absmin[codes[i]] = ai.minimum; dev.absmax[codes[i]] = ai.maximum;
-        if (ROT_ON && codes[i] == ABS_MT_POSITION_X) { dev.absmin[codes[i]] = 0; dev.absmax[codes[i]] = W - 1; }   /* logical pixels */
-        if (ROT_ON && codes[i] == ABS_MT_POSITION_Y) { dev.absmin[codes[i]] = 0; dev.absmax[codes[i]] = H - 1; }
+        int logical_axes = ROT_ON || SWAP_XY || FLIP_X || FLIP_Y;
+        if (logical_axes && codes[i] == ABS_MT_POSITION_X) { dev.absmin[codes[i]] = 0; dev.absmax[codes[i]] = W - 1; }   /* logical pixels */
+        if (logical_axes && codes[i] == ABS_MT_POSITION_Y) { dev.absmin[codes[i]] = 0; dev.absmax[codes[i]] = H - 1; }
         fprintf(stderr, "abs %d: %d..%d\n", codes[i], dev.absmin[codes[i]], dev.absmax[codes[i]]);
     }
     if (src_proto != PROTO_B) {
@@ -1024,8 +1060,9 @@ static int setup_uinput_touch(void)
         if (!oky) { ay.minimum = 0; ay.maximum = H - 1; }
         sx_min = ax.minimum; sx_max = ax.maximum; sy_min = ay.minimum; sy_max = ay.maximum;
         const int syn[4] = { ABS_MT_SLOT, ABS_MT_TRACKING_ID, ABS_MT_POSITION_X, ABS_MT_POSITION_Y };
-        const int smin[4] = { 0, 0, ROT_ON ? 0 : ax.minimum, ROT_ON ? 0 : ay.minimum };
-        const int smax[4] = { ASLOTS - 1, 65535, ROT_ON ? W - 1 : ax.maximum, ROT_ON ? H - 1 : ay.maximum };
+        int logical_axes = ROT_ON || SWAP_XY || FLIP_X || FLIP_Y;
+        const int smin[4] = { 0, 0, logical_axes ? 0 : ax.minimum, logical_axes ? 0 : ay.minimum };
+        const int smax[4] = { ASLOTS - 1, 65535, logical_axes ? W - 1 : ax.maximum, logical_axes ? H - 1 : ay.maximum };
         for (int i = 0; i < 4; i++) {
             ioctl(ufd, UI_SET_ABSBIT, syn[i]);
             dev.absmin[syn[i]] = smin[i]; dev.absmax[syn[i]] = smax[i];
@@ -1181,6 +1218,51 @@ static void tap_read(void)
     }
 }
 
+static int is_sleeping(void)
+{
+    return SLEEP_FLAG && SLEEP_FLAG[0] && access(SLEEP_FLAG, F_OK) == 0;
+}
+
+static void keydev_read(void)
+{
+    struct input_event ev;
+    for (;;) {
+        ssize_t n = read(keyfd, &ev, sizeof(ev));
+        if (n == (ssize_t)sizeof(ev)) {
+            if (paused) continue;
+            if (ev.type == EV_KEY && ev.code == KEY_POWER) {
+                /* Trigger sleep/wake toggle on release so long-press hardware power-off still works */
+                if (ev.value == 0) {
+                    logf_("hw key: KEY_POWER release -> action power");
+                    action("power", NULL);
+                }
+                continue;
+            }
+            if (ev.type == EV_KEY && (ev.code == 193 || ev.code == 194 || ev.code == KEY_PAGEUP || ev.code == KEY_PAGEDOWN)) {
+                if (is_sleeping()) continue;
+                if (ev.value != 1) continue;   /* press triggers page turn */
+                gconf_load();
+                int is_next = (ev.code == 193 || ev.code == KEY_PAGEDOWN);
+                if (ROT == 180) is_next = !is_next;
+                if (KEY_SWAP) is_next = !is_next;
+                int out_key = KEY_MAP_PAGE ? (is_next ? KEY_PAGEDOWN : KEY_PAGEUP)
+                                           : (is_next ? KEY_VOLUMEDOWN : KEY_VOLUMEUP);
+                logf_("hw key %d -> key %d (rot=%d swap=%d)", ev.code, out_key, ROT, KEY_SWAP);
+                idle_thaw();
+                epd_cmd("TOUCH\n");
+                key_tap(out_key);
+                action("poke", NULL);
+                continue;
+            }
+            continue;
+        }
+        if (n < 0 && (errno == EAGAIN || errno == EINTR)) return;
+        logf_("keydev gone (%s), hardware keys off", n < 0 ? strerror(errno) : "eof");
+        close(keyfd); keyfd = -1;
+        return;
+    }
+}
+
 int main(int argc, char **argv)
 {
     const char *dev = NULL;
@@ -1203,6 +1285,13 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--gconf") && i + 1 < argc) GCONF = argv[++i];
         else if (!strcmp(argv[i], "--fg") && i + 1 < argc) FGF = argv[++i];
         else if (!strcmp(argv[i], "--rotate") && i + 1 < argc) { ROT = atoi(argv[++i]); ROT_ON = 1; }
+        else if (!strcmp(argv[i], "--swap-xy")) SWAP_XY = 1;
+        else if (!strcmp(argv[i], "--flip-x")) FLIP_X = 1;
+        else if (!strcmp(argv[i], "--flip-y")) FLIP_Y = 1;
+        else if (!strcmp(argv[i], "--keydev") && i + 1 < argc) KEYDEV = argv[++i];
+        else if (!strcmp(argv[i], "--key-swap")) KEY_SWAP = 1;
+        else if (!strcmp(argv[i], "--key-map") && i + 1 < argc) { KEY_MAP_PAGE = !strcmp(argv[++i], "page"); }
+        else if (!strcmp(argv[i], "--sleep-flag") && i + 1 < argc) SLEEP_FLAG = argv[++i];
         else if (!strcmp(argv[i], "--vw") && i + 1 < argc) VW = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--tapdev") && i + 1 < argc) TAPDEV = argv[++i];
         else if (!strcmp(argv[i], "--epd-fifo") && i + 1 < argc) EPDF = argv[++i];
@@ -1259,6 +1348,11 @@ int main(int argc, char **argv)
         if (tapfd < 0) fprintf(stderr, "tapdev %s: %s\n", TAPDEV, strerror(errno));
         else if (ioctl(tapfd, EVIOCGRAB, 1) < 0) perror("EVIOCGRAB tapdev");
     }
+    if (KEYDEV && KEYDEV[0]) {
+        keyfd = open(KEYDEV, O_RDONLY | O_NONBLOCK);
+        if (keyfd < 0) fprintf(stderr, "keydev %s: %s\n", KEYDEV, strerror(errno));
+        else if (ioctl(keyfd, EVIOCGRAB, 1) < 0) perror("EVIOCGRAB keydev");
+    }
     {
         struct input_absinfo ai;
         if (src_proto == PROTO_B && ioctl(tfd, EVIOCGABS(ABS_MT_SLOT), &ai) == 0 && ai.value >= 0 && ai.value < MAXSLOT) hw_slot = cur_slot = ai.value;
@@ -1279,12 +1373,12 @@ int main(int argc, char **argv)
         if (want_release) {
             want_release = 0;
             boost_end();
-            if (!paused) { release_android(1, "released to the Kindle"); ioctl(tfd, EVIOCGRAB, 0); if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 0); paused = 1; md = IDLE; nheld = 0; nf = 0; memset(sl, 0, sizeof(sl)); memset(as_, 0, sizeof(as_)); st_btn = 0; logf_("released"); }
+            if (!paused) { release_android(1, "released to the Kindle"); ioctl(tfd, EVIOCGRAB, 0); if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 0); if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 0); paused = 1; md = IDLE; nheld = 0; nf = 0; memset(sl, 0, sizeof(sl)); memset(as_, 0, sizeof(as_)); st_btn = 0; logf_("released"); }
         }
         if (want_grab) {
             want_grab = 0;
             if (paused) {
-                ioctl(tfd, EVIOCGRAB, 1); if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 1); paused = 0; md = IDLE; nheld = 0; nf = 0; memset(sl, 0, sizeof(sl)); memset(as_, 0, sizeof(as_)); st_btn = 0;
+                ioctl(tfd, EVIOCGRAB, 1); if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 1); if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 1); paused = 0; md = IDLE; nheld = 0; nf = 0; memset(sl, 0, sizeof(sl)); memset(as_, 0, sizeof(as_)); st_btn = 0;
                 struct input_absinfo ai;
                 if (src_proto == PROTO_B && ioctl(tfd, EVIOCGABS(ABS_MT_SLOT), &ai) == 0 && ai.value >= 0 && ai.value < MAXSLOT) hw_slot = cur_slot = ai.value;
                 release_android(1, "grabbed again");
@@ -1292,11 +1386,15 @@ int main(int argc, char **argv)
             }
         }
         if (boost_until && now_ms() >= boost_until) boost_end();
-        struct pollfd pf[3] = { { tfd, POLLIN, 0 }, { ifd, POLLIN, 0 }, { tapfd, POLLIN, 0 } };
+        struct pollfd pf[4] = { { tfd, POLLIN, 0 }, { ifd, POLLIN, 0 }, { tapfd, POLLIN, 0 }, { keyfd, POLLIN, 0 } };
         int pto = md == IDLE ? -1 : 10;
         if (STUCK_MS > 0 && (out_any() || count_active())) { int w = STUCK_MS / 4 > 10 ? STUCK_MS / 4 : 10; if (pto < 0 || w < pto) pto = w; }
         if (boost_until) { long left = boost_until - now_ms(); if (left < 1) left = 1; if (pto < 0 || left < pto) pto = (int)left; }
-        int pr = poll(pf, 3, pto);   /* a negative fd is skipped by poll */
+        int pr = poll(pf, 4, pto);   /* a negative fd is skipped by poll */
+        if (pr > 0 && keyfd >= 0 && (pf[3].revents & (POLLIN | POLLERR | POLLHUP))) {
+            keydev_read();
+            if (!(pf[0].revents & POLLIN) && !(ifd >= 0 && (pf[1].revents & POLLIN)) && !(tapfd >= 0 && (pf[2].revents & POLLIN))) continue;
+        }
         if (pr > 0 && tapfd >= 0 && (pf[2].revents & (POLLIN | POLLERR | POLLHUP))) {
             tap_read();
             if (!(pf[0].revents & POLLIN) && !(ifd >= 0 && (pf[1].revents & POLLIN))) continue;
@@ -1342,7 +1440,7 @@ int main(int argc, char **argv)
         ssize_t n = read(tfd, rb, sizeof(rb));
         if (n < (ssize_t)sizeof(rb[0])) { if (n < 0 && (errno == EINTR || errno == EAGAIN)) continue; break; }
         last_hw_ms = now_ms();
-        if (paused) { nf = 0; dropping = 0; continue; }
+        if (paused || is_sleeping()) { nf = 0; dropping = 0; continue; }
         for (int k = 0; k < (int)(n / (ssize_t)sizeof(rb[0])); k++) {
             struct input_event e = rb[k];
             if (e.type == EV_SYN && e.code == SYN_DROPPED) {
@@ -1384,6 +1482,7 @@ int main(int argc, char **argv)
     boost_end();
     ioctl(tfd, EVIOCGRAB, 0);
     if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 0);
+    if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 0);
     ioctl(ufd, UI_DEV_DESTROY);
     if (kfd >= 0) ioctl(kfd, UI_DEV_DESTROY);
     logf_("boost: %lu times, scroll hints: %lu, idle thaws: %lu", n_boost, n_scroll, n_thaw);

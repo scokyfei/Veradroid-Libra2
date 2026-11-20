@@ -11,6 +11,7 @@ data/
 __pycache__/
 *.pyc
 # Built artifacts (publish via Releases, not git).
+build/
 dist/*.apk
 dist/*.tar.gz
 # Dependencies and private host keys (added when the git baseline was created).
