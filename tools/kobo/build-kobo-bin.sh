@@ -35,10 +35,19 @@ $CC -pthread \
 echo "[2/5] veradroid-input"
 $CC "$TOP/input/legacy/vinput.c" -lm -o "$OUT/veradroid-input"
 
-echo "[3/5] pivot_init, vdlmk, vdloopdio"
-for p in pivot_init vdlmk vdloopdio; do
+echo "[3/5] pivot_init, vdlmk, vdloopdio, vdmkswap"
+for p in pivot_init vdlmk vdloopdio vdmkswap; do
     $CC "$TOP/tools/src/$p.c" -o "$OUT/$p"
 done
+
+if [ -n "${BIONIC_LIBC:-}" ] && [ -f "$BIONIC_LIBC" ]; then
+    echo "[3b/5] libkobo_madvise.so (Bionic LD_PRELOAD shim)"
+    "$ZIG" cc -target arm-linux-gnueabi -mcpu=cortex_a9 -mfloat-abi=softfp -O2 \
+        -shared -fPIC -nostdlib -fno-stack-protector -fno-unwind-tables \
+        -fno-asynchronous-unwind-tables -Wl,-soname,libkobo_madvise.so \
+        "$TOP/tools/kobo/libkobo_madvise.c" "$BIONIC_LIBC" \
+        -o "$OUT/libkobo_madvise.so"
+fi
 
 if [ -n "${E2FSPROGS_TAR:-}" ] && [ -f "$E2FSPROGS_TAR" ]; then
     echo "[4/5] static mke2fs & e2fsck (e2fsprogs)"

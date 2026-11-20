@@ -37,10 +37,11 @@ cp -a "$TOP/host/kobo/nm" "$STAGE/"
 chmod 755 "$STAGE/boot/veradroid.sh" "$STAGE/boot/stop.sh" "$STAGE/boot/action.sh" "$STAGE/boot/ashell.sh" "$STAGE/boot/init-sysimg.sh"
 
 echo "[2/4] Staging compiled Kobo ARMv7 binaries ..."
-for b in veradroid-epd veradroid-input pivot_init vdlmk vdloopdio e2fsck mke2fs; do
+for b in veradroid-epd veradroid-input pivot_init vdlmk vdloopdio vdmkswap e2fsck mke2fs; do
     [ -x "$BIN_DIR/$b" ] || { echo "deploy-kobo: missing $BIN_DIR/$b (run tools/kobo/build-kobo-bin.sh first)" >&2; exit 2; }
     cp "$BIN_DIR/$b" "$STAGE/bin/$b"
 done
+[ -f "$BIN_DIR/libkobo_madvise.so" ] && cp "$BIN_DIR/libkobo_madvise.so" "$STAGE/bin/libkobo_madvise.so"
 
 if [ -n "$LEGACY_DIR" ] && [ -d "$LEGACY_DIR" ]; then
     [ -f "$LEGACY_DIR/bin/hwcomposer.kindle.so" ] && cp "$LEGACY_DIR/bin/hwcomposer.kindle.so" "$STAGE/bin/"

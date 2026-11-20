@@ -23,7 +23,7 @@ status_write() {
         lowmem && echo "lowmem=1" || echo "lowmem=0"
         echo "lowmem_setting=${LOWMEM:-auto}"
         echo "kindleui=$(kindle_ui_mode)"
-        echo "sysversion=$(head -1 "$VD/VERSION" 2>/dev/null | tr -cd '0-9.')"
+        echo "sysversion=$(head -1 "$VD/VERSION" 2>/dev/null | sed 's/-.*//' | tr -cd '0-9.')"
         echo "imageclass=kobo-libra2"
         echo "autoupdate=0"
         echo "update_available="

@@ -152,6 +152,7 @@ done
 
 t() { echo "[$(date +%H:%M:%S) up=$(cut -d' ' -f1 /proc/uptime)] $*"; }
 alive() { [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null; }
+log_release() { :; }
 
 vd_timeout() {
     vt_s=$1; shift

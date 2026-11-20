@@ -102,7 +102,6 @@ kmod_load     || { t "kmod_load failed"; splash "VeraDroid：内核模块加载�
 FRAMEWORK_AFTER_SAVE='splash_begin 正在准备 3'
 framework_stop || { t "cannot pause kobo ui"; exit 1; }
 splash_update 12
-splash_after_stop &
 
 display_prepare
 touch "$X/ctl/sleep"
@@ -117,11 +116,13 @@ input_start || { t "no usable touch screen: stopping"; sh "$VD/boot/stop.sh" >/d
 
 echo "androidboot.hardware=kindle androidboot.zygote=zygote32 androidboot.vdhostnet=1" > "$W/cmdline"
 
-# Sync Kobo timezone into Android persist.sys.timezone
+# Sync Kobo timezone into Android persist.sys.timezone (init requires 0600 on persist.* files)
 tz_k=$(kobo_tz)
 if [ -n "$tz_k" ] && [ -d "$SYS/data" ]; then
     mkdir -p "$SYS/data/property"
+    chmod 700 "$SYS/data/property" 2>/dev/null || true
     printf '%s' "$tz_k" > "$SYS/data/property/persist.sys.timezone"
+    chmod 600 "$SYS/data/property/persist.sys.timezone" 2>/dev/null || true
     echo "$tz_k" > "$W/tz.android"
     t "tz: synced Kobo timezone -> $tz_k"
 fi

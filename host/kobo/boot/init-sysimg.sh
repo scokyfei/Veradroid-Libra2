@@ -55,6 +55,11 @@ if [ -f "$VD/seed/user0.xml" ] && [ ! -f "$MP/data/system/users/0.xml" ]; then
     chown 1000:1000 "$MP/data/system/users/0.xml" 2>/dev/null || true
 fi
 
+# Disable `mount rootfs rootfs / ro remount` so Android init does not flip the shared ext4 loop superblock read-only
+if [ -f "$MP/rootfs/init.rc" ]; then
+    sed -i 's|^[[:space:]]*mount rootfs rootfs / ro remount|# disabled for kobo shared loop: &|' "$MP/rootfs/init.rc"
+fi
+
 # Install hwcomposer.kindle.so into rootfs
 if [ -f "$VD/bin/hwcomposer.kindle.so" ] && [ -d "$MP/rootfs/system/lib/hw" ]; then
     cp "$VD/bin/hwcomposer.kindle.so" "$MP/rootfs/system/lib/hw/hwcomposer.kindle.so"

@@ -75,8 +75,10 @@ framework_stop() {
     fb_geom
     echo "$FB_STRIDE $FB_PANY $FB_ROWS" > "$FWD/geom"
     dd if=/dev/fb0 of="$W/kobo-screen.raw" bs="$FB_STRIDE" skip="$FB_PANY" count="$FB_ROWS" 2>/dev/null || true
-    cat /proc/sys/kernel/core_pattern > "$FWD/core_pattern" 2>/dev/null || true
-    echo "|/bin/true" > /proc/sys/kernel/core_pattern 2>/dev/null || true
+    if [ -w /proc/sys/kernel/core_pattern ]; then
+        cat /proc/sys/kernel/core_pattern > "$FWD/core_pattern" 2>/dev/null || true
+        echo "|/bin/true" > /proc/sys/kernel/core_pattern 2>/dev/null || true
+    fi
     touch "$FWD/paused"
     t "fw: screen saved (${FB_STRIDE}x${FB_ROWS}, pan=$FB_PANY)"
 
@@ -100,7 +102,7 @@ framework_start() {
         t "fw: resumed $ui (pids: $pids)"
     fi
 
-    [ -f "$FWD/core_pattern" ] && cat "$FWD/core_pattern" > /proc/sys/kernel/core_pattern 2>/dev/null || true
+    [ -f "$FWD/core_pattern" ] && [ -w /proc/sys/kernel/core_pattern ] && cat "$FWD/core_pattern" > /proc/sys/kernel/core_pattern 2>/dev/null || true
     rm -rf "$FWD"
     return 0
 }

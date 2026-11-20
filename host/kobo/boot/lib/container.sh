@@ -165,7 +165,6 @@ sysfont_mount() {
     sf_src=$(cat "$W/sysfont/src")
     mkdir -p "$R/dev/vdfont" && touch "$R/dev/vdfont/system.ttf" || return 0
     if mount --bind "$sf_src" "$R/dev/vdfont/system.ttf"; then
-        mount -o remount,ro,bind "$R/dev/vdfont/system.ttf" 2>/dev/null || true
         mount --bind "$W/sysfont/fonts.xml" "$R/system/etc/fonts.xml" && return 0
         umount "$R/dev/vdfont/system.ttf" 2>/dev/null || true
     fi
@@ -173,10 +172,33 @@ sysfont_mount() {
 }
 
 container_start() {
+    # Prevent Android init.rc `mount rootfs rootfs / ro remount` from flipping the
+    # shared ext4 loop superblock (/dev/loop0 holding both rootfs and /data) read-only!
+    if [ -w "$R/init.rc" ] && grep -q '^[[:space:]]*mount rootfs rootfs / ro remount' "$R/init.rc" 2>/dev/null; then
+        sed -i 's|^[[:space:]]*mount rootfs rootfs / ro remount|# disabled for kobo shared loop: &|' "$R/init.rc" \
+            && t "container: patched init.rc (disabled ro remount of shared loop superblock)"
+    fi
+    # Install Bionic madvise shim and wire into init.kindle.rc LD_PRELOAD alongside libvdshim.so
+    if [ -f "$VD/bin/libkobo_madvise.so" ] && [ -d "$R/system/lib" ]; then
+        if ! cmp -s "$VD/bin/libkobo_madvise.so" "$R/system/lib/libkobo_madvise.so"; then
+            cp "$VD/bin/libkobo_madvise.so" "$R/system/lib/libkobo_madvise.so.new" \
+                && chmod 644 "$R/system/lib/libkobo_madvise.so.new" \
+                && mv -f "$R/system/lib/libkobo_madvise.so.new" "$R/system/lib/libkobo_madvise.so" \
+                && t "container: installed libkobo_madvise.so"
+        fi
+        if [ -w "$R/init.kindle.rc" ] && ! grep -q 'libkobo_madvise.so' "$R/init.kindle.rc" 2>/dev/null; then
+            sed -i 's|export LD_PRELOAD /system/lib/libvdshim.so|export LD_PRELOAD /system/lib/libvdshim.so:/system/lib/libkobo_madvise.so|' "$R/init.kindle.rc" \
+                && t "container: enabled libkobo_madvise.so in init.kindle.rc LD_PRELOAD"
+        fi
+    fi
     sysfont_prepare
     fstrim_defuse
     docs_snapshot
-    wc -l < "$SYS/data/system/uiderrors.txt" 2>/dev/null | tr -d ' ' > "$W/uiderr.lines"
+    if [ -f "$SYS/data/system/uiderrors.txt" ]; then
+        wc -l < "$SYS/data/system/uiderrors.txt" 2>/dev/null | tr -d ' ' > "$W/uiderr.lines"
+    else
+        echo 0 > "$W/uiderr.lines"
+    fi
     freezer_setup
     setsid busybox unshare -m sh "$VD/boot/veradroid.sh" --in-chroot "$KFB_TOUCH" "$KFB_KEYS_VIRT" "$KFB_KEYS" </dev/null >>"$LOG" 2>&1 &
     P=$!
@@ -196,14 +218,15 @@ run_in_ns() {
     mount --make-rprivate / 2>/dev/null || true
     mkdir -p "$R$KLIB_MP" 2>/dev/null || true
     mount --bind "$R" "$R" || exit 1
-    mount -o remount,ro,bind "$R" 2>/dev/null || true
+    # NOTE: Do NOT call `mount -o remount,ro,bind "$R"` with Kobo BusyBox mount:
+    # BusyBox drops MS_BIND on remount and turns the entire veradroid-sys.img ext4 superblock read-only!
 
     mount -t tmpfs -o nosuid,mode=755 tmpfs "$R/dev" || exit 1
     for n in null zero full tty random urandom kmsg fuse; do
         [ -e "/dev/$n" ] && touch "$R/dev/$n" && mount --bind "/dev/$n" "$R/dev/$n"
     done
 
-    # Bind Kobo's out-of-tree /dev/binder into container /dev/binder
+    # Bind Kobo's out-of-tree /dev/binder and /dev/kobo_madvise into container /dev
     if [ -c /dev/binder ]; then
         chmod 666 /dev/binder 2>/dev/null || true
         touch "$R/dev/binder"
@@ -212,6 +235,12 @@ run_in_ns() {
     else
         echo "veradroid: /dev/binder missing (binder_linux.ko not loaded)" >&2
         exit 1
+    fi
+    if [ -c /dev/kobo_madvise ]; then
+        chmod 666 /dev/kobo_madvise 2>/dev/null || true
+        touch "$R/dev/kobo_madvise"
+        mount --bind /dev/kobo_madvise "$R/dev/kobo_madvise" || true
+        chmod 666 "$R/dev/kobo_madvise" 2>/dev/null || true
     fi
 
     touch "$R/dev/vdchroot"
@@ -229,11 +258,6 @@ run_in_ns() {
 
     mount -t proc proc "$R/proc" || exit 1
     [ -f "$W/cmdline" ] && mount --bind "$W/cmdline" "$R/proc/cmdline"
-    # Keep host /proc/sys read-only so Android init cannot alter Kobo kernel sysctls
-    mount --rbind "$R/proc/sys" "$R/proc/sys" 2>/dev/null && mount -o remount,ro,bind "$R/proc/sys" 2>/dev/null || true
-    for f in sysrq-trigger cpu/alignment; do
-        [ -e "$R/proc/$f" ] && mount --bind "$R/proc/$f" "$R/proc/$f" 2>/dev/null && mount -o remount,ro,bind "$R/proc/$f" 2>/dev/null || true
-    done
 
     mount -t sysfs -o ro sysfs "$R/sys" || exit 1
     for d in sys/fs/selinux sys/fs/bpf sys/fs/pstore sys/kernel/tracing sys/kernel/debug; do
@@ -256,7 +280,6 @@ run_in_ns() {
     mkdir -p "$R/data/media/0/KindleFonts" "$R/data/media/0/Fonts"
     if [ -d /usr/local/Trolltech/QtEmbedded-4.6.2-arm/lib/fonts ]; then
         mount --bind /usr/local/Trolltech/QtEmbedded-4.6.2-arm/lib/fonts "$R/data/media/0/KindleFonts" 2>/dev/null || true
-        mount -o remount,ro,bind "$R/data/media/0/KindleFonts" 2>/dev/null || true
     fi
     if [ -d "$VD/fonts" ]; then
         mount --bind "$VD/fonts" "$R/data/media/0/Fonts" 2>/dev/null || true

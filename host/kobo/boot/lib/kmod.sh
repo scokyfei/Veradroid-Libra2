@@ -42,8 +42,15 @@ kmod_load() {
         kmod_load_one kobo_zram "$d/kobo_zram.ko" || true
     fi
 
-    # 3. Optional memory tuning module
-    [ -f "$d/kobo_madvise.ko" ] && kmod_load_one kobo_madvise "$d/kobo_madvise.ko" || true
+    # 3. kobo_madvise (/dev/kobo_madvise) — required by ART RosAlloc on stock 4.1.15 (CONFIG_ADVISE_SYSCALLS=n)
+    if ! grep -qw kobo_madvise /proc/misc 2>/dev/null; then
+        kmod_load_one kobo_madvise "$d/kobo_madvise.ko" || true
+    fi
+    if [ ! -c /dev/kobo_madvise ]; then
+        minor=$(awk '$2=="kobo_madvise"{print $1}' /proc/misc 2>/dev/null)
+        [ -n "$minor" ] && mknod /dev/kobo_madvise c 10 "$minor" && t "kmod: mknod /dev/kobo_madvise (10:$minor)"
+    fi
+    chmod 666 /dev/kobo_madvise 2>/dev/null || true
 
     # 4. Built-in uinput device check
     if [ ! -c /dev/uinput ]; then

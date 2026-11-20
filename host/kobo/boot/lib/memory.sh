@@ -49,7 +49,9 @@ zram_on() {
     [ "$ZRAM_MB" -gt 256 ] && ZRAM_MB=256
     if ! grep -q '^/dev/zram0 ' /proc/swaps; then
         [ "$(cat "$Z/disksize" 2>/dev/null)" != 0 ] && echo 1 > "$Z/reset" 2>/dev/null || true
-        if echo $((ZRAM_MB * 1048576)) > "$Z/disksize" && mkswap /dev/zram0 >/dev/null 2>&1 && swapon -p 100 /dev/zram0 2>/dev/null; then
+        mksw=mkswap
+        [ -x "$VD/bin/vdmkswap" ] && mksw="$VD/bin/vdmkswap"
+        if echo $((ZRAM_MB * 1048576)) > "$Z/disksize" && "$mksw" /dev/zram0 >/dev/null 2>&1 && { swapon -p 100 /dev/zram0 2>/dev/null || swapon /dev/zram0 2>/dev/null; }; then
             t "zram: ${ZRAM_MB}MB active"
         else
             echo 1 > "$Z/reset" 2>/dev/null || true
