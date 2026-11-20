@@ -77,5 +77,19 @@ else fail "user-facing Kindle strings in VeraHome: $kh_home"; fi
 grep -q 'static boolean isKobo()' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HostLink.java" \
     && ok "VeraHome HostLink.isKobo() present" || fail "HostLink.isKobo() missing"
 
+# 7. Settings/commands wiring checks (saver, lock, storage, webadmin, wifiscan, SYSTEM_FONT)
+for mod in saver lock storage webadmin progress; do
+    grep -q "\b$mod\b" "$TOP/host/kobo/boot/veradroid.sh" \
+        || fail "veradroid.sh missing module $mod"
+done
+for verb in wifiscan storage netdiag wa saver; do
+    grep -qE "^[[:space:]]*$verb\)" "$TOP/host/kobo/boot/lib/cmd.sh" \
+        || fail "cmd.sh missing command $verb"
+done
+grep -q 'SYSTEM_FONT=' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q 'time_format_apply' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && ok "Kobo host settings & commands fully wired (saver/lock/storage/webadmin/wifiscan/font/time)" \
+    || fail "settings.sh missing SYSTEM_FONT or time_format_apply"
+
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"

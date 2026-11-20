@@ -107,7 +107,60 @@ kobo_wifi_select() { # $1 = ssid
     command -v wpa_cli >/dev/null 2>&1 || return 1
     nid=$(wpa_cli -i wlan0 list_networks 2>/dev/null | awk -F'\t' -v s="$1" 'NR > 1 && $2 == s { print $1; exit }')
     [ -n "$nid" ] || return 1
+    wpa_cli -i wlan0 enable_network "$nid" >/dev/null 2>&1
     wpa_cli -i wlan0 select_network "$nid" >/dev/null 2>&1
+}
+
+# Scan nearby Wi-Fi APs via wpa_cli and print TAB-separated lines for WifiActivity:
+#   saved(y|n) \t secured(y|n) \t bars(1..5) \t mgmt \t ssid
+kobo_wifi_scan() {
+    command -v wpa_cli >/dev/null 2>&1 || return 1
+    wpa_cli -i wlan0 scan >/dev/null 2>&1 || true
+    sleep 2
+    saved=$(kobo_wifi_saved)
+    wpa_cli -i wlan0 scan_results 2>/dev/null | awk -F'\t' -v saved="$saved" '
+        BEGIN {
+            n = split(saved, sv, "\n")
+            for (i = 1; i <= n; i++) if (sv[i] != "") is_saved[sv[i]] = 1
+        }
+        NR > 1 && NF >= 5 && $5 != "" {
+            ssid = $5; sig = $3 + 0; flags = $4
+            if (!(ssid in best) || sig > best[ssid]) {
+                best[ssid] = sig
+                flg[ssid] = flags
+            }
+        }
+        END {
+            for (s in best) {
+                sig = best[s]
+                bars = (sig >= -55) ? 5 : (sig >= -65) ? 4 : (sig >= -75) ? 3 : (sig >= -85) ? 2 : 1
+                f = flg[s]
+                sec = (f ~ /WPA|WEP|RSN/) ? "y" : "n"
+                mgmt = (f ~ /WPA2/) ? "WPA2" : (f ~ /WPA/) ? "WPA" : (f ~ /WEP/) ? "WEP" : "NONE"
+                sv_f = (s in is_saved) ? "y" : "n"
+                printf "%s\t%s\t%d\t%s\t%s\n", sv_f, sec, bars, mgmt, s
+            }
+        }' | sort -t"$(printf '\t')" -k3,3nr
+}
+
+# Add & connect to a new Wi-Fi network (open if $2 empty, WPA-PSK if $2 non-empty).
+kobo_wifi_connect_new() { # $1 = ssid  $2 = psk (optional)
+    command -v wpa_cli >/dev/null 2>&1 || return 1
+    nid=$(wpa_cli -i wlan0 list_networks 2>/dev/null | awk -F'\t' -v s="$1" 'NR > 1 && $2 == s { print $1; exit }')
+    if [ -z "$nid" ]; then
+        nid=$(wpa_cli -i wlan0 add_network 2>/dev/null | tail -1 | tr -cd '0-9')
+        [ -n "$nid" ] || return 1
+        wpa_cli -i wlan0 set_network "$nid" ssid "\"$1\"" >/dev/null 2>&1 || return 1
+    fi
+    if [ -n "$2" ]; then
+        wpa_cli -i wlan0 set_network "$nid" psk "\"$2\"" >/dev/null 2>&1 || return 1
+    else
+        wpa_cli -i wlan0 set_network "$nid" key_mgmt NONE >/dev/null 2>&1 || return 1
+    fi
+    wpa_cli -i wlan0 enable_network "$nid" >/dev/null 2>&1 || return 1
+    wpa_cli -i wlan0 select_network "$nid" >/dev/null 2>&1 || return 1
+    wpa_cli -i wlan0 save_config >/dev/null 2>&1 || true
+    return 0
 }
 
 # Timezone from /etc/localtime symlink (/etc/zoneinfo/Asia/Shanghai -> Asia/Shanghai)

@@ -27,7 +27,7 @@ case "$1" in
         fi ;;
 esac
 
-for m in settings memory slim freeze kmod framework container input network sleep status cmd watchdog afterboot splash bootwatch diagboot compile energy tz bgnice; do
+for m in settings memory slim freeze kmod framework container input network sleep status cmd watchdog afterboot splash bootwatch diagboot compile energy tz bgnice saver lock storage webadmin progress; do
     [ -f "$VD/boot/lib/$m.sh" ] && . "$VD/boot/lib/$m.sh"
 done
 

@@ -8,13 +8,20 @@ screensaver_show() {
     : > "$list"
     smode=; sone=
     type saver_choice >/dev/null 2>&1 && saver_choice
-    [ "$smode" = one ] && [ -n "$sone" ] && echo "$sone" >> "$list"
-    [ -s "$list" ] || for f in "$VD"/screensaver/*.[pP][nN][gG] "$VD"/screensaver/*.[jJ][pP][gG] "$VD"/screensaver/*.[jJ][pP][eE][gG] \
-             "$SYS"/data/media/0/Screensaver/*.[pP][nN][gG] "$SYS"/data/media/0/Screensaver/*.[jJ][pP][gG] "$SYS"/data/media/0/Screensaver/*.[jJ][pP][eE][gG] \
-             /mnt/onboard/.kobo/screensaver/*.[pP][nN][gG] /mnt/onboard/.kobo/screensaver/*.[jJ][pP][gG]; do
-        [ -f "$f" ] || continue
-        echo "$f" >> "$list"
-    done
+    if [ "$smode" = one ] && [ -n "$sone" ]; then
+        echo "$sone" >> "$list"
+    elif [ "$smode" = kindle ]; then
+        for f in /mnt/onboard/.kobo/screensaver/*.[pP][nN][gG] /mnt/onboard/.kobo/screensaver/*.[jJ][pP][gG] /mnt/onboard/.kobo/screensaver/*.[jJ][pP][eE][gG]; do
+            [ -f "$f" ] && echo "$f" >> "$list"
+        done
+    else
+        for f in "$VD"/screensaver/*.[pP][nN][gG] "$VD"/screensaver/*.[jJ][pP][gG] "$VD"/screensaver/*.[jJ][pP][eE][gG] \
+                 "$SYS"/data/media/0/Screensaver/*.[pP][nN][gG] "$SYS"/data/media/0/Screensaver/*.[jJ][pP][gG] "$SYS"/data/media/0/Screensaver/*.[jJ][pP][eE][gG] \
+                 /mnt/onboard/.kobo/screensaver/*.[pP][nN][gG] /mnt/onboard/.kobo/screensaver/*.[jJ][pP][gG]; do
+            [ -f "$f" ] || continue
+            echo "$f" >> "$list"
+        done
+    fi
     n=$(wc -l < "$list" 2>/dev/null | tr -d ' ')
     if [ "${n:-0}" -gt 0 ] && [ -x "$FBINK" ]; then
         i=$(cat "$W/saver.index" 2>/dev/null || echo 0)

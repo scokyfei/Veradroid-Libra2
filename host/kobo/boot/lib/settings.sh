@@ -42,6 +42,9 @@ settings_defaults() {
     G_TWO_BACK=1
     G_TWO_SLIDE=1
     G_EDGE_SENS=1
+    G_EDGE_THIRDS=0
+    G_EB_L=back; G_EB_M=home; G_EB_R=switch
+    G_EB_HOLD=0; G_EB_HOLD_MS=600
     G_BACK_EXCLUDE=com.tencent.weread.eink
     UPDATE_BACKUP=off
     DNS_MODE=auto
@@ -50,9 +53,14 @@ settings_defaults() {
     G_TWO_LONG_ACT=invert
     SAVER_EXIT_H=0
     SLEEP_TIMEOUT=600
+    STORAGE_AUTO=1
     KFB_HWC=1
     KFB_HZ=20
     KFB_DIM=off
+    KFB_IMG=0
+    KFB_SMOOTH=0
+    KFB_REAGL_MIN=50
+    KFB_SCROLLDU=0
     USB_ASK=0
     WIFI_PS=auto
     APP_COMPILE=auto
@@ -85,7 +93,7 @@ settings_load() {
 }
 
 settings_publish() {
-    { for k in KFB_CONTRAST KFB_DITHER KFB_FLASH KFB_INVERT KFB_LIGHTF KFB_DARKEN KFB_MODE KFB_SETTLE KFB_HOLD KFB_ANIM_MODE KFB_ANIM_DIR KFB_ANIM_STEPS KFB_ANIM_MIN KFB_GESTURES KFB_ROTATE RETURN_MODE LOWMEM KINDLE_UI DNS_MODE G_TL G_TR G_BL G_BR G_EDGE_BACK G_EDGE_PANEL G_TWO_TAP G_TWO_LONG G_TWO_BACK G_TWO_SLIDE G_EDGE_SENS G_BACK_EXCLUDE G_TWO_TAP_ACT G_TWO_LONG_ACT WIFI_PS APP_COMPILE TIME_12_24 GESTURE_HINT BOOST_MS BOOST_KHZ KFB_SCROLLDELAY KFB_SCROLLSTYLE KFB_SCROLLWFM FAST_DRAG; do
+    { for k in KFB_CONTRAST KFB_DITHER KFB_FLASH KFB_INVERT KFB_LIGHTF KFB_DARKEN KFB_MODE KFB_SETTLE KFB_HOLD KFB_ANIM_MODE KFB_ANIM_DIR KFB_ANIM_STEPS KFB_ANIM_MIN KFB_IMG KFB_SMOOTH KFB_REAGL_MIN KFB_SCROLLDU KFB_GESTURES KFB_ROTATE RETURN_MODE LOWMEM KINDLE_UI DNS_MODE G_TL G_TR G_BL G_BR G_EDGE_BACK G_EDGE_PANEL G_EDGE_THIRDS G_EB_L G_EB_M G_EB_R G_EB_HOLD G_EB_HOLD_MS G_TWO_TAP G_TWO_LONG G_TWO_BACK G_TWO_SLIDE G_EDGE_SENS G_BACK_EXCLUDE G_TWO_TAP_ACT G_TWO_LONG_ACT STORAGE_AUTO USB_ASK WIFI_PS APP_COMPILE TIME_12_24 GESTURE_HINT BOOST_MS BOOST_KHZ KFB_SCROLLDELAY KFB_SCROLLSTYLE KFB_SCROLLWFM FAST_DRAG; do
           eval "echo $k=\${GLOB_$k:-\$$k}"
       done; } > "$X/settings.tmp" \
         && printf 'SYSTEM_FONT=%s\nSYSTEM_FONT_LIVE=%s\n' "$SYSTEM_FONT" "$(cat "$W/sysfont/android" 2>/dev/null)" >> "$X/settings.tmp" \
@@ -97,23 +105,39 @@ settings_apply() {
     sfile=$W/settings.apply.$$.$(cut -d' ' -f1 /proc/uptime | tr -d .)
     mv -f "$X/ctl/settings.new" "$sfile" 2>/dev/null || return 0
     touch "$SYS/settings.conf"
-    for k in KFB_CONTRAST KFB_DITHER KFB_FLASH KFB_INVERT KFB_LIGHTF KFB_DARKEN KFB_MODE KFB_SETTLE KFB_HOLD KFB_ANIM_MODE KFB_ANIM_DIR KFB_ANIM_STEPS KFB_ANIM_MIN KFB_GESTURES KFB_ROTATE RETURN_MODE LOWMEM DNS_MODE G_TL G_TR G_BL G_BR G_EDGE_BACK G_EDGE_PANEL G_TWO_TAP G_TWO_LONG G_TWO_BACK G_TWO_SLIDE G_EDGE_SENS G_BACK_EXCLUDE G_TWO_TAP_ACT G_TWO_LONG_ACT WIFI_PS APP_COMPILE TIME_12_24 GESTURE_HINT BOOST_MS BOOST_KHZ KFB_SCROLLDELAY KFB_SCROLLSTYLE KFB_SCROLLWFM FAST_DRAG SLEEP_TIMEOUT; do
+    for k in KFB_CONTRAST KFB_DITHER KFB_FLASH KFB_INVERT KFB_LIGHTF KFB_DARKEN KFB_MODE KFB_SETTLE KFB_HOLD KFB_ANIM_MODE KFB_ANIM_DIR KFB_ANIM_STEPS KFB_ANIM_MIN KFB_IMG KFB_SMOOTH KFB_REAGL_MIN KFB_SCROLLDU KFB_GESTURES KFB_ROTATE RETURN_MODE LOWMEM DNS_MODE G_TL G_TR G_BL G_BR G_EDGE_BACK G_EDGE_PANEL G_EDGE_THIRDS G_EB_L G_EB_M G_EB_R G_EB_HOLD G_EB_HOLD_MS G_TWO_TAP G_TWO_LONG G_TWO_BACK G_TWO_SLIDE G_EDGE_SENS G_BACK_EXCLUDE G_TWO_TAP_ACT G_TWO_LONG_ACT STORAGE_AUTO USB_ASK WIFI_PS APP_COMPILE TIME_12_24 GESTURE_HINT BOOST_MS BOOST_KHZ KFB_SCROLLDELAY KFB_SCROLLSTYLE KFB_SCROLLWFM FAST_DRAG SLEEP_TIMEOUT; do
         v=$(sed -n "s/^$k=\([0-9A-Za-z._,]*\)\$/\1/p" "$sfile" | tail -1)
         [ -n "$v" ] || continue
         grep -v "^$k=" "$SYS/settings.conf" > "$sfile.conf" 2>/dev/null || true
         [ "$v" = default ] || echo "$k=$v" >> "$sfile.conf"
         mv -f "$sfile.conf" "$SYS/settings.conf"
     done
+    # System font path (contains '/', validated by sysfont_host; takes effect on next Android restart)
+    if grep -q '^SYSTEM_FONT=' "$sfile"; then
+        v=$(sed -n 's/^SYSTEM_FONT=//p' "$sfile" | tail -1)
+        case "$v" in
+            ''|default|none) v= ;;
+            *[\'\"\$\`\\]*) v=bad ;;
+            *) sysfont_host "$v" >/dev/null 2>&1 || v=bad ;;
+        esac
+        if [ "$v" != bad ]; then
+            grep -v '^SYSTEM_FONT=' "$SYS/settings.conf" > "$sfile.conf" 2>/dev/null || true
+            [ -n "$v" ] && printf "SYSTEM_FONT='%s'\n" "$v" >> "$sfile.conf"
+            mv -f "$sfile.conf" "$SYS/settings.conf"
+        fi
+    fi
     rm -f "$sfile" "$sfile.conf"
     settings_load
     settings_publish
     epd_send ANIM "$KFB_ANIM_MODE" "$KFB_ANIM_DIR" "$KFB_ANIM_STEPS" "$KFB_ANIM_MIN"
     epd_send SET "$KFB_CONTRAST" "$KFB_DITHER" "$KFB_FLASH" "$KFB_INVERT" "$KFB_MODE" "$KFB_SETTLE" "${KFB_LIGHTF:-0}" "${KFB_DARKEN:-0}"
     epd_send HOLD "${KFB_HOLD:-70}"
+    [ -n "${KFB_REAGL_MIN:-}" ] && epd_send REAGL "$KFB_REAGL_MIN"
     epd_send_scroll
     if [ "$KFB_GESTURES" = 0 ]; then touch "$W/nogestures"; else rm -f "$W/nogestures"; fi
     gestures_write
     dns_apply
+    type time_format_apply >/dev/null 2>&1 && time_format_apply
     rotate_apply
     status_write
 }
@@ -141,10 +165,14 @@ gestures_write() {
 
 dns_apply() {
     case "$DNS_MODE" in
-        aliyun)  ANDROID_DNS="223.5.5.5 223.6.6.6" ;;
-        tencent) ANDROID_DNS="119.29.29.29 182.254.116.116" ;;
-        google)  ANDROID_DNS="8.8.8.8 8.8.4.4" ;;
-        *)       ANDROID_DNS="223.5.5.5 223.6.6.6" ;;
+        aliyun)  ANDROID_DNS="223.5.5.5 223.6.6.6"; d1=223.5.5.5; d2=223.6.6.6 ;;
+        tencent) ANDROID_DNS="119.29.29.29 182.254.116.116"; d1=119.29.29.29; d2=182.254.116.116 ;;
+        google)  ANDROID_DNS="8.8.8.8 8.8.4.4"; d1=8.8.8.8; d2=8.8.4.4 ;;
+        *)       ANDROID_DNS="223.5.5.5 223.6.6.6"; d1=223.5.5.5; d2=223.6.6.6 ;;
     esac
     hostnet_write 2>/dev/null || true
+    pid=$(cat "$W/pid" 2>/dev/null)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && type vd_in >/dev/null 2>&1; then
+        P=$pid; $(vd_in) /system/bin/sh -c "export ANDROID_DATA=/data ANDROID_ROOT=/system PATH=/system/bin; ndc resolver setnetdns 100 '' $d1 $d2" >/dev/null 2>&1 || true
+    fi
 }

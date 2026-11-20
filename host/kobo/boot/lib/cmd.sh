@@ -37,20 +37,47 @@ wifi_list() {
 
 wifi_result() { printf '%s\n' "$@" > "$X/ctl/wifi.result.tmp" && mv -f "$X/ctl/wifi.result.tmp" "$X/ctl/wifi.result"; }
 
+wifi_scan() {
+    kobo_wifi_scan > "$X/ctl/wifi.scan.tmp" 2>/dev/null || : > "$X/ctl/wifi.scan.tmp"
+    chmod 644 "$X/ctl/wifi.scan.tmp" 2>/dev/null
+    mv -f "$X/ctl/wifi.scan.tmp" "$X/ctl/wifi.scan"
+}
+
 wifi_connect() {
     hex=$1
     case "$hex" in ''|*[!0-9a-f]*) wifi_result ok=0 "error=bad name"; return 1 ;; esac
     want=$(printf "$(printf '%s' "$hex" | sed 's/../\\x&/g')")
-    if kobo_wifi_select "$want"; then
-        i=0
-        while [ $i -lt 15 ]; do
-            sleep 1; i=$((i + 1))
-            [ "$(kobo_wifi_current)" = "$want" ] && break
-        done
-        if [ "$(kobo_wifi_current)" = "$want" ]; then wifi_result ok=1 "essid=$hex"
-        else wifi_result ok=0 "error=timeout" "essid=$hex"; fi
+    psk=
+    if [ -f "$W/wifi.psk" ]; then
+        read -r phn php < "$W/wifi.psk" 2>/dev/null || true
+        rm -f "$W/wifi.psk"
+        if [ "$phn" = "$hex" ] && [ -n "$php" ]; then
+            psk=$(printf "$(printf '%s' "$php" | sed 's/../\\x&/g')")
+        fi
+    fi
+    ok_sel=0
+    if [ -n "$psk" ]; then
+        kobo_wifi_connect_new "$want" "$psk" && ok_sel=1
+    elif kobo_wifi_select "$want"; then
+        ok_sel=1
     else
-        wifi_result ok=0 "error=not saved" "essid=$hex"
+        # Open network not yet saved
+        kobo_wifi_connect_new "$want" "" && ok_sel=1
+    fi
+    if [ "$ok_sel" = 1 ]; then
+        i=0
+        while [ $i -lt 25 ]; do
+            sleep 1; i=$((i + 1))
+            [ "$(kobo_wifi_current)" = "$want" ] && [ -n "$(kobo_wifi_ip)" ] && break
+        done
+        if [ "$(kobo_wifi_current)" = "$want" ]; then
+            hostnet_write 2>/dev/null || true
+            wifi_result ok=1 "essid=$hex"
+        else
+            wifi_result ok=0 "error=timeout" "essid=$hex"
+        fi
+    else
+        wifi_result ok=0 "error=create" "essid=$hex"
     fi
     wifi_list; status_write
 }
@@ -170,11 +197,20 @@ cmd_listen() {
                   case "$r" in *Success*) type compile_watch >/dev/null 2>&1 && compile_watch ;; esac ) &
             fi ;;
         saver)   type saver_cmd >/dev/null 2>&1 && saver_cmd "$a" ;;
+        netdiag) type vp_netdiag >/dev/null 2>&1 && ( vp_netdiag "$X/ctl/netdiag.status" ) </dev/null >/dev/null 2>&1 & ;;
+        storage)
+            type st_cmd >/dev/null 2>&1 && case "$a" in
+                info) ( st_cmd info ) & ;;
+                "resize "*) sa=${a#resize }; st_num "$sa" && ( st_cmd resize "$sa" ) & ;;
+                "auto on"|"auto off") st_cmd auto "${a#auto }" ;;
+            esac ;;
+        wa)      type wa_request >/dev/null 2>&1 && wa_request "$a" ;;
         compile) type compile_cmd >/dev/null 2>&1 && compile_cmd "$a" ;;
         optimize) ( opt_run ) & ;;
         poke)    touch "$W/lastinput" 2>/dev/null || true ;;
         wifi)    status_write ;;
         wifilist) ( wifi_list ) & ;;
+        wifiscan) ( wifi_scan ) & ;;
         wificonnect) ( wifi_connect "$a" ) & ;;
         dns)
             case "$a" in

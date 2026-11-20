@@ -72,6 +72,9 @@ storage_mount() {
         usleep 200000
     done
     ef=$(e2fsck_bin 2>/dev/null || true)
+    if type st_recover >/dev/null 2>&1; then
+        st_recover || return 1
+    fi
     if [ -n "$ef" ]; then
         "$ef" -p "$SYSTEM_IMG" >"$VD/logs/fsck.log" 2>&1; rc=$?
         if [ $rc -ge 4 ]; then

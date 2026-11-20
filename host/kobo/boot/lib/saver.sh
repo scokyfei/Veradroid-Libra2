@@ -37,10 +37,12 @@ saver_cmd() {
             cp "$f" $X/saver.tmp/ 2>/dev/null && n=$((n + 1))
             [ $n -ge 60 ] && break
         done
-        for f in /usr/share/blanket/screensaver/bg_ss*.png; do [ -f "$f" ] && { cp "$f" $X/saver.tmp/.kindle-preview.png; break; }; done
-        chmod 755 $X/saver.tmp; chmod 644 $X/saver.tmp/* $X/saver.tmp/.kindle-preview.png 2>/dev/null
-        mv $X/saver.tmp $X/saver; : > $X/ctl/saver.listed
-        t "screensaver: exported $n image(s) from veradroid/screensaver for the picker" ;;
+        for f in /mnt/onboard/.kobo/screensaver/*.[pP][nN][gG] /mnt/onboard/.kobo/screensaver/*.[jJ][pP][gG] /mnt/onboard/.kobo/screensaver/*.[jJ][pP][eE][gG]; do
+            [ -f "$f" ] && { cp "$f" "$X/saver.tmp/.kindle-preview.png"; break; }
+        done
+        chmod 755 "$X/saver.tmp"; chmod 644 "$X/saver.tmp"/* "$X/saver.tmp/.kindle-preview.png" 2>/dev/null
+        mv "$X/saver.tmp" "$X/saver"; : > "$X/ctl/saver.listed"
+        t "screensaver: exported $n image(s) from screensaver dir for picker" ;;
     done) rm -rf $X/saver $X/saver.tmp $X/ctl/saver.listed ;;
     esac
 }

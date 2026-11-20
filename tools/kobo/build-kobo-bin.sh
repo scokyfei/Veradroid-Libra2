@@ -50,9 +50,9 @@ if [ -n "${BIONIC_LIBC:-}" ] && [ -f "$BIONIC_LIBC" ]; then
 fi
 
 if [ -n "${E2FSPROGS_TAR:-}" ] && [ -f "$E2FSPROGS_TAR" ]; then
-    echo "[4/5] static mke2fs & e2fsck (e2fsprogs)"
+    echo "[4/5] static mke2fs, e2fsck & resize2fs (e2fsprogs)"
     EW=$TOP/build/e2fs-kobo
-    if [ ! -x "$OUT/mke2fs" ] || [ ! -x "$OUT/e2fsck" ]; then
+    if [ ! -x "$OUT/mke2fs" ] || [ ! -x "$OUT/e2fsck" ] || [ ! -x "$OUT/resize2fs" ]; then
         rm -rf "$EW" && mkdir -p "$EW"
         tar -xJf "$E2FSPROGS_TAR" -C "$EW"
         ED=$(find "$EW" -mindepth 1 -maxdepth 1 -type d | head -n 1)
@@ -74,12 +74,14 @@ if [ -n "${E2FSPROGS_TAR:-}" ] && [ -f "$E2FSPROGS_TAR" ]; then
             --without-libarchive >"$EW/configure.log" 2>&1 && \
           make -j4 libs >"$EW/make.log" 2>&1 && \
           make -j4 -C misc mke2fs.static >>"$EW/make.log" 2>&1 && \
-          make -j4 -C e2fsck e2fsck.static >>"$EW/make.log" 2>&1 )
+          make -j4 -C e2fsck e2fsck.static >>"$EW/make.log" 2>&1 && \
+          make -j4 -C resize resize2fs >>"$EW/make.log" 2>&1 )
         "$ZIG" objcopy --strip-all "$ED/misc/mke2fs.static" "$OUT/mke2fs"
         "$ZIG" objcopy --strip-all "$ED/e2fsck/e2fsck.static" "$OUT/e2fsck"
+        "$ZIG" objcopy --strip-all "$ED/resize/resize2fs" "$OUT/resize2fs"
     fi
 else
-    echo "[4/5] skipping e2fsprogs (set E2FSPROGS_TAR to build static mke2fs/e2fsck)"
+    echo "[4/5] skipping e2fsprogs (set E2FSPROGS_TAR to build static mke2fs/e2fsck/resize2fs)"
 fi
 
 echo "[5/5] done"
