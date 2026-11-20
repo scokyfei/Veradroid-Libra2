@@ -69,7 +69,7 @@ step_warmth() {
 run_action() {
     case "$1" in
         ''|none) ;;
-        back|home|panel|switch)
+        back|home|panel|switch|appopt)
             case "$1" in back) hint back "BACK|返回" ;; home) hint home "HOME|桌面" ;; panel) hint panel "PANEL|面板" ;; switch) hint switch "SWITCH APPS|切换" ;; esac
             touch "$X/ctl/act.$1"; watch_ctl "act.$1" ;;
         kindle|return) hint kindle "KOBO|返回 Kobo"; send exit ;;
@@ -101,6 +101,7 @@ case "$1" in
     tr) POS=tr; run_action "${G_TR:-none}" ;;
     bl) POS=bl; run_action "${G_BL:-kindle}" ;;
     br) POS=br; run_action "${G_BR:-none}" ;;
+    eb) POS=b; run_action "$2" ;;
     power)  power_send toggle ;;
     sleep)  power_send sleep ;;
     wake)   power_send wake ;;

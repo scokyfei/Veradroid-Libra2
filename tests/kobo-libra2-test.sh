@@ -48,6 +48,13 @@ grep -q 'kobo_wipe_y8' "$TOP/display/legacy/epd.c" && ok "epd.c has Kobo strip-w
 grep -q -- '--swap-xy' "$TOP/input/legacy/vinput.c" && ok "vinput.c has --swap-xy support" || fail "vinput.c missing --swap-xy"
 grep -q -- '--keydev' "$TOP/input/legacy/vinput.c" && ok "vinput.c has --keydev support" || fail "vinput.c missing --keydev"
 grep -q 'input_event_sec' "$TOP/input/legacy/vinput.c" && ok "vinput.c handles musl 64-bit time_t input_event_sec" || fail "vinput.c missing input_event_sec"
+grep -q 'sl\[cur_slot\].tid != e->value' "$TOP/input/legacy/vinput.c" \
+    && grep -q 'G_EDGE_THIRDS' "$TOP/input/legacy/vinput.c" \
+    && grep -q 'G_EDGE_THIRDS' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q 'appopt' "$TOP/host/kobo/boot/action.sh" \
+    && grep -qE '^[[:space:]]*eb\)' "$TOP/host/kobo/boot/action.sh" \
+    && ok "vinput.c + Kobo host handle Elan repeated tracking-id and bottom-edge thirds" \
+    || fail "missing Elan repeated tracking-id fix or G_EDGE_THIRDS wiring"
 
 # 5. Kobo Libra 2 model profile, slimming/memory optimizations & launcher files
 [ -f "$TOP/host/kobo/models/libra2.conf" ] \

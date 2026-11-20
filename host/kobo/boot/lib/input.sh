@@ -45,7 +45,7 @@ input_touch_start() {
 
     "$VD/bin/veradroid-input" "$REAL" "$W/input.log" "$VD/boot/action.sh" \
         --w "${viewWidth:-1264}" --h "${viewHeight:-1680}" \
-        --edge "$ge" --window "${G_WINDOW:-40}" \
+        --edge "$ge" --window "${G_WINDOW:-60}" \
         --edge-hold $((ge / 2)) --edge-swipe $((ge * 2 / 3)) \
         --edge-back "${KFB_EDGE_BACK:-1}" --corner-ms 2000 \
         --flag "$W/nogestures" --inject "$W/inject" \

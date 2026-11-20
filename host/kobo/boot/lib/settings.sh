@@ -43,12 +43,12 @@ settings_defaults() {
     G_TWO_SLIDE=1
     G_EDGE_SENS=1
     G_EDGE_THIRDS=0
-    G_EB_L=back; G_EB_M=home; G_EB_R=switch
-    G_EB_HOLD=0; G_EB_HOLD_MS=600
+    G_EB_L=appopt; G_EB_M=home; G_EB_R=back
+    G_EB_HOLD=switch; G_EB_HOLD_MS=500
     G_BACK_EXCLUDE=com.tencent.weread.eink
     UPDATE_BACKUP=off
     DNS_MODE=auto
-    G_WINDOW=40
+    G_WINDOW=60
     G_TWO_TAP_ACT=clear
     G_TWO_LONG_ACT=invert
     SAVER_EXIT_H=0
@@ -155,7 +155,7 @@ gestures_write() {
         case "$a" in ''|none) ;; *) gc="${gc:+$gc,}${c%%:*}" ;; esac
     done
     {
-        for k in G_EDGE_BACK G_EDGE_PANEL G_TWO_TAP G_TWO_LONG G_TWO_BACK G_TWO_SLIDE G_EDGE_SENS G_BACK_EXCLUDE BOOST_MS BOOST_KHZ FAST_DRAG; do
+        for k in G_EDGE_BACK G_EDGE_PANEL G_EDGE_THIRDS G_EB_L G_EB_M G_EB_R G_EB_HOLD G_EB_HOLD_MS G_TWO_TAP G_TWO_LONG G_TWO_BACK G_TWO_SLIDE G_EDGE_SENS G_BACK_EXCLUDE BOOST_MS BOOST_KHZ FAST_DRAG; do
             eval "echo $k=\$$k"
         done
         echo "G_CORNERS=${gc:-none}"

@@ -142,6 +142,11 @@ static int EDGE_SWIPE;                 /* defined with its default further down 
 static int EDGE_BASE = -1, EDGE_TOP_BASE = -1, EDGE_SWIPE_BASE = -1;   /* command-line values, captured at startup */
 static char G_BACK_EXCLUDE[512] = "";
 static char G_CORNERS[24] = "all";   /* corners whose long press is a gesture ("tl,bl", "" = none, "all"); others stay Android's */
+/* bottom edge in thirds (G_EDGE_THIRDS): G_EB[0..2] = left / middle / right swipe up, G_EB[3] = swipe up and hold */
+static int G_EDGE_THIRDS = 0, G_EB_HOLD_MS = 500;
+static char G_EB[4][24] = { "appopt", "home", "back", "switch" };
+static const char *const EB_KEY[4] = { "G_EB_L", "G_EB_M", "G_EB_R", "G_EB_HOLD" };
+static const char *const EB_DEF[4] = { "appopt", "home", "back", "switch" };
 /* rotation (see the header): ROT_ON = --rotate was given at all; PW/PH = panel size in pixels; W/H become the logical size */
 static int ROT = 0, ROT_ON = 0, PW = 0, PH = 0, VW = 0;   /* FLAGF exists -> gestures are off (only bottom-edge back stays) */
 static int SWAP_XY = 0, FLIP_X = 0, FLIP_Y = 0;          /* raw touchscreen axis transform (e.g. Kobo Libra 2 Elan: --swap-xy) */
@@ -186,6 +191,8 @@ static void gconf_load(void)
     G_EDGE_BACK = G_EDGE_PANEL = G_TWO_TAP = G_TWO_LONG = G_TWO_BACK = G_TWO_SLIDE = 1; G_BACK_EXCLUDE[0] = 0; G_EDGE_SENS = 1;
     G_TAP = 1; G_TAP_KEY = KEY_VOLUMEDOWN; snprintf(G_CORNERS, sizeof(G_CORNERS), "all");
     BOOST_MS = 150; BOOST_KHZ = 0; SCROLL_PX = 20; FAST_DRAG = 1;
+    G_EDGE_THIRDS = 0; G_EB_HOLD_MS = 500;
+    for (int i = 0; i < 4; i++) snprintf(G_EB[i], sizeof(G_EB[i]), "%s", EB_DEF[i]);
     FILE *f = !ok ? NULL : fopen(GCONF, "r");
     if (f) {
         char line[600];
@@ -200,6 +207,16 @@ static void gconf_load(void)
             else if (!strcmp(line, "G_TWO_BACK")) G_TWO_BACK = b;
             else if (!strcmp(line, "G_TWO_SLIDE")) G_TWO_SLIDE = b;
             else if (!strcmp(line, "G_TAP")) G_TAP = b;
+            else if (!strcmp(line, "G_EDGE_THIRDS")) G_EDGE_THIRDS = b;
+            else if (!strcmp(line, "G_EB_HOLD_MS")) { G_EB_HOLD_MS = atoi(v); if (G_EB_HOLD_MS < 200 || G_EB_HOLD_MS > 3000) G_EB_HOLD_MS = 500; }
+            else if (!strncmp(line, "G_EB_", 5)) {
+                for (int i = 0; i < 4; i++)
+                    if (!strcmp(line, EB_KEY[i])) {
+                        int okv = v[0] != 0 && strlen(v) < sizeof(G_EB[i]);
+                        for (const char *c = v; *c; c++) if (!((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || (*c >= '0' && *c <= '9') || *c == '.' || *c == '_')) okv = 0;
+                        if (okv) snprintf(G_EB[i], sizeof(G_EB[i]), "%.23s", v);
+                    }
+            }
             else if (!strcmp(line, "BOOST_MS")) { BOOST_MS = atoi(v); if (BOOST_MS < 0 || BOOST_MS > 2000) BOOST_MS = 150; }
             else if (!strcmp(line, "BOOST_KHZ")) { BOOST_KHZ = atoi(v); if (BOOST_KHZ < 0) BOOST_KHZ = 0; }
             else if (!strcmp(line, "FAST_DRAG")) FAST_DRAG = b;
@@ -233,6 +250,7 @@ static void gconf_load(void)
     logf_("gconf: edge_sens=%d (strip %d/%d px, swipe %d px) boost=%dms/%dkHz scroll_px=%d", G_EDGE_SENS, EDGE, EDGE_TOP, EDGE_SWIPE, BOOST_MS, BOOST_KHZ, SCROLL_PX);
     logf_("gconf: edge_back=%d edge_panel=%d two_tap=%d two_long=%d two_back=%d two_slide=%d exclude=%s",
           G_EDGE_BACK, G_EDGE_PANEL, G_TWO_TAP, G_TWO_LONG, G_TWO_BACK, G_TWO_SLIDE, G_BACK_EXCLUDE[0] ? G_BACK_EXCLUDE : "-");
+    if (G_EDGE_THIRDS) logf_("gconf: bottom edge thirds: left=%s middle=%s right=%s hold=%s (%d ms)", G_EB[0], G_EB[1], G_EB[2], G_EB[3], G_EB_HOLD_MS);
 }
 /* is the foreground app (VeraHome writes it to --fg) in G_BACK_EXCLUDE? */
 static int back_excluded(void)
@@ -291,6 +309,7 @@ static void uout(const struct input_event *e)
     }
     else if (e->type == EV_ABS && e->code == ABS_MT_TRACKING_ID) {
         if (out_slot >= 0 && out_slot < MAXSLOT) {
+            if (e->value >= 0 && out_act[out_slot] && out_tid[out_slot] == e->value) return;   /* driver (e.g. Kobo Elan) repeated the same tracking id on a move frame */
             if (e->value >= 0 && out_act[out_slot] && out_tid[out_slot] != e->value) {
                 /* a new tracking id in a slot Android still has down (the lift was lost or swallowed, or the panel
                    reused the slot within one frame): Android gets the lift first, as a frame of its own */
@@ -361,10 +380,15 @@ static void back_key(void)
 }
 
 /* ---- touch state ---- */
-struct slot { int active; int x, y; int sx, sy; long t0, tl; };   /* tl: last event for this slot */
+struct slot { int active; int tid; int x, y; int sx, sy; long t0, tl; };   /* tl: last event for this slot */
 static struct slot sl[MAXSLOT];
 static int cur_slot = 0, slot_ign = 0;   /* slot_ign: the driver is talking about a slot >= MAXSLOT */
 
+static void slots_reset(void)
+{
+    memset(sl, 0, sizeof(sl));
+    for (int i = 0; i < MAXSLOT; i++) { sl[i].tid = -1; sl[i].sx = sl[i].sy = -1; }
+}
 static int count_active(void) { int n = 0; for (int i = 0; i < MAXSLOT; i++) n += sl[i].active; return n; }
 
 /* ---- resync with the kernel after lost events ----
@@ -404,11 +428,16 @@ static void resync_slots(int after_drop)
     }
     struct input_event fr[2 * MAXSLOT + 4];
     int n = 0, lifted = 0, keep = cur_slot, left = 0;
+    long now = now_ms();
     memset(fr, 0, sizeof(fr));
 #define RS(t, c, v) do { fr[n].type = (t); fr[n].code = (c); fr[n].value = (v); n++; } while (0)
     for (int i = 0; i < MAXSLOT; i++) {
-        if (sl[i].active && q.v[i] < 0) { RS(EV_ABS, ABS_MT_SLOT, i); RS(EV_ABS, ABS_MT_TRACKING_ID, -1); lifted++; }
-        else if (sl[i].active) left++;
+        /* When after_drop == 0 (a new touch while another is active), skip slots that sent an event < 250 ms ago:
+           EVIOCGMTSLOTS reflects the live kernel state ahead of unread events in the evdev ring buffer, so lifting
+           a fresh contact would prematurely destroy fast taps / two-finger taps whose lift frame is already queued. */
+        if (sl[i].active && q.v[i] < 0 && (after_drop != 0 || now - sl[i].tl >= 250)) {
+            RS(EV_ABS, ABS_MT_SLOT, i); RS(EV_ABS, ABS_MT_TRACKING_ID, -1); lifted++;
+        } else if (sl[i].active) left++;
     }
     if (!lifted) return;
     RS(EV_ABS, ABS_MT_SLOT, keep);          /* Android's slot pointer must be where the driver's next events expect it */
@@ -426,15 +455,33 @@ static void resync_slots(int after_drop)
     handle_frame(fr, n);
     cur_slot = keep;
 }
-/* does this frame put a finger down while we already think one is down? */
+/* does this frame put a genuinely NEW finger down while another stale finger is still believed down?
+   Note: drivers such as Kobo Libra 2's Elan Touchscreen repeat the same non-negative ABS_MT_TRACKING_ID on every
+   move frame; repeating the current active tracking id for a slot is NOT a new touch. */
 static int new_touch_over_active(const struct input_event *fr, int n)
 {
     if (!count_active()) return 0;
-    for (int i = 0; i < n; i++) if (fr[i].type == EV_ABS && fr[i].code == ABS_MT_TRACKING_ID && fr[i].value >= 0) return 1;
+    int s = cur_slot;
+    int has_new = 0;
+    for (int i = 0; i < n; i++) {
+        if (fr[i].type != EV_ABS) continue;
+        if (fr[i].code == ABS_MT_SLOT) {
+            s = fr[i].value;
+        } else if (fr[i].code == ABS_MT_TRACKING_ID && fr[i].value >= 0) {
+            if (s >= 0 && s < MAXSLOT && (!sl[s].active || sl[s].tid != fr[i].value)) {
+                has_new = 1;
+                break;
+            }
+        }
+    }
+    if (!has_new) return 0;
+    long now = now_ms();
+    for (int i = 0; i < MAXSLOT; i++)
+        if (sl[i].active && now - sl[i].tl >= 250) return 1;
     return 0;
 }
 
-enum mode { IDLE, PENDING, PASS, EDGE_B, EDGE_T, TWO, SWALLOW, EDGE_FWD };
+enum mode { IDLE, PENDING, PASS, EDGE_B, EDGE_T, TWO, SWALLOW, EDGE_FWD, EDGE_ARM };
 static enum mode md = IDLE;
 static enum mode edge_kind = IDLE;     /* which edge strip (EDGE_B / EDGE_T) an EDGE_FWD touch started in */
 static int EDGE_HOLD_MS = 60;          /* how long a touch in the edge strip is held before Android gets it (a back swipe fits inside) */
@@ -598,6 +645,40 @@ static int in_corner(int x, int y, const char **name)
     return !strcmp(G_CORNERS, "all") || strstr(G_CORNERS, *name) != NULL;
 }
 
+/* ---- bottom edge in thirds (G_EDGE_THIRDS) ----
+   eb_third: which third this touch started in (0 left, 1 middle, 2 right; -1 = plain bottom-edge back for this touch).
+   EDGE_ARM: the swipe up was seen and the touch is ours; lifting fires the third's action, holding still for G_EB_HOLD_MS
+   fires G_EB_HOLD. Moving more than the slop restarts the hold clock (a slow drag is not a hold). */
+static int eb_third = -1, arm_x, arm_y;
+static long arm_t = 0;
+static int eb_none(int i) { return !strcmp(G_EB[i], "none"); }
+static int eb_slop(void) { int s = 30 * (PW ? PW : W) / 1272; return s < 8 ? 8 : s; }
+static void eb_fire(int i)
+{
+    static const char *const nm[4] = { "left", "middle", "right", "hold" };
+    if (eb_none(i)) { logf_("edge thirds: %s -> none", nm[i]); return; }
+    logf_("edge thirds: %s -> %s", nm[i], G_EB[i]);
+    if (!strcmp(G_EB[i], "back")) back_key();   /* the key straight away, as the plain bottom-edge back */
+    else action("eb", G_EB[i]);
+}
+static void eb_swipe(int lifted)
+{
+    if (eb_third < 0) { logf_("edge swipe up -> back"); back_key(); return; }
+    if (lifted || eb_none(3)) { eb_fire(eb_third); return; }
+    arm_x = sl[cur_slot].x; arm_y = sl[cur_slot].y; arm_t = now_ms();
+    md = EDGE_ARM;
+}
+static void eb_armed(int active, int frame)
+{
+    if (frame && active == 0) { eb_fire(eb_third); md = IDLE; return; }
+    if (active == 0) return;
+    if (frame && (abs(sl[cur_slot].x - arm_x) > eb_slop() || abs(sl[cur_slot].y - arm_y) > eb_slop())) {
+        arm_x = sl[cur_slot].x; arm_y = sl[cur_slot].y; arm_t = now_ms();
+        return;
+    }
+    if (now_ms() - arm_t >= G_EB_HOLD_MS) { eb_fire(3); md = SWALLOW; }
+}
+
 static void two_finger_end(void)
 {
     /* classify by the movement of the first two fingers */
@@ -720,8 +801,20 @@ static void handle_frame(struct input_event *fr, int n)
             if (e->code == ABS_MT_SLOT) { slot_ign = !(e->value >= 0 && e->value < MAXSLOT); if (!slot_ign) cur_slot = e->value; }
             else if (slot_ign) continue;   /* a slot we do not track: Android still gets the events, the gestures ignore it */
             else if ((sl[cur_slot].tl = now_ms()), e->code == ABS_MT_TRACKING_ID) {
-                if (e->value >= 0) { sl[cur_slot].active = 1; sl[cur_slot].t0 = now_ms(); sl[cur_slot].sx = sl[cur_slot].sy = -1; }
-                else sl[cur_slot].active = 0;
+                if (e->value >= 0) {
+                    /* Some drivers (e.g. Kobo Libra 2 Elan Touchscreen) repeat the same non-negative
+                       ABS_MT_TRACKING_ID on every move frame. Only reset the contact start point when
+                       the slot transitions from inactive or changes to a new tracking id. */
+                    if (!sl[cur_slot].active || sl[cur_slot].tid != e->value) {
+                        sl[cur_slot].active = 1;
+                        sl[cur_slot].tid = e->value;
+                        sl[cur_slot].t0 = now_ms();
+                        sl[cur_slot].sx = sl[cur_slot].sy = -1;
+                    }
+                } else {
+                    sl[cur_slot].active = 0;
+                    sl[cur_slot].tid = -1;
+                }
             } else if (e->code == ABS_MT_POSITION_X) { sl[cur_slot].x = e->value; if (sl[cur_slot].sx < 0) sl[cur_slot].sx = e->value; }
             else if (e->code == ABS_MT_POSITION_Y) { sl[cur_slot].y = e->value; if (sl[cur_slot].sy < 0) sl[cur_slot].sy = e->value; }
         }
@@ -766,6 +859,12 @@ static void handle_frame(struct input_event *fr, int n)
             { static long last_poke = 0; if (t_down - last_poke > 20000) { last_poke = t_down; action("poke", NULL); } }   /* keep the Kindle from sleeping while the screen is being used */
             corner_fired = 0;
             two_done = 0;
+            eb_third = -1;
+            if (eb && gest && G_EDGE_THIRDS) {
+                int t = sx < W / 3 ? 0 : sx >= W - W / 3 ? 2 : 1;
+                if (eb_none(t) && eb_none(3)) eb = 0;   /* nothing bound here: an ordinary touch for Android */
+                else eb_third = t;
+            }
             if (active >= 2 && !two_any()) {    /* every two-finger gesture off: Android gets them (pinch) */
                 flush_held(); md = PASS;
             } else if (active >= 2) {       /* both fingers landed in the same frame */
@@ -840,7 +939,7 @@ static void handle_frame(struct input_event *fr, int n)
         if (active == 0) {
             if (swipe) {                    /* a fast flick that ended before the swipe was seen while held */
                 corner_fired = 1;
-                if (md == EDGE_B) { logf_("edge swipe up -> back"); back_key(); } else action("panel", NULL);
+                if (md == EDGE_B) eb_swipe(1); else action("panel", NULL);
             } else if (!corner_fired) {     /* a tap: deliver the held press and this release to Android */
                 for (int i = 0; i < n && nheld < MAXEV; i++) held[nheld++] = fr[i];
                 flush_held();
@@ -849,7 +948,7 @@ static void handle_frame(struct input_event *fr, int n)
         } else if (swipe) {
             corner_fired = 1;               /* fire as soon as the swipe is long enough; the held press never reaches Android */
             nheld = 0;
-            if (md == EDGE_B) { logf_("edge swipe up -> back"); back_key(); }
+            if (md == EDGE_B) eb_swipe(0);  /* thirds with a hold action: armed (EDGE_ARM) until lift / hold */
             else action("panel", NULL);
         } else if (!corner_fired) {
             for (int i = 0; i < n && nheld < MAXEV; i++) held[nheld++] = fr[i];
@@ -871,9 +970,9 @@ static void handle_frame(struct input_event *fr, int n)
         if (!corner_fired && ((edge_kind == EDGE_B && dy < -EDGE_SWIPE) || (edge_kind == EDGE_T && dy > EDGE_SWIPE)) && abs(dy) > abs(dx)) {
             corner_fired = 1;               /* the swipe turned out to be a gesture after all: take the touch back from Android */
             cancel_to_android();
-            if (edge_kind == EDGE_B) { logf_("edge swipe up -> back"); back_key(); }
-            else action("panel", NULL);
             md = SWALLOW;
+            if (edge_kind == EDGE_B) eb_swipe(0);   /* may arm (md = EDGE_ARM) */
+            else action("panel", NULL);
         } else {
             /* corner long press also for touches that started inside the top/bottom edge strip (they are in EDGE_FWD,
                not PASS): same rule as below -- one finger, held >= CORNER_MS, moved < 40 px */
@@ -897,6 +996,9 @@ static void handle_frame(struct input_event *fr, int n)
     case SWALLOW:
         if (active == 0) md = IDLE;
         break;
+    case EDGE_ARM:
+        eb_armed(active, 1);
+        break;
     }
     /* scroll hint: one finger that Android is getting moved past the slop */
     if (!scroll_sent && SCROLL_PX > 0 && active == 1 && (md == PASS || md == EDGE_FWD || md == IDLE)) {
@@ -908,7 +1010,7 @@ static void handle_frame(struct input_event *fr, int n)
             if (TOUCH_DEBUG) logf_("scroll begin (%d,%d -> %d,%d)", sx, sy, sl[cur_slot].x, sl[cur_slot].y);
         }
     }
-    if (scroll_sent && (active == 0 || active >= 2 || md == SWALLOW || md == TWO)) { epd_cmd("SCROLL 0\n"); scroll_sent = active ? 2 : 0; }
+    if (scroll_sent && (active == 0 || active >= 2 || md == SWALLOW || md == TWO || md == EDGE_ARM)) { epd_cmd("SCROLL 0\n"); scroll_sent = active ? 2 : 0; }
     android_check();
 }
 
@@ -1354,6 +1456,7 @@ int main(int argc, char **argv)
         if (keyfd < 0) fprintf(stderr, "keydev %s: %s\n", KEYDEV, strerror(errno));
         else if (ioctl(keyfd, EVIOCGRAB, 1) < 0) perror("EVIOCGRAB keydev");
     }
+    slots_reset();
     {
         struct input_absinfo ai;
         if (src_proto == PROTO_B && ioctl(tfd, EVIOCGABS(ABS_MT_SLOT), &ai) == 0 && ai.value >= 0 && ai.value < MAXSLOT) hw_slot = cur_slot = ai.value;
@@ -1374,12 +1477,12 @@ int main(int argc, char **argv)
         if (want_release) {
             want_release = 0;
             boost_end();
-            if (!paused) { release_android(1, "released to the Kindle"); ioctl(tfd, EVIOCGRAB, 0); if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 0); if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 0); paused = 1; md = IDLE; nheld = 0; nf = 0; memset(sl, 0, sizeof(sl)); memset(as_, 0, sizeof(as_)); st_btn = 0; logf_("released"); }
+            if (!paused) { release_android(1, "released to the Kindle"); ioctl(tfd, EVIOCGRAB, 0); if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 0); if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 0); paused = 1; md = IDLE; nheld = 0; nf = 0; slots_reset(); memset(as_, 0, sizeof(as_)); st_btn = 0; logf_("released"); }
         }
         if (want_grab) {
             want_grab = 0;
             if (paused) {
-                ioctl(tfd, EVIOCGRAB, 1); if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 1); if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 1); paused = 0; md = IDLE; nheld = 0; nf = 0; memset(sl, 0, sizeof(sl)); memset(as_, 0, sizeof(as_)); st_btn = 0;
+                ioctl(tfd, EVIOCGRAB, 1); if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 1); if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 1); paused = 0; md = IDLE; nheld = 0; nf = 0; slots_reset(); memset(as_, 0, sizeof(as_)); st_btn = 0;
                 struct input_absinfo ai;
                 if (src_proto == PROTO_B && ioctl(tfd, EVIOCGABS(ABS_MT_SLOT), &ai) == 0 && ai.value >= 0 && ai.value < MAXSLOT) hw_slot = cur_slot = ai.value;
                 release_android(1, "grabbed again");
@@ -1414,12 +1517,16 @@ int main(int argc, char **argv)
                 edge_kind = md;
                 md = EDGE_FWD;
             }
+            if (md == EDGE_ARM) eb_armed(count_active(), 0);   /* swipe up and hold: a still finger sends nothing */
             if (md == TWO && !two_done && G_TWO_LONG && now_ms() - two_t0 >= 2000 && abs(sl[two_i[0]].x - two_sx[0]) < 60 && abs(sl[two_i[0]].y - two_sy[0]) < 60) {
                 action("invert", NULL); two_done = 1;
             }
             if (md == PASS && !corner_fired && CORNER_MS > 0 && count_active() == 1 && now_ms() - t_down >= CORNER_MS) {
                 const char *cn;
-                if (in_corner(sl[cur_slot].x, sl[cur_slot].y, &cn)) { corner_fired = 1; cancel_to_android(); action(cn, NULL); md = SWALLOW; }
+                int sx = sl[cur_slot].sx >= 0 ? sl[cur_slot].sx : sl[cur_slot].x, sy = sl[cur_slot].sy >= 0 ? sl[cur_slot].sy : sl[cur_slot].y;
+                if (in_corner(sl[cur_slot].x, sl[cur_slot].y, &cn) && abs(sl[cur_slot].x - sx) < 40 && abs(sl[cur_slot].y - sy) < 40) {
+                    corner_fired = 1; cancel_to_android(); action(cn, NULL); md = SWALLOW;
+                }
             }
             /* the same for a touch that started in the top / bottom edge strip and was handed to Android (EDGE_FWD): a finger
                held still sends no events, so only this tick sees the time run out. Same rule as handle_frame's EDGE_FWD
