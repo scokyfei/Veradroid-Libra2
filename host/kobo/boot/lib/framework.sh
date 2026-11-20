@@ -71,10 +71,12 @@ framework_stop() {
         t "fw: no foreground Kobo UI detected (headless/SSH launch)"
     fi
 
-    # Save current screen content before VeraDroid draws
+    # Save current screen content on disk ($VD/state) instead of /tmp tmpfs to save 2.1 MB RAM
     fb_geom
     echo "$FB_STRIDE $FB_PANY $FB_ROWS" > "$FWD/geom"
-    dd if=/dev/fb0 of="$W/kobo-screen.raw" bs="$FB_STRIDE" skip="$FB_PANY" count="$FB_ROWS" 2>/dev/null || true
+    mkdir -p "$VD/state" 2>/dev/null || true
+    SCR_BAK="$VD/state/kobo-screen.raw"
+    dd if=/dev/fb0 of="$SCR_BAK" bs="$FB_STRIDE" skip="$FB_PANY" count="$FB_ROWS" 2>/dev/null || true
     if [ -w /proc/sys/kernel/core_pattern ]; then
         cat /proc/sys/kernel/core_pattern > "$FWD/core_pattern" 2>/dev/null || true
         echo "|/bin/true" > /proc/sys/kernel/core_pattern 2>/dev/null || true
@@ -89,9 +91,11 @@ framework_stop() {
 framework_start() {
     framework_paused || { t "kobo ui not paused"; return 0; }
     set -- $(cat "$FWD/geom" 2>/dev/null)
-    if [ -f "$W/kobo-screen.raw" ] && [ -n "$1" ]; then
-        dd if="$W/kobo-screen.raw" of=/dev/fb0 bs="$1" seek="$2" count="$3" 2>/dev/null || true
-        rm -f "$W/kobo-screen.raw"
+    SCR_BAK="$VD/state/kobo-screen.raw"
+    [ -f "$SCR_BAK" ] || SCR_BAK="$W/kobo-screen.raw"
+    if [ -f "$SCR_BAK" ] && [ -n "$1" ]; then
+        dd if="$SCR_BAK" of=/dev/fb0 bs="$1" seek="$2" count="$3" 2>/dev/null || true
+        rm -f "$VD/state/kobo-screen.raw" "$W/kobo-screen.raw"
     fi
     [ -x "$FBINK" ] && "$FBINK" -q -f -s 2>/dev/null || true
 

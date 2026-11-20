@@ -52,9 +52,10 @@ adb_sh() {
     # Refresh into a live container; never run host sh if vd_in fails (empty prefix).
     pref=$(vd_in) || return 1
     [ -n "$pref" ] || return 1
-    # am / pm / settings 是 ART 进程：栈限制按正在跑的镜像定（vd_art_stack，在子 shell 里改，不影响调用者）
+    # am / pm / settings 是 ART 进程：栈限制按正在跑的镜像定（vd_art_stack，在子 shell 里改，不影响调用者），
+    # 并且 Kobo 4.1.15 缺少 CONFIG_ADVISE_SYSCALLS，必须带上 libkobo_madvise.so 否则 app_process 直接段错误。
     ( vd_art_stack
-      $pref /system/bin/sh -c "export PATH=/system/bin:/system/xbin ANDROID_DATA=/data ANDROID_ROOT=/system; $*" )
+      $pref /system/bin/sh -c "export PATH=/system/bin:/system/xbin ANDROID_DATA=/data ANDROID_ROOT=/system LD_PRELOAD=/system/lib/libvdshim.so:/system/lib/libkobo_madvise.so; $*" )
 }
 
 # 包是否已安装：读 PackageManager 自己维护的 packages.list（宿主上直接读文件，不用为一次查询起一个 JVM）
@@ -76,7 +77,7 @@ apk_precheck() {
 apk_fail_reason() { # $1 = pm 输出  $2 = apk（可选，用来进一步判断“格式不对”是哪一种）
     case "$1" in
     *INSTALL_FAILED_OLDER_SDK*) echo "这个版本要求更新的 Android，VeraDroid 是 Android 7.1。请换一个支持 Android 7 的旧版本。" ;;
-    *INSTALL_FAILED_NO_MATCHING_ABIS*|*INSTALL_FAILED_CPU_ABI_INCOMPATIBLE*) echo "这个安装包只有 64 位或 x86 版本，Kindle 只能运行 32 位 ARM（armeabi-v7a）的应用。" ;;
+    *INSTALL_FAILED_NO_MATCHING_ABIS*|*INSTALL_FAILED_CPU_ABI_INCOMPATIBLE*) echo "这个安装包只有 64 位或 x86 版本，Kobo 只能运行 32 位 ARM（armeabi-v7a）的应用。" ;;
     *INSTALL_FAILED_INSUFFICIENT_STORAGE*) echo "Android 的存储空间不够。删掉一些应用或书后，把文件名末尾的 .failed 去掉，重启 VeraDroid 会再装一次。" ;;
     *INSTALL_FAILED_UPDATE_INCOMPATIBLE*|*INSTALL_FAILED_INCONSISTENT_CERTIFICATES*|*INSTALL_FAILED_SHARED_USER_INCOMPATIBLE*)
         echo "已经装着同一个应用，但签名不一样（来源不同）。先在桌面上卸载旧的再装。" ;;
@@ -194,9 +195,9 @@ after_boot() {
     # 开机完成后再强制一次整页 GC16，避免停在原生 Kindle/黑屏。
     epd_send FULL
     sleep 1
-    # 下面这些都是写进 Android 数据库后就一直有效的设置（settings / pm disable）。每条命令都要起一个新的 JVM，
-    # PW6 真机上一共约 10 秒 CPU，正好压在桌面刚出来的时候。每个版本只做一次；恢复出厂会清掉 data，标记跟着没了，自然重做。
-    ABV=$(cat $SYS/version 2>/dev/null); ABM=$SYS/data/.vd-afterboot
+    # 下面这些都是写进 Android 数据库后就一直有效的设置（settings / pm disable）。
+    # 每个版本只做一次；恢复出厂会清掉 data，标记跟着没了，自然重做。
+    ABV="$(cat $SYS/version 2>/dev/null)-kobo2"; ABM=$SYS/data/.vd-afterboot
     AB_ONCE=
     [ -n "$ABV" ] && [ "$(cat $ABM 2>/dev/null)" = "$ABV" ] || AB_ONCE=1
     if [ -n "$AB_ONCE" ]; then
@@ -204,12 +205,18 @@ after_boot() {
         adb_sh 'settings put global hide_error_dialogs 1; settings put global show_first_crash_dialog 0; settings put global show_restart_in_crash_dialog 0' >/dev/null 2>&1
         # 系统里没有开机向导（Provision）：不标记“已完成设置”时 HOME 键被忽略（user setup is in progress）、快捷设置受限
         adb_sh 'settings put global device_provisioned 1; settings put secure user_setup_complete 1' >/dev/null 2>&1
-        # 用不到的后台服务：通知排序助手常驻约 37 MB
+        # 用不到的后台服务：通知排序助手常驻约 9–37 MB
         adb_sh 'pm disable-user --user 0 android.ext.services' >/dev/null 2>&1
+        ep=$(pidof android.ext.services 2>/dev/null)
+        [ -n "$ep" ] && kill $ep 2>/dev/null || true
         slim_after_boot
         if lowmem; then
             set -- $(heap_values); hg=$1; hs=$2   # 和 heap_fix 一致（memory.sh）
-            adb_sh 'for p in com.android.printspooler com.android.managedprovisioning com.android.companiondevicesupport com.android.bookmarkprovider com.android.providers.calendar com.android.calendar com.android.sharedstoragebackup com.android.camera2 com.android.gallery3d; do pm disable-user --user 0 $p >/dev/null 2>&1; done; settings put global window_animation_scale 0; settings put global transition_animation_scale 0; settings put global animator_duration_scale 0; settings put global wifi_scan_always_enabled 0; setprop dalvik.vm.heapgrowthlimit '"$hg"'; setprop dalvik.vm.heapsize '"$hs" >/dev/null 2>&1 || true
+            extra_dis=
+            for p in com.android.printspooler com.android.managedprovisioning com.android.companiondevicesupport com.android.bookmarkprovider com.android.providers.calendar com.android.calendar com.android.sharedstoragebackup com.android.camera2 com.android.gallery3d; do
+                pkg_installed "$p" && extra_dis="$extra_dis $p"
+            done
+            adb_sh 'for p in'"$extra_dis"'; do pm disable-user --user 0 $p >/dev/null 2>&1; done; settings put global window_animation_scale 0; settings put global transition_animation_scale 0; settings put global animator_duration_scale 0; settings put global wifi_scan_always_enabled 0; setprop dalvik.vm.heapgrowthlimit '"$hg"'; setprop dalvik.vm.heapsize '"$hs" >/dev/null 2>&1 || true
             t "low-ram: disabled extra pkgs + zero anim"
         fi
     fi
@@ -227,17 +234,10 @@ after_boot() {
     # 离线更新文件夹（lib/localupdate.sh）：装好就有这个文件夹和一份说明，用户才知道离线包往哪里放
     if [ ! -f $VD/update/README.txt ]; then
         mkdir -p $VD/update 2>/dev/null && cat > $VD/update/README.txt 2>/dev/null <<'RDME'
-VeraDroid 离线更新
+VeraDroid for Kobo Libra 2
 
-把离线更新包原样放进这个文件夹（不用解压），任选一种：
-  - veradroid-pw6-版本号.tar.gz 或 veradroid-k49-版本号.tar.gz
-  - 整个离线包 VeraDroid-Offline.zip 或 VeraDroid-Offline-Experimental.zip
-
-Paperwhite 6 / Colorsoft 用 pw6 的包，其他机型（PW5、KT5、KT6、Scribe 等）用 k49 的包；
-放错的、版本不比现在新的会自动跳过（不会降级）。
-
-下次在书库里点“VeraDroid”启动时自动校验并安装，装完包会删掉。
-结果写在这个文件夹的 result.txt 里。
+可将需要自动安装的 Android 安装包（.apk）放入上级目录的 apps/ 文件夹，
+启动 VeraDroid 后将自动安装并删除原安装包。
 RDME
     fi
     upload_dir_fix || t "after_boot: upload staging dir $SYS/data/media/0/.upload is not usable ($(ls -ldn $SYS/data/media/0/.upload 2>&1))"
@@ -322,7 +322,8 @@ RDME
         read -r mypid _ < /proc/self/stat; echo "$mypid" > $W/installing    # 本进程（after_boot 是后台子 shell，$$ 是早已退出的父进程）
         type compile_hold >/dev/null 2>&1 && compile_hold      # 后台编译拿着 PackageManager 的锁：先让开（compile.sh）
         type vp_kvw >/dev/null 2>&1 && vp_kvw $X/ctl/apkinst.status state=installing "name=$(basename "$f")" "start=$(date +%s)" from=apps
-        r=$(adb_sh 'pm install -d -g /data/local/tmp/vdinst.apk' 2>&1)
+        sz=$(apk_size "$f")
+        r=$(adb_sh "cmd package install -r -d -g -S $sz < /data/local/tmp/vdinst.apk" 2>&1)
         case "$r" in *Success*) ;; *) r=$(adb_sh 'pm install -r -d -g /data/local/tmp/vdinst.apk' 2>&1) ;; esac
         type compile_release >/dev/null 2>&1 && compile_release
         rm -f $W/installing

@@ -28,15 +28,15 @@ heap_fix() {
     _prop dalvik.vm.heapstartsize "${HEAP_START:-8m}"
     _prop dalvik.vm.heapgrowthlimit "$hg"
     _prop dalvik.vm.heapsize "$hs"
-    _prop dalvik.vm.heapminfree 512k
-    _prop dalvik.vm.heapmaxfree 2m
+    _prop dalvik.vm.heapminfree "${HEAP_MINFREE:-2m}"
+    _prop dalvik.vm.heapmaxfree "${HEAP_MAXFREE:-8m}"
     _prop dalvik.vm.heaptargetutilization 0.75
     _prop ro.config.low_ram true
     _prop ro.config.max_starting_bg "${MAX_STARTING_BG:-2}"
-    _prop ro.sys.fw.bg_apps_limit 2
+    _prop ro.sys.fw.bg_apps_limit "${PROC_LIMIT:-2}"
     _prop persist.sys.strictmode.disable true
     _prop ro.product.model "VeraDroid on Kobo Libra 2"
-    t "memory: heap ${HEAP_START:-8m}/$hg/$hs + ro.config.low_ram=true"
+    t "memory: heap ${HEAP_START:-8m}/$hg/$hs (${HEAP_MINFREE:-2m}-${HEAP_MAXFREE:-8m}) + ro.config.low_ram=true"
 }
 
 zram_on() {

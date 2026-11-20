@@ -64,8 +64,13 @@ hostnet_write() {
         [ -n "$gw" ] && echo "gw=$gw"
         for d in $ANDROID_DNS; do echo "dns=$d"; done
         sed -n 's/^nameserver[[:space:]]*\([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\)[[:space:]]*$/dns=\1/p' "$(readlink -f /etc/resolv.conf 2>/dev/null || echo /etc/resolv.conf)" 2>/dev/null
-    } > "$X/hostnet"
-    chmod 644 "$X/hostnet"
+    } > "$X/hostnet.tmp"
+    if [ -f "$X/hostnet" ] && cmp -s "$X/hostnet.tmp" "$X/hostnet"; then
+        rm -f "$X/hostnet.tmp"
+        return 0
+    fi
+    chmod 644 "$X/hostnet.tmp"
+    mv -f "$X/hostnet.tmp" "$X/hostnet"
     t "net: hostnet $(tr '\n' ' ' < "$X/hostnet")"
 }
 

@@ -11,7 +11,7 @@ SYS=${SYS:-$VD/sys}
 
 AL=/tmp/veradroid-actions.log
 if [ "$1" != poke ]; then
-    [ "$(wc -c < "$AL" 2>/dev/null || echo 0)" -gt 65536 ] && { tail -c 32768 "$AL" > "$AL.tmp" 2>/dev/null && mv -f "$AL.tmp" "$AL"; }
+    [ -f "$AL" ] && [ "$(wc -c < "$AL" 2>/dev/null || echo 0)" -gt 65536 ] && { tail -c 32768 "$AL" > "$AL.tmp" 2>/dev/null && mv -f "$AL.tmp" "$AL"; }
     echo "[$(date +%T)] action $1 $2" >> "$AL"
 fi
 [ -f "$SYS/settings.conf" ] && . "$SYS/settings.conf"

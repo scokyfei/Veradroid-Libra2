@@ -43,6 +43,10 @@ service mediaextractor /system/bin/mediaextractor
     group drmrpc mediadrm
     disabled
 
+service healthd /sbin/healthd
+    class core
+    disabled
+
 service bootanim /system/bin/true
     class core
     user graphics
@@ -50,6 +54,14 @@ service bootanim /system/bin/true
     disabled
     oneshot
 RC
+    if [ ! -f "$VD/debugboot" ]; then
+        cat <<'RC_DBG'
+
+service debuggerd /system/bin/debuggerd
+    class main
+    disabled
+RC_DBG
+    fi
 }
 
 slim_prop_block() {
@@ -129,11 +141,13 @@ slim_apply() {
 }
 
 # 开机后只做一次的部分（写进 PackageManager 的状态，之后一直有效）；afterboot.sh 的 AB_ONCE 段里调。
-#   MediaScannerReceiver：每次开机和每次“存储已挂载”都把整个 /sdcard（含绑进来的 Kindle 书库）扫进媒体库，开机后白烧 CPU。
+#   MediaScannerReceiver：每次开机和每次“存储已挂载”都把整个 /sdcard（含绑进来的 Kobo 书库）扫进媒体库，开机后白烧 CPU。
 #       关的是这个广播接收器，MediaScannerConnection（应用主动请求扫描某个文件）走服务，不受影响。
 slim_after_boot() {
     if [ "${SLIM:-1}" = 1 ]; then
         adb_sh 'pm disable com.android.providers.media/com.android.providers.media.MediaScannerReceiver' >/dev/null 2>&1
+        mp=$(pidof android.process.media 2>/dev/null)
+        [ -n "$mp" ] && kill $mp 2>/dev/null || true
         t "slim: boot media scan disabled"
     else
         adb_sh 'pm enable com.android.providers.media/com.android.providers.media.MediaScannerReceiver' >/dev/null 2>&1

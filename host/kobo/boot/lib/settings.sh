@@ -51,8 +51,8 @@ settings_defaults() {
     SAVER_EXIT_H=0
     SLEEP_TIMEOUT=600
     KFB_HWC=1
-    KFB_HZ=30
-    KFB_DIM=20
+    KFB_HZ=20
+    KFB_DIM=off
     USB_ASK=0
     WIFI_PS=auto
     APP_COMPILE=auto
