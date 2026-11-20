@@ -55,6 +55,15 @@ grep -q 'sl\[cur_slot\].tid != e->value' "$TOP/input/legacy/vinput.c" \
     && grep -qE '^[[:space:]]*eb\)' "$TOP/host/kobo/boot/action.sh" \
     && ok "vinput.c + Kobo host handle Elan repeated tracking-id and bottom-edge thirds" \
     || fail "missing Elan repeated tracking-id fix or G_EDGE_THIRDS wiring"
+grep -q 'MSC_RAW_PORTRAIT_DOWN' "$TOP/input/legacy/vinput.c" \
+    && grep -q 'G_AUTO_ROTATE' "$TOP/input/legacy/vinput.c" \
+    && grep -q 'KFB_AUTO_ROTATE' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q 'PAGE_KEYS_SWAP' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -qE '^[[:space:]]*autorot\)' "$TOP/host/kobo/boot/lib/cmd.sh" \
+    && grep -q 'KFB_AUTO_ROTATE' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && grep -q 'PAGE_KEYS_SWAP' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && ok "gyro auto-rotate (with page-key follow) & page-key swap toggles wired end-to-end" \
+    || fail "missing gyro auto-rotate or page-key swap wiring"
 
 # 5. Kobo Libra 2 model profile, slimming/memory optimizations & launcher files
 [ -f "$TOP/host/kobo/models/libra2.conf" ] \

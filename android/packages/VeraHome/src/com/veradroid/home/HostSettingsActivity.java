@@ -154,6 +154,12 @@ public class HostSettingsActivity extends Activity {
         stepper("屏幕旋转", "画面顺时针转。倒过来（180°）立即生效；横屏（90° / 270°）要重启 Android（约 20 秒，自动进行）。停手 2.5 秒后才生效。",
             "KFB_ROTATE", new String[] { "竖屏（0°）", "倒过来（180°）", "横屏（90°，会重启）", "横屏（270°，会重启）" },
             new String[] { "0", "180", "90", "270" }, "0", null);
+        if (HostLink.isKobo()) {
+            stepper("重力感应自动旋转", "开启后倒拿设备自动在 0° / 180° 间实时旋转，触摸坐标、手势与实体翻页键自动随动；横屏模式下在 90° / 270° 间随动。",
+                "KFB_AUTO_ROTATE", new String[] { "关（默认）", "开" }, new String[] { "0", "1" }, "0", null);
+            stepper("翻页键功能互换", "交换上下实体翻页键的上一页 / 下一页功能，立即生效，且自动跟随屏幕旋转。",
+                "PAGE_KEYS_SWAP", new String[] { "关（默认）", "开" }, new String[] { "0", "1" }, "0", null);
+        }
         section("档位");
         stepper("显示档位", "一次定好下面的刷新方式：流畅（先快刷、停下再补灰度）、均衡、画质（驱动自动选波形，合并中间帧）。选“自定义”时按下面几项单独设。",
             "KFB_SMOOTH", new String[] { "自定义", "流畅", "均衡", "画质" }, new String[] { "0", "1", "2", "3" }, "0",

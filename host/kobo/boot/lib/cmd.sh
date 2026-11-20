@@ -150,6 +150,14 @@ cmd_listen() {
                 echo "KFB_ROTATE=$a" >> "$SYS/settings.conf.tmp"; mv -f "$SYS/settings.conf.tmp" "$SYS/settings.conf"
                 settings_load; settings_publish; rotate_apply ;;
             esac ;;
+        autorot)
+            case "$a" in 0|90|180|270)
+                touch "$SYS/settings.conf"
+                grep -v "^KFB_ROTATE=" "$SYS/settings.conf" > "$SYS/settings.conf.tmp" 2>/dev/null || true
+                echo "KFB_ROTATE=$a" >> "$SYS/settings.conf.tmp"; mv -f "$SYS/settings.conf.tmp" "$SYS/settings.conf"
+                echo "$a" > "$W/rotate"
+                settings_load; settings_publish; gestures_write ;;
+            esac ;;
         invert)
             cur=$(sed -n 's/^KFB_INVERT=//p' "$X/settings" 2>/dev/null); [ "$cur" = 1 ] && n=0 || n=1
             echo "KFB_INVERT=$n" > "$X/ctl/settings.new"; settings_apply ;;

@@ -57,6 +57,7 @@ import java.util.Map;
 public class HomeActivity extends Activity {
     // “恢复默认设置”交给宿主恢复默认的设置项（显示、手势、返回方式）
     static final String[] RESET_KEYS = { "KFB_SETTLE", "KFB_MODE", "KFB_FLASH", "KFB_CONTRAST", "KFB_DITHER", "KFB_INVERT", "KFB_LIGHTF", "KFB_DARKEN", "KFB_GESTURES",
+        "KFB_AUTO_ROTATE", "PAGE_KEYS_SWAP",
         "RETURN_MODE", "KFB_ANIM_MODE", "KFB_ANIM_STEPS", "KFB_ANIM_DIR", "KFB_ANIM_MIN", "KFB_SMOOTH", "KFB_PACE", "KFB_HOLD", "KFB_CLEAN", "KFB_REAGL_MIN",
         "G_TL", "G_TR", "G_BL", "G_BR", "G_EDGE_BACK", "G_EDGE_PANEL", "G_TWO_TAP", "G_TWO_LONG", "G_TWO_BACK", "G_TWO_SLIDE", "G_BACK_EXCLUDE",
         "G_EDGE_THIRDS", "G_EB_L", "G_EB_M", "G_EB_R", "G_EB_HOLD", "G_EB_HOLD_MS" };
@@ -2109,6 +2110,11 @@ public class HomeActivity extends Activity {
             hostChoice(list, host, "手势提示", "识别到手势时在屏幕边上闪一下提示；应用卡住、2 秒没反应时提示怎么回到 Kobo。", "GESTURE_HINT",
                 new String[] { "全部", "只在没响应时", "关" }, new String[] { "all", "stuck", "off" }, "all");
             hostChoice(list, host, "启用手势", "下面所有手势的总开关。关掉后它们都不起作用，单指点按的反应也会快一点；“从最下边往上划：返回”只看它自己的开关。", "KFB_GESTURES", ONOFF_L, ONOFF_V, "1");
+            if (HostLink.isKobo()) {
+                section(list, "实体翻页键与方向");
+                hostChoice(list, host, "重力感应自动旋转", "倒拿设备自动在 0° / 180° 间实时旋转，触摸与物理翻页键自动随动。", "KFB_AUTO_ROTATE", ONOFF_L, ONOFF_V, "0");
+                hostChoice(list, host, "翻页键功能互换", "对调上下两个实体翻页键的上一页 / 下一页功能，立即生效且随屏幕旋转同步调整。", "PAGE_KEYS_SWAP", ONOFF_L, ONOFF_V, "0");
+            }
             section(list, "单个手势（每个都能单独关，立即生效）");
             hostChoice(list, host, "从最下边往上划：返回", "从屏幕最下边一小条往上划，相当于返回键。和应用自己的上划冲突时可以关掉，或者用下一项只在某些应用里关掉。", "G_EDGE_BACK", ONOFF_L, ONOFF_V, "1");
             hostChoice(list, host, "这些应用里不用上划返回", "微信读书在阅读页上划会呼出底部工具栏。这些应用在前台时，上划直接交给应用；要返回可以用两根手指左右滑。", "G_BACK_EXCLUDE", EXCL_L, EXCL_V, "com.tencent.weread.eink");

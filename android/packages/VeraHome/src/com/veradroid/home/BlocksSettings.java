@@ -188,6 +188,13 @@ final class BlocksSettings {
         final int[] animLast = { am > 0 ? am : 1 };
         add(g, Blocks.row(a, "翻页动画", "Page-turn swipe", toggle(am > 0, new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { host("KFB_ANIM_MODE=" + (on ? animLast[0] : 0)); } })));
+        if (HostLink.isKobo()) {
+            LinearLayout kr = group(c, "方向与实体按键");
+            add(kr, Blocks.row(a, "重力感应自动旋转", "Auto rotate (0° / 180°, keys follow)", toggle("1".equals(cfg.get("KFB_AUTO_ROTATE")), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("KFB_AUTO_ROTATE=" + (on ? 1 : 0)); } })));
+            add(kr, Blocks.row(a, "翻页键功能互换", "Swap page-turn buttons", toggle("1".equals(cfg.get("PAGE_KEYS_SWAP")), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("PAGE_KEYS_SWAP=" + (on ? 1 : 0)); } })));
+        }
         LinearLayout fg = group(c, "文字");
         float fs = AppFont.user(a);
         int fi = 0;

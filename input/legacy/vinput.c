@@ -149,9 +149,18 @@ static const char *const EB_KEY[4] = { "G_EB_L", "G_EB_M", "G_EB_R", "G_EB_HOLD"
 static const char *const EB_DEF[4] = { "appopt", "home", "back", "switch" };
 /* rotation (see the header): ROT_ON = --rotate was given at all; PW/PH = panel size in pixels; W/H become the logical size */
 static int ROT = 0, ROT_ON = 0, PW = 0, PH = 0, VW = 0;   /* FLAGF exists -> gestures are off (only bottom-edge back stays) */
+static int gconf_rot = -1;                                /* last ROTATE= seen in --gconf, so unrelated gconf reloads don't override gyro */
+static int G_AUTO_ROTATE = 0;                             /* Kobo kx122 accelerometer auto-rotate (live 0<->180 or 90<->270) */
+static int gyro_want = -1;                                /* pending gyro target degrees, or -1 if none */
+static long gyro_since = 0;                               /* monotonic ms when gyro_want was first seen */
+#define GYRO_SETTLE_MS 500
+#define MSC_RAW_PORTRAIT_DOWN   0x17
+#define MSC_RAW_PORTRAIT_UP     0x18
+#define MSC_RAW_LANDSCAPE_RIGHT 0x19
+#define MSC_RAW_LANDSCAPE_LEFT  0x1a
 static int SWAP_XY = 0, FLIP_X = 0, FLIP_Y = 0;          /* raw touchscreen axis transform (e.g. Kobo Libra 2 Elan: --swap-xy) */
 static const char *KEYDEV = NULL, *SLEEP_FLAG = NULL;    /* optional hardware key device (Kobo gpio-keys) + sleep gate */
-static int keyfd = -1, KEY_SWAP = 0, KEY_MAP_PAGE = 0;   /* KEY_MAP_PAGE: 0 = volume keys (default), 1 = page keys */
+static int keyfd = -1, KEY_SWAP = 0, KEY_SWAP_CLI = 0, KEY_MAP_PAGE = 0;   /* KEY_MAP_PAGE: 0 = volume keys (default), 1 = page keys */
 static volatile sig_atomic_t quit = 0, want_release = 0, want_grab = 0;
 static int paused = 0;
 static int hw_slot = 0;          /* protocol B: the slot the panel's next events refer to (it only sends ABS_MT_SLOT on change) */
@@ -192,6 +201,7 @@ static void gconf_load(void)
     G_TAP = 1; G_TAP_KEY = KEY_VOLUMEDOWN; snprintf(G_CORNERS, sizeof(G_CORNERS), "all");
     BOOST_MS = 150; BOOST_KHZ = 0; SCROLL_PX = 20; FAST_DRAG = 1;
     G_EDGE_THIRDS = 0; G_EB_HOLD_MS = 500;
+    G_AUTO_ROTATE = 0; KEY_SWAP = KEY_SWAP_CLI;
     for (int i = 0; i < 4; i++) snprintf(G_EB[i], sizeof(G_EB[i]), "%s", EB_DEF[i]);
     FILE *f = !ok ? NULL : fopen(GCONF, "r");
     if (f) {
@@ -230,12 +240,19 @@ static void gconf_load(void)
             else if (!strcmp(line, "G_EDGE_SENS")) { G_EDGE_SENS = atoi(v); if (G_EDGE_SENS < 0 || G_EDGE_SENS > 2) G_EDGE_SENS = 1; }
             else if (!strcmp(line, "G_CORNERS")) snprintf(G_CORNERS, sizeof(G_CORNERS), "%s", strcmp(v, "none") ? v : "");
             else if (!strcmp(line, "G_BACK_EXCLUDE")) { snprintf(G_BACK_EXCLUDE, sizeof(G_BACK_EXCLUDE), "%s", strcmp(v, "none") ? v : ""); }
+            else if (!strcmp(line, "AUTO_ROTATE")) { G_AUTO_ROTATE = b; if (!G_AUTO_ROTATE) gyro_want = -1; }
+            else if (!strcmp(line, "KEY_SWAP")) { KEY_SWAP = b; }
             else if (!strcmp(line, "ROTATE")) {
-                /* live only within the same logical size: the virtual touch screen's ranges are fixed at start */
+                /* live only within the same logical size: the virtual touch screen's ranges are fixed at start.
+                   Track gconf_rot so reloading gestures for an unrelated toggle does not undo a gyro auto-rotate. */
                 int r = atoi(v);
-                if ((r == 0 || r == 90 || r == 180 || r == 270) && (r % 180) == (ROT % 180) && r != ROT) {
-                    logf_("rotate %d -> %d", ROT, r);
-                    ROT = r;
+                if ((r == 0 || r == 90 || r == 180 || r == 270) && r != gconf_rot) {
+                    gconf_rot = r;
+                    if ((r % 180) == (ROT % 180) && r != ROT) {
+                        logf_("rotate %d -> %d", ROT, r);
+                        ROT = r;
+                        gyro_want = -1;
+                    }
                 }
             }
         }
@@ -247,7 +264,8 @@ static void gconf_load(void)
         EDGE_TOP = EDGE_TOP_BASE * strip_pct[G_EDGE_SENS] / 100;
         EDGE_SWIPE = EDGE_SWIPE_BASE * swipe_pct[G_EDGE_SENS] / 100;
     }
-    logf_("gconf: edge_sens=%d (strip %d/%d px, swipe %d px) boost=%dms/%dkHz scroll_px=%d", G_EDGE_SENS, EDGE, EDGE_TOP, EDGE_SWIPE, BOOST_MS, BOOST_KHZ, SCROLL_PX);
+    logf_("gconf: edge_sens=%d (strip %d/%d px, swipe %d px) boost=%dms/%dkHz scroll_px=%d auto_rot=%d key_swap=%d",
+          G_EDGE_SENS, EDGE, EDGE_TOP, EDGE_SWIPE, BOOST_MS, BOOST_KHZ, SCROLL_PX, G_AUTO_ROTATE, KEY_SWAP);
     logf_("gconf: edge_back=%d edge_panel=%d two_tap=%d two_long=%d two_back=%d two_slide=%d exclude=%s",
           G_EDGE_BACK, G_EDGE_PANEL, G_TWO_TAP, G_TWO_LONG, G_TWO_BACK, G_TWO_SLIDE, G_BACK_EXCLUDE[0] ? G_BACK_EXCLUDE : "-");
     if (G_EDGE_THIRDS) logf_("gconf: bottom edge thirds: left=%s middle=%s right=%s hold=%s (%d ms)", G_EB[0], G_EB[1], G_EB[2], G_EB[3], G_EB_HOLD_MS);
@@ -1260,6 +1278,8 @@ static void inj_frame(int tid, int x, int y)
     rot_frame(fr, n);
     handle_frame(fr, n);
 }
+static void gyro_report(int deg, int raw);
+static void handle_page_key(int code);
 static void inject_cmd(int fd)
 {
     char buf[256];
@@ -1271,6 +1291,12 @@ static void inject_cmd(int fd)
         int x1, y1, x2, y2, ms;
         if (!strncmp(line, "reset", 5) && (line[5] == 0 || line[5] == ' ')) {
             touch_reset(line[5] ? line + 6 : "host");
+        } else if (sscanf(line, "gyro %d", &x1) == 1) {
+            logf_("inject gyro %d", x1);
+            gyro_report(x1, 0);
+        } else if (sscanf(line, "hwkey %d", &x1) == 1) {
+            logf_("inject hwkey %d", x1);
+            handle_page_key(x1);
         } else if (sscanf(line, "down %d %d", &x1, &y1) == 2) {
             logf_("inject down %d,%d", x1, y1);
             inj_frame(77, x1, y1);          /* returns at once: the poll tick decides when the press is handed to Android */
@@ -1325,6 +1351,60 @@ static int is_sleeping(void)
     return SLEEP_FLAG && SLEEP_FLAG[0] && access(SLEEP_FLAG, F_OK) == 0;
 }
 
+static void gyro_report(int deg, int raw)
+{
+    if (paused || is_sleeping()) return;
+    gconf_load();
+    if (!G_AUTO_ROTATE) return;
+    if (deg != 0 && deg != 90 && deg != 180 && deg != 270) return;
+    /* Live auto-rotate only switches within the same logical dimensions (0<->180 in portrait,
+       90<->270 in landscape) so tilting while reading never triggers an Android container restart. */
+    if ((deg % 180) != (ROT % 180)) return;
+    if (deg == ROT) {
+        gyro_want = -1;
+        return;
+    }
+    if (deg != gyro_want) {
+        gyro_want = deg;
+        gyro_since = now_ms();
+        logf_("gyro: pending rotate %d -> %d (raw=0x%x)", ROT, deg, raw);
+    }
+}
+
+static void gyro_check(void)
+{
+    if (!G_AUTO_ROTATE || gyro_want < 0 || gyro_want == ROT || paused || is_sleeping()) return;
+    if (md != IDLE || count_active() != 0 || out_any()) return;
+    if (now_ms() - gyro_since < GYRO_SETTLE_MS) return;
+    int old_rot = ROT;
+    ROT = gyro_want;
+    gyro_want = -1;
+    logf_("gyro: auto-rotate %d -> %d", old_rot, ROT);
+    char rcmd[32];
+    snprintf(rcmd, sizeof(rcmd), "ROT %d\n", ROT);
+    epd_cmd(rcmd);
+    char rarg[16];
+    snprintf(rarg, sizeof(rarg), "%d", ROT);
+    action("rotate", rarg);
+}
+
+static void handle_page_key(int code)
+{
+    if (is_sleeping()) return;
+    gconf_load();
+    int is_next = (code == 193 || code == KEY_PAGEDOWN);
+    if (ROT == 180 || ROT == 270) is_next = !is_next;
+    if (KEY_SWAP) is_next = !is_next;
+    int out_key = KEY_MAP_PAGE ? (is_next ? KEY_PAGEDOWN : KEY_PAGEUP)
+                               : (is_next ? KEY_VOLUMEDOWN : KEY_VOLUMEUP);
+    logf_("hw key %d -> key %d (rot=%d swap=%d)", code, out_key, ROT, KEY_SWAP);
+    idle_thaw();
+    epd_dir(is_next ? 2 : 3);
+    epd_cmd("TOUCH\n");
+    key_tap(out_key);
+    action("poke", NULL);
+}
+
 static void keydev_read(void)
 {
     struct input_event ev;
@@ -1332,6 +1412,15 @@ static void keydev_read(void)
         ssize_t n = read(keyfd, &ev, sizeof(ev));
         if (n == (ssize_t)sizeof(ev)) {
             if (paused) continue;
+            if (ev.type == EV_MSC && ev.code == MSC_RAW) {
+                int deg = -1;
+                if (ev.value == MSC_RAW_PORTRAIT_UP) deg = 0;
+                else if (ev.value == MSC_RAW_PORTRAIT_DOWN) deg = 180;
+                else if (ev.value == MSC_RAW_LANDSCAPE_RIGHT) deg = 90;
+                else if (ev.value == MSC_RAW_LANDSCAPE_LEFT) deg = 270;
+                if (deg >= 0) gyro_report(deg, ev.value);
+                continue;
+            }
             if (ev.type == EV_KEY && ev.code == KEY_POWER) {
                 /* Trigger sleep/wake toggle on release so long-press hardware power-off still works */
                 if (ev.value == 0) {
@@ -1341,20 +1430,8 @@ static void keydev_read(void)
                 continue;
             }
             if (ev.type == EV_KEY && (ev.code == 193 || ev.code == 194 || ev.code == KEY_PAGEUP || ev.code == KEY_PAGEDOWN)) {
-                if (is_sleeping()) continue;
                 if (ev.value != 1) continue;   /* press triggers page turn */
-                gconf_load();
-                int is_next = (ev.code == 193 || ev.code == KEY_PAGEDOWN);
-                if (ROT == 180) is_next = !is_next;
-                if (KEY_SWAP) is_next = !is_next;
-                int out_key = KEY_MAP_PAGE ? (is_next ? KEY_PAGEDOWN : KEY_PAGEUP)
-                                           : (is_next ? KEY_VOLUMEDOWN : KEY_VOLUMEUP);
-                logf_("hw key %d -> key %d (rot=%d swap=%d)", ev.code, out_key, ROT, KEY_SWAP);
-                idle_thaw();
-                epd_dir(is_next ? 2 : 3);
-                epd_cmd("TOUCH\n");
-                key_tap(out_key);
-                action("poke", NULL);
+                handle_page_key(ev.code);
                 continue;
             }
             continue;
@@ -1392,7 +1469,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--flip-x")) FLIP_X = 1;
         else if (!strcmp(argv[i], "--flip-y")) FLIP_Y = 1;
         else if (!strcmp(argv[i], "--keydev") && i + 1 < argc) KEYDEV = argv[++i];
-        else if (!strcmp(argv[i], "--key-swap")) KEY_SWAP = 1;
+        else if (!strcmp(argv[i], "--key-swap")) { KEY_SWAP = KEY_SWAP_CLI = 1; }
         else if (!strcmp(argv[i], "--key-map") && i + 1 < argc) { KEY_MAP_PAGE = !strcmp(argv[++i], "page"); }
         else if (!strcmp(argv[i], "--sleep-flag") && i + 1 < argc) SLEEP_FLAG = argv[++i];
         else if (!strcmp(argv[i], "--vw") && i + 1 < argc) VW = atoi(argv[++i]);
@@ -1477,10 +1554,12 @@ int main(int argc, char **argv)
         if (want_release) {
             want_release = 0;
             boost_end();
+            gyro_want = -1;
             if (!paused) { release_android(1, "released to the Kindle"); ioctl(tfd, EVIOCGRAB, 0); if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 0); if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 0); paused = 1; md = IDLE; nheld = 0; nf = 0; slots_reset(); memset(as_, 0, sizeof(as_)); st_btn = 0; logf_("released"); }
         }
         if (want_grab) {
             want_grab = 0;
+            gyro_want = -1;
             if (paused) {
                 ioctl(tfd, EVIOCGRAB, 1); if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 1); if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 1); paused = 0; md = IDLE; nheld = 0; nf = 0; slots_reset(); memset(as_, 0, sizeof(as_)); st_btn = 0;
                 struct input_absinfo ai;
@@ -1490,10 +1569,16 @@ int main(int argc, char **argv)
             }
         }
         if (boost_until && now_ms() >= boost_until) boost_end();
+        gyro_check();
         struct pollfd pf[4] = { { tfd, POLLIN, 0 }, { ifd, POLLIN, 0 }, { tapfd, POLLIN, 0 }, { keyfd, POLLIN, 0 } };
         int pto = md == IDLE ? -1 : 10;
         if (STUCK_MS > 0 && (out_any() || count_active())) { int w = STUCK_MS / 4 > 10 ? STUCK_MS / 4 : 10; if (pto < 0 || w < pto) pto = w; }
         if (boost_until) { long left = boost_until - now_ms(); if (left < 1) left = 1; if (pto < 0 || left < pto) pto = (int)left; }
+        if (G_AUTO_ROTATE && gyro_want >= 0 && gyro_want != ROT) {
+            long left = GYRO_SETTLE_MS - (now_ms() - gyro_since);
+            if (left < 1) left = 1;
+            if (pto < 0 || left < pto) pto = (int)left;
+        }
         int pr = poll(pf, 4, pto);   /* a negative fd is skipped by poll */
         if (pr > 0 && keyfd >= 0 && (pf[3].revents & (POLLIN | POLLERR | POLLHUP))) {
             keydev_read();

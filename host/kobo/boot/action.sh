@@ -102,6 +102,7 @@ case "$1" in
     bl) POS=bl; run_action "${G_BL:-kindle}" ;;
     br) POS=br; run_action "${G_BR:-none}" ;;
     eb) POS=b; run_action "$2" ;;
+    rotate) echo "$2" > "$W/rotate"; send "autorot $2" ;;
     power)  power_send toggle ;;
     sleep)  power_send sleep ;;
     wake)   power_send wake ;;
