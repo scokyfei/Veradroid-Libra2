@@ -18,9 +18,9 @@ settings_defaults() {
     KFB_SETTLE=50
     KFB_MODE=0
     KFB_HOLD=70
-    KFB_ANIM_MODE=0
+    KFB_ANIM_MODE=1
     KFB_ANIM_DIR=2
-    KFB_ANIM_STEPS=12
+    KFB_ANIM_STEPS=8
     KFB_ANIM_MIN=45
     KFB_ROTATE=0
     G_TL=none; G_TR=none; G_BL=kindle; G_BR=none

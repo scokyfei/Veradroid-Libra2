@@ -1249,6 +1249,7 @@ static void keydev_read(void)
                                            : (is_next ? KEY_VOLUMEDOWN : KEY_VOLUMEUP);
                 logf_("hw key %d -> key %d (rot=%d swap=%d)", ev.code, out_key, ROT, KEY_SWAP);
                 idle_thaw();
+                epd_dir(is_next ? 2 : 3);
                 epd_cmd("TOUCH\n");
                 key_tap(out_key);
                 action("poke", NULL);

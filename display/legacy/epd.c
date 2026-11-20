@@ -350,6 +350,39 @@ static int maybe_animate(FBInkConfig *c, int w, int h, int flash)
 {
     int one = anim_next, od = once_dir, os = once_steps;
     anim_next = 0; once_dir = -1;
+#ifdef FBINK_FOR_KOBO
+    if (flash) return 0;
+    if (one && od >= 0) {
+        if (os < 4) os = 4;
+        if (os > 16) os = 16;
+        if (w < os * 16 || h < os * 16) return 0;
+        int d1 = rot_dir(od);
+        last_swipe_dir = d1; swipe_steps = os;
+        c->is_flashing = false;
+        fprintf(stderr, "epd: kobo wipe once dir=%d steps=%d\n", d1, os);
+        return 1;
+    }
+    if (anim_mode == 0) return 0;
+    int st = anim_steps;
+    if (st < 4) st = 4;
+    if (st > 16) st = 16;
+    int want = one || ((long)w * h > (long)W * H * anim_min_pct / 100);
+    if (!want || w < st * 16 || h < st * 16) return 0;
+    swipe_steps = st;
+    int dir = anim_dir;
+    switch (anim_mode) {
+    case 2: dir = 2; break;   /* left (next page: right -> left) */
+    case 3: dir = 3; break;   /* right (prev page: left -> right) */
+    case 4: dir = 1; break;   /* up (bottom -> top) */
+    case 5: dir = 0; break;   /* down (top -> bottom) */
+    default: break;           /* 1: follow DIR from veradroid-input (touch & page keys) */
+    }
+    dir = rot_dir(dir);
+    last_swipe_dir = dir;
+    c->is_flashing = false;
+    fprintf(stderr, "epd: kobo wipe mode=%d dir=%d steps=%d\n", anim_mode, dir, st);
+    return 1;
+#else
     if (flash || !g_is_mtk) return 0;
     if (one && od >= 0) {
         /* SWIPE one-shot: its own direction / steps, independent of the ANIM settings */
@@ -385,7 +418,71 @@ static int maybe_animate(FBInkConfig *c, int w, int h, int flash)
     c->is_flashing = false;      /* FBInk sends a swipe as AUTO + PARTIAL; the driver turns it into GLR16 itself */
     fprintf(stderr, "epd: swipe mode=%d dir=%d steps=%d\n", anim_mode, dir, anim_steps);
     return 1;
+#endif
 }
+
+#ifdef FBINK_FOR_KOBO
+/* Koboweread-inspired disjoint strip-wipe page-turn animation for Kobo i.MX6 SLL EPDC v2.
+   Reveals the new page across N 16px-aligned disjoint strips (~180 ms total) while untouched
+   strips keep the old page visible on the e-ink glass. dir: 2=left (R->L), 3=right (L->R),
+   1=up (B->T), 0=down (T->B). Falls back to single-shot refresh on error. */
+static int kobo_wipe_y8(const uint8_t *buf, int x, int y, int w, int h, int dir, int steps, FBInkConfig c)
+{
+    if (steps < 4) steps = 4;
+    if (steps > 16) steps = 16;
+    c.dithering_mode = HWD_PASSTHROUGH;
+    c.is_flashing = false;
+    c.is_animated = false;
+    c.halign = NONE;
+    c.valign = NONE;
+    long step_ms = 180L / (steps - 1);
+    if (step_ms < 14) step_ms = 14;
+    if (step_ms > 30) step_ms = 30;
+    struct timespec pause = { 0, step_ms * 1000000L };
+
+    if (dir == 2 || dir == 3) {
+        /* Vertical strips sweeping right->left (dir=2) or left->right (dir=3) */
+        int max_sw = (w / steps) + 32;
+        uint8_t *scratch = malloc((size_t)max_sw * (size_t)h);
+        if (!scratch) return -1;
+        int rc = 0;
+        for (int i = 0; i < steps; i++) {
+            int s = (dir == 2) ? (steps - 1 - i) : i;
+            int sx0 = (s == 0) ? 0 : ((w * s / steps) & ~15);
+            int sx1 = (s + 1 == steps) ? w : ((w * (s + 1) / steps) & ~15);
+            int sw = sx1 - sx0;
+            if (sw <= 0) continue;
+            if (sw > max_sw) {
+                uint8_t *ns = realloc(scratch, (size_t)sw * (size_t)h);
+                if (!ns) { rc = -1; break; }
+                scratch = ns; max_sw = sw;
+            }
+            for (int row = 0; row < h; row++)
+                memcpy(scratch + (size_t)row * (size_t)sw, buf + (size_t)row * (size_t)w + sx0, (size_t)sw);
+            if (fbink_print_raw_data(fbfd, scratch, sw, h, (size_t)sw * (size_t)h, (short)(x + sx0), (short)y, &c) < 0) {
+                rc = -1; break;
+            }
+            if (i + 1 < steps) nanosleep(&pause, NULL);
+        }
+        free(scratch);
+        return rc;
+    } else {
+        /* Horizontal strips sweeping bottom->top (dir=1) or top->bottom (dir=0): contiguous rows, zero copy */
+        for (int i = 0; i < steps; i++) {
+            int s = (dir == 1) ? (steps - 1 - i) : i;
+            int sy0 = (s == 0) ? 0 : ((h * s / steps) & ~15);
+            int sy1 = (s + 1 == steps) ? h : ((h * (s + 1) / steps) & ~15);
+            int sh = sy1 - sy0;
+            if (sh <= 0) continue;
+            if (fbink_print_raw_data(fbfd, (unsigned char *)(buf + (size_t)sy0 * (size_t)w), w, sh,
+                                     (size_t)w * (size_t)sh, (short)x, (short)(y + sy0), &c) < 0)
+                return -1;
+            if (i + 1 < steps) nanosleep(&pause, NULL);
+        }
+        return 0;
+    }
+}
+#endif
 
 static void on_sig(int s) { (void)s; quit = 1; }
 
@@ -916,7 +1013,17 @@ static int push_y8(const uint8_t *buf, int x, int y, int w, int h, int mode)
         for (size_t i = 0; i < (size_t)w * h; i++) mono[i] = buf[i] >= mono_level ? 255 : 0;
         c.dithering_mode = HWD_PASSTHROUGH;
     }
-    int rc = fbink_print_raw_data(fbfd, mono ? mono : buf, w, h, (size_t)w * h, (short)x, (short)y, &c);
+    int rc;
+#ifdef FBINK_FOR_KOBO
+    if (anim) {
+        rc = kobo_wipe_y8(mono ? mono : buf, x, y, w, h, last_swipe_dir, swipe_steps, c);
+        if (rc < 0) rc = fbink_print_raw_data(fbfd, (unsigned char *)(mono ? mono : buf), w, h, (size_t)w * h, (short)x, (short)y, &c);
+    } else {
+        rc = fbink_print_raw_data(fbfd, (unsigned char *)(mono ? mono : buf), w, h, (size_t)w * h, (short)x, (short)y, &c);
+    }
+#else
+    rc = fbink_print_raw_data(fbfd, mono ? mono : buf, w, h, (size_t)w * h, (short)x, (short)y, &c);
+#endif
     free(mono);
     if ((g_cfa || g_rawmtk) && rc >= 0) rc = refresh_cfa(x, y, w, h, &c);
     /* flash=1 only for the GC16 full refresh that really flashes (REAGL is also sent FULL but does not flash) */
@@ -1178,12 +1285,23 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
         if (timing_flag && access(timing_flag, F_OK) == 0) fprintf(stderr, "[%ld] epd: GCN %d reached: flash when still\n", now_ms(), gc_every);
         return 3;
     }
+#ifdef FBINK_FOR_KOBO
+    if (mode != M_FULL && !g_scroll && (anim_next || (anim_mode && flip_total > (long)W * H * anim_min_pct / 100))) {
+        /* Kobo strip-wipe page turn: reveal across disjoint 16px-aligned strips (see kobo_wipe_y8) */
+        anim_next = 1;
+        int wy0 = cy0[0], wy1 = cy1[nc - 1];
+        if (wy1 - wy0 >= H * 80 / 100) { wy0 = 0; wy1 = H; }
+        push_region(0, wy0, W, wy1, M_AUTO);
+        return 0;
+    }
+#else
     if (g_is_mtk && mode != M_FULL && !g_scroll && (anim_next || (anim_mode && flip_total > (long)W * H * anim_min_pct / 100))) {
         /* 整页变化交给硬件滑动动画；到 KFB_FLASH 页数时上面已经改成停下来以后整屏闪刷 */
         anim_next = 1;
         push_region(0, 0, W, H, M_AUTO);
         return 0;
     }
+#endif
     {
         int rm = reagl_min;
         if (hint_until && now_ms() < hint_until) { if (hint_pct < rm) rm = hint_pct; }

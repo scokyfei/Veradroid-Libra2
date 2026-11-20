@@ -83,7 +83,9 @@ display_start() {
         --flash "${KFB_FLASH:-8}" --invert "${KFB_INVERT:-0}" \
         --lightf "${KFB_LIGHTF:-0}" --darken "${KFB_DARKEN:-0}" \
         --mode "${KFB_MODE:-0}" --settle "${KFB_SETTLE:-50}" --hold "${KFB_HOLD:-70}" \
-        --anim-mode 0 --scroll-delay "${KFB_SCROLLDELAY:-500}" \
+        --anim-mode "${KFB_ANIM_MODE:-1}" --anim-dir "${KFB_ANIM_DIR:-2}" \
+        --anim-steps "${KFB_ANIM_STEPS:-8}" --anim-min "${KFB_ANIM_MIN:-45}" \
+        --scroll-delay "${KFB_SCROLLDELAY:-500}" \
         --scroll-style "${KFB_SCROLLSTYLE:-1}" --scroll-wfm "${KFB_SCROLLWFM:-a2}" \
         --nice "${KFB_EPD_NICE:--8}" $(rot_args) >>"$W/epd.log" 2>&1 &
     echo $! > "$W/epd.pid"
