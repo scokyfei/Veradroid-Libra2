@@ -16,8 +16,8 @@ public class VeraFileProvider extends ContentProvider {
 
     @Override public boolean onCreate() { return true; }
 
-    /** Canonical path inside shared storage or the Kindle library. Since 2026-11-13 /data/media/0/KindleLibrary is a symlink
-     *  to /kindle_library (the bind mount of the Kindle's documents lives outside /data), so its files canonicalise there. */
+    /** Canonical path inside shared storage or the Kobo library. Since 2026-11-13 /data/media/0/KindleLibrary is a symlink
+     *  to /kindle_library (the bind mount of the Kobo's documents lives outside /data), so its files canonicalise there. */
     static boolean allowed(String cp) {
         return (cp.startsWith("/data/media/0/") || cp.startsWith("/kindle_library/")) && !cp.contains("/.");
     }

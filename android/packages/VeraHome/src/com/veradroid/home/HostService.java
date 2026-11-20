@@ -244,7 +244,7 @@ public class HostService extends Service {
             Perf.begin();   // 宿主手势到达：从这里算面板 / 切换器打开用了多久
             String act = name.substring(4);
             if (act.equals("lock")) { LockScreen.show(this); return; }
-            if (LockScreen.showing()) return;   // 锁着时不让手势打开面板 / 切换应用 / 回桌面（回 Kindle 由宿主自己做，不经过这里）
+            if (LockScreen.showing()) return;   // 锁着时不让手势打开面板 / 切换应用 / 回桌面（回 Kobo 由宿主自己做，不经过这里）
             if (act.equals("panel")) { if (Panel.isOpen()) Panel.close(); else Panel.open(this); }
             else if (Panel.isOpen() && act.equals("back")) Panel.close();
             else if (act.equals("switch")) { Panel.close(); start(SwitcherActivity.class); }
@@ -260,7 +260,7 @@ public class HostService extends Service {
         try {
             if (a[0].equals("grown") && a.length >= 3) return "存储空间快满了，已自动扩大到 " + StorageActivity.size(Integer.parseInt(a[2]));
             if (a[0].equals("pending") && a.length >= 2) return "存储空间快满了，下次启动 VeraDroid 时会扩大到 " + StorageActivity.size(Integer.parseInt(a[1]));
-            if (a[0].equals("full")) return "存储空间快满了，已经不能再扩大（" + (a.length > 1 && a[1].equals("fat") ? "FAT 格式单个文件最大 4 GB" : "Kindle 没有剩余空间了") + "）。请删掉不用的应用或书。";
+            if (a[0].equals("full")) return "存储空间快满了，已经不能再扩大（" + (a.length > 1 && a[1].equals("fat") ? "FAT 格式单个文件最大 4 GB" : "Kobo 没有剩余空间了") + "）。请删掉不用的应用或书。";
             if (a[0].equals("result") && a.length >= 5) {
                 String op = a[2].equals("grow") ? "扩大" : a[2].equals("shrink") ? "缩小" : "调整";
                 if (a[1].equals("ok")) return "存储空间已" + op + "到 " + StorageActivity.size(Integer.parseInt(a[4]));
@@ -280,8 +280,8 @@ public class HostService extends Service {
     private android.widget.TextView noticeText;
     private android.app.Dialog usbDialog;
     /**
-     * Android 在前台时插上 USB 线：Kindle 的 USB（MTP / 大容量存储）这时停着，电脑上什么都不出现（不能让 Android 和电脑同时写
-     * 用户存储）。问一句要不要切到 USB 传输：切换 = 回到 Kindle（宿主 usbswitch，和“返回 Kindle”同一套），Kindle 接着进 USB 传输；
+     * Android 在前台时插上 USB 线：Kobo 的 USB（MTP / 大容量存储）这时停着，电脑上什么都不出现（不能让 Android 和电脑同时写
+     * 用户存储）。问一句要不要切到 USB 传输：切换 = 回到 Kobo（宿主 usbswitch，和“返回 Kobo”同一套），Kobo 接着进 USB 传输；
      * 拔线后在书库点“VeraDroid 启动”回来。充电器也会触发（分不出来），所以有“不用”和“不再询问”。锁屏时不问。
      */
     private void usbAsk() {
@@ -299,7 +299,7 @@ public class HostService extends Service {
             android.widget.TextView t = Ui.text(c, "已连接电脑：要切换到 USB 传输吗？", 18, true);
             t.setPadding(0, 0, 0, Ui.dp(c, 10));
             box.addView(t);
-            android.widget.TextView m = Ui.text(c, "会退回 Kindle，电脑上就能看到 Kindle 盘；拔线后在书库点“VeraDroid 启动”，一键回到安卓。"
+            android.widget.TextView m = Ui.text(c, "会退回 Kobo，电脑上就能看到 Kobo 盘；拔线后在书库点“VeraDroid 启动”，一键回到安卓。"
                 + "\n\n不想离开安卓：用“传书”（设置 → 传书，电脑浏览器打开网页传文件）或 adb。只是在充电就点“不用”。", 16, false);
             m.setPadding(0, 0, 0, Ui.dp(c, 16));
             box.addView(m);

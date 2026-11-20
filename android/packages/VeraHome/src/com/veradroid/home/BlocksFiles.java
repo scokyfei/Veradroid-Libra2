@@ -28,7 +28,7 @@ import java.util.Map;
 /**
  * 方块风格的“文件”标签：最近 / 书籍 / 图片 / 笔记，一页一页翻。只浏览和打开，不删不改（删书在长按菜单里，和经典书库同一套）。
  *  - 最近：书库索引里的书，最近读过 / 放进来的在前（{@link Lib}）。
- *  - 书籍：按文件夹浏览 Books、下载、Kindle 书库。内部存储的文件夹当场列；Kindle 书库走 FUSE 会卡，在后台列，列完再画。
+ *  - 书籍：按文件夹浏览 Books、下载、Kobo 书库。内部存储的文件夹当场列；Kobo 书库走 FUSE 会卡，在后台列，列完再画。
  *  - 图片：{@link Theme#findImages()}（后台找，有缓存）。点一张全屏看，可以设成壁纸。
  *  - 笔记：所有书的书签（阅读器还没有摘录 / 批注）。点一条打开那本书。
  */
@@ -83,7 +83,7 @@ final class BlocksFiles {
     }
 
     private static String[][] roots() {
-        return new String[][] { { "Books（内部存储）", Transfer.BOOKS }, { "下载", "/data/media/0/Download" }, { "Kindle 书库", Transfer.KINDLE } };
+        return new String[][] { { "Books（内部存储）", Transfer.BOOKS }, { "下载", "/data/media/0/Download" }, { "Kobo 书库", Transfer.KINDLE } };
     }
 
     View build() {
@@ -202,7 +202,7 @@ final class BlocksFiles {
     }
 
     private String emptyHint() {
-        if (loading()) return "Kindle 书库在另一个文件系统上，第一次要读一会儿";
+        if (loading()) return "Kobo 书库在另一个文件系统上，第一次要读一会儿";
         switch (seg) {
         case 0: return a.libOn() ? "用传书网页传进来，或者放进 Books 文件夹" : "设置／应用与桌面／书库";
         case 2: return "放进 Pictures、Download 或 VeraDroid/wallpaper";
@@ -233,7 +233,7 @@ final class BlocksFiles {
     }
 
     private static String shortPath(String p) {
-        if (p.startsWith(Transfer.KINDLE)) return "/Kindle 书库" + p.substring(Transfer.KINDLE.length());
+        if (p.startsWith(Transfer.KINDLE)) return "/Kobo 书库" + p.substring(Transfer.KINDLE.length());
         if (p.startsWith("/data/media/0")) return p.substring("/data/media/0".length());
         return p;
     }
@@ -337,7 +337,7 @@ final class BlocksFiles {
         } }).show();
     }
 
-    /** 移动到：Books、下载、Kindle 书库三个地方之一。 */
+    /** 移动到：Books、下载、Kobo 书库三个地方之一。 */
     private void moveDialog(final List<String> paths) {
         if (paths.isEmpty()) { VeraToast.show(a, "还没选文件"); return; }
         final String[][] r = roots();
@@ -524,7 +524,7 @@ final class BlocksFiles {
     private static Lib.Book known(String p) { for (Lib.Book b : Lib.all()) if (b.path.equals(p)) return b; return null; }
     private static Lib.Book book(String p) { Lib.Book b = known(p); return b != null ? b : new Lib.Book(p); }
 
-    /** 列一个文件夹：内部存储当场列；Kindle 书库（FUSE）后台列，列完再画一次。 */
+    /** 列一个文件夹：内部存储当场列；Kobo 书库（FUSE）后台列，列完再画一次。 */
     private File[] list(final String p) {
         File[] c = dirCache.get(p);
         if (c != null) return c;

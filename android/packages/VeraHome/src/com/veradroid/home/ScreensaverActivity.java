@@ -26,9 +26,9 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * 设置 → 设备与更新 → 屏保：Kindle 自带（默认）/ 轮换全部图片 / 只用一张；还能从内部存储导入图片。
+ * 设置 → 设备与更新 → 屏保：Kobo 自带（默认）/ 轮换全部图片 / 只用一张；还能从内部存储导入图片。
  *
- * 图片来自两个地方：Android 的 /sdcard/Screensaver/（导入、传书网页都放这里）和 Kindle 存储的 veradroid/screensaver/
+ * 图片来自两个地方：Android 的 /sdcard/Screensaver/（导入、传书网页都放这里）和 Kobo 存储的 veradroid/screensaver/
  * （USB 拷进去的；Android 看不到那个文件夹，宿主的 `saver list` 临时拷到 /dev/kfb/saver/ 给这里显示缩略图）。
  * 选择写到 /sdcard/Screensaver/.vd-saver，宿主每次进屏保时读（host/&#42;/boot/lib/saver.sh）。
  * 缩略图一页 3×3，一页的图全部解码好才换上去（一次刷新），翻页用按钮或横划，没有滚动和动画。
@@ -46,7 +46,7 @@ public class ScreensaverActivity extends Activity {
     /** 三个放图的地方，和宿主写进两个文件夹的“把屏保图片放这里.txt”说的一样。 */
     static final String WHERE =
             "图片（jpg / png / webp / bmp / gif，大小写都行，竖图最好）放在这三个地方都行：\n"
-          + "· USB 连电脑：Kindle 盘 → veradroid → screensaver 文件夹\n"
+          + "· USB 连电脑：Kobo 盘 → veradroid → screensaver 文件夹\n"
           + "· Android 里：内部存储 → Screensaver 文件夹（下面的“从内部存储导入…”也放到这里）\n"
           + "· 传书网页：“文件” → Screensaver 文件夹 → 上传\n"
           + "放好后回到这一页就能看到（打开这一页时会把图转成适合这块屏的灰度图）。手机的 HEIC 照片请先转成 JPG。";
@@ -57,7 +57,7 @@ public class ScreensaverActivity extends Activity {
 
     static final class Item {
         final String key;   // "kindle" | "sd/名字" | "vd/名字"
-        final File f;       // 缩略图来源（Kindle 自带的预览可能没有）
+        final File f;       // 缩略图来源（Kobo 自带的预览可能没有）
         final String label;
         volatile String why;   // 用不了的原因（null = 能用 / 还没查）
         Item(String key, File f, String label) { this.key = key; this.f = f; this.label = label; }
@@ -89,7 +89,7 @@ public class ScreensaverActivity extends Activity {
         where.setPadding(0, 0, 0, dp(8));
         page.addView(where);
         LinearLayout modes = new LinearLayout(this);
-        modes.addView(Ui.button(this, "用 Kindle 自带的", 17, false, new View.OnClickListener() {
+        modes.addView(Ui.button(this, "用 Kobo 自带的", 17, false, new View.OnClickListener() {
             @Override public void onClick(View v) { choose("kindle", null); }
         }), weight());
         modes.addView(Ui.button(this, "轮换全部图片", 17, false, new View.OnClickListener() {
@@ -164,7 +164,7 @@ public class ScreensaverActivity extends Activity {
     private void load() {
         items.clear();
         File kp = new File(VD_DIR, ".kindle-preview.png");
-        items.add(new Item("kindle", kp.isFile() ? kp : null, "Kindle 自带"));
+        items.add(new Item("kindle", kp.isFile() ? kp : null, "Kobo 自带"));
         nSd = 0; nVd = 0;
         for (File f : images(SD_DIR)) { items.add(new Item("sd/" + f.getName(), f, f.getName())); nSd++; }
         for (File f : images(VD_DIR)) { items.add(new Item("vd/" + f.getName(), f, f.getName() + "（USB）")); nVd++; }
@@ -193,10 +193,10 @@ public class ScreensaverActivity extends Activity {
         return out;
     }
 
-    /** 放错地方的图：Kindle 盘上的 screensaver、linkss/screensavers（宿主数好写在 .elsewhere），Android 里小写的 screensaver 之类。 */
+    /** 放错地方的图：Kobo 盘上的 screensaver、linkss/screensavers（宿主数好写在 .elsewhere），Android 里小写的 screensaver 之类。 */
     private String elsewhere() {
         StringBuilder b = new StringBuilder();
-        for (String[] l : tsv(new File(VD_DIR, ".elsewhere"))) if (l.length >= 2) b.append(b.length() > 0 ? "、" : "").append("Kindle 盘的 ").append(l[0]).append("（").append(l[1]).append(" 张）");
+        for (String[] l : tsv(new File(VD_DIR, ".elsewhere"))) if (l.length >= 2) b.append(b.length() > 0 ? "、" : "").append("Kobo 盘的 ").append(l[0]).append("（").append(l[1]).append(" 张）");
         File[] top = new File("/data/media/0").listFiles();
         if (top != null) for (File d : top) {
             String n = d.getName();
@@ -260,7 +260,7 @@ public class ScreensaverActivity extends Activity {
 
     /** “找到 N 张你的图片”：分开说两个文件夹各几张，一张都没有时说下一步做什么。 */
     static String found(int nSd, int nVd) {
-        if (nSd + nVd == 0) return "还没有找到你的图片：按下面任一种方法放进去（现在用 Kindle 自带的屏保）。";
+        if (nSd + nVd == 0) return "还没有找到你的图片：按下面任一种方法放进去（现在用 Kobo 自带的屏保）。";
         return "找到 " + (nSd + nVd) + " 张你的图片（Android 的 Screensaver " + nSd + " 张，USB 的 veradroid/screensaver " + nVd + " 张）。";
     }
 
@@ -274,8 +274,8 @@ public class ScreensaverActivity extends Activity {
     private void showMode() {
         String s;
         if ("one".equals(mode) && file != null) s = "当前：只用一张（" + file.substring(file.indexOf('/') + 1) + "）";
-        else if ("rotate".equals(mode)) s = "当前：轮换全部图片（共 " + (items.size() - 1) + " 张，没有图片时用 Kindle 自带的）";
-        else s = "当前：Kindle 自带的屏保";
+        else if ("rotate".equals(mode)) s = "当前：轮换全部图片（共 " + (items.size() - 1) + " 张，没有图片时用 Kobo 自带的）";
+        else s = "当前：Kobo 自带的屏保";
         modeText.setText(s);
     }
 
@@ -363,7 +363,7 @@ public class ScreensaverActivity extends Activity {
                 iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
                 cell.addView(iv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
             } else {
-                TextView none = Ui.text(this, it.key.equals("kindle") ? "Kindle\n自带" : "无法预览", 18, true);
+                TextView none = Ui.text(this, it.key.equals("kindle") ? "Kobo\n自带" : "无法预览", 18, true);
                 none.setGravity(Gravity.CENTER);
                 cell.addView(none, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
             }
@@ -415,7 +415,7 @@ public class ScreensaverActivity extends Activity {
         }
     }
 
-    /** 从内部存储（Pictures、Download、Kindle 的 documents……）挑一张，复制进 /sdcard/Screensaver/ 并设成“只用这一张”。 */
+    /** 从内部存储（Pictures、Download、Kobo 的 documents……）挑一张，复制进 /sdcard/Screensaver/ 并设成“只用这一张”。 */
     private void importImage() {
         new Thread(new Runnable() {
             @Override public void run() {
@@ -427,7 +427,7 @@ public class ScreensaverActivity extends Activity {
                         if (isFinishing()) return;
                         if (imgs.isEmpty()) {
                             new VeraDialog.Builder(ScreensaverActivity.this).title("导入屏保图片")
-                                .message("没有找到 jpg / png / webp / bmp / gif 图片。用传书网页上传到内部存储，或用 USB 把图片放进 Kindle 的 veradroid/screensaver 文件夹。")
+                                .message("没有找到 jpg / png / webp / bmp / gif 图片。用传书网页上传到内部存储，或用 USB 把图片放进 Kobo 的 veradroid/screensaver 文件夹。")
                                 .positive("知道了", null).show();
                             return;
                         }
@@ -443,7 +443,7 @@ public class ScreensaverActivity extends Activity {
     }
 
     /**
-     * 拷进 Android 的 Screensaver 文件夹再设成屏保。拷贝放在后台线程：图可能是几 MB 的 PNG，源可能在 Kindle 的书库（FUSE）上，
+     * 拷进 Android 的 Screensaver 文件夹再设成屏保。拷贝放在后台线程：图可能是几 MB 的 PNG，源可能在 Kobo 的书库（FUSE）上，
      * 以前在主线程上拷，点完要卡好几秒（触摸 5 秒没回应就是 ANR）。拷完回到主线程选中、刷新列表。
      */
     private void copyIn(final File src) {

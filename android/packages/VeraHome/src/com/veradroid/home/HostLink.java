@@ -10,7 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The link to the host program (the scripts on the Kindle), all through files in /dev/kfb:
+ * The link to the host program (the scripts on the Kobo), all through files in /dev/kfb:
  *   ctl/cmd            a FIFO the host reads one command line from: exit stop restart diag clear invert status apply
  *                      light N, warmth N, wifi 0|1.  (Writing blocks until the host reads, so it runs on its own thread.)
  *   ctl/settings.new   new settings (KEY=value lines); "apply" makes the host take them at once
@@ -108,6 +108,21 @@ final class HostLink {
 
     static int num(Map<String, String> m, String key, int def) {
         try { return Integer.parseInt(m.get(key)); } catch (Exception e) { return def; }
+    }
+
+    /** True when running on a Kobo host (e.g. Kobo Libra 2, imageclass=kobo-libra2). */
+    static boolean isKobo() {
+        Map<String, String> st = kv(CTL + "status");
+        String ic = st.get("imageclass");
+        if (ic != null && ic.startsWith("kobo")) return true;
+        String m = st.get("model");
+        if (m != null && (m.toLowerCase(java.util.Locale.US).contains("kobo") || m.toLowerCase(java.util.Locale.US).contains("libra"))) return true;
+        try {
+            byte[] b = HostReq.read(new File(KFB + "model"), 64);
+            String s = new String(b, "UTF-8").trim().toLowerCase(java.util.Locale.US);
+            if (s.startsWith("libra") || s.startsWith("kobo")) return true;
+        } catch (Exception ignored) { }
+        return false;
     }
 
     /**

@@ -16,14 +16,14 @@ vp_label() {
     case "$1" in
         net) echo "检查网络" ;; dl) echo "下载安装包" ;; copy) echo "读取离线包" ;; verify) echo "校验安装包" ;;
         backup) echo "备份书库" ;; disk) echo "建系统盘" ;; unpack) echo "解压安装包" ;; install) echo "安装系统" ;; boot) echo "首次开机" ;;
-        kindle) echo "恢复 Kindle 界面" ;; android) echo "启动 Android" ;; apps) echo "优化应用" ;; *) echo "$1" ;;
+        kindle) echo "恢复 Kobo 界面" ;; android) echo "启动 Android" ;; apps) echo "优化应用" ;; *) echo "$1" ;;
     esac
 }
 vp_caps() {
     case "$1" in
         net) echo "NETWORK CHECK" ;; dl) echo "DOWNLOAD" ;; copy) echo "OFFLINE PACKAGE" ;; verify) echo "VERIFY" ;;
         backup) echo "BACKUP" ;; disk) echo "SYSTEM DISK" ;; unpack) echo "UNPACK" ;; install) echo "INSTALL" ;; boot) echo "FIRST BOOT" ;;
-        kindle) echo "BACK TO KINDLE" ;; android) echo "STARTING ANDROID" ;; apps) echo "OPTIMIZING APPS" ;; *) echo "" ;;
+        kindle) echo "BACK TO KOBO" ;; android) echo "STARTING ANDROID" ;; apps) echo "OPTIMIZING APPS" ;; *) echo "" ;;
     esac
 }
 # 状态文件里的 state（VeraHome 按它显示步骤）
@@ -178,13 +178,13 @@ vp_eips_all() {
 vp_ascii() { printf '%s' "$1" | head -1 | sed 's/剩余/left/g; s/已用/elapsed/g; s/·/|/g; s/速度/speed/g; s/正常/ok/g; s/很慢/slow/g; s/一般要/usually/g; s/左右//g' | tr -cd ' -~' | sed 's/  */ /g'; }
 vp_en_err() {
     case "$1" in
-        11) echo "No Wi-Fi. Connect in Kindle settings, then tap install again." ;;
+        11) echo "No Wi-Fi. Connect in Kobo settings, then tap install again." ;;
         12) echo "Wi-Fi is on but no internet (DNS failed). Network problem." ;;
         13) echo "Cannot reach the VeraDroid server (blocked/maintenance). Network problem; try another network or the offline package." ;;
         14) echo "Network too slow, download timed out. Tap install again to resume, or use the offline package." ;;
         15) echo "Download corrupted twice (checksum). Try another network." ;;
         21) echo "Not enough storage. Free some space and tap install again." ;;
-        *) echo "Device-side error. Restart the Kindle and try again; log: veradroid/logs/install.log" ;;
+        *) echo "Device-side error. Restart the Kobo and try again; log: veradroid-libra2/logs/install.log" ;;
     esac
 }
 # ---- 对外 ----
@@ -354,9 +354,8 @@ vp_netcheck() {
     rt=$(awk '$2 == "00000000" && $1 != "lo" {print $1; exit}' /proc/net/route 2>/dev/null)
     ip_=
     [ -n "$rt" ] && ip_=$(ip -4 addr show "$rt" 2>/dev/null | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)
-    cm=$(lipc-get-prop com.lab126.wifid cmState 2>/dev/null || true)
     if [ -n "$rt" ]; then NC_WIFI=ok; NC_LINES="■ Wi-Fi 已连接（${rt}${ip_:+ $ip_}）"
-    else NC_LINES="□ Wi-Fi 没有连上${cm:+（$cm）}"; NC_CODE=11; NC_MSG="没连 Wi-Fi：请在 Kindle 的设置里连上 Wi-Fi 再试"; return 1; fi
+    else NC_LINES="□ Wi-Fi 没有连上"; NC_CODE=11; NC_MSG="没连 Wi-Fi：请在 Kobo 的设置里连上 Wi-Fi 再试"; return 1; fi
     w=$(curl_do -sS -o /dev/null -I --connect-timeout 10 --max-time 20 -w '%{time_namelookup} %{time_connect} %{time_appconnect} %{http_code}' "$u/" 2>/dev/null) && rc=0 || rc=$?
     set -- $w; hc=${4:-000}
     tn=$(awk -v t="${1:-0}" 'BEGIN { printf "%.2f", t }'); tc=$(awk -v t="${2:-0}" 'BEGIN { printf "%.2f", t }'); ta=$(awk -v t="${3:-0}" 'BEGIN { printf "%.2f", t }')
@@ -389,7 +388,7 @@ vp_netcheck() {
 # （只连我们自己的服务器，不找第三方测速站）。在子 shell 里跑：会读 network.conf（代理 / DNS / IP）。
 vp_netdiag() { # 输出文件 [服务器根地址]
     nf=$1; nb=${2:-https://veradroid.wenjin.jp}
-    VD=${VD:-/mnt/base-us/veradroid}
+    VD=${VD:-/mnt/onboard/.adds/veradroid-libra2}
     [ -f "$VD/network.conf" ] && . "$VD/network.conf"
     CURL_OPTS=
     [ -n "${VD_PROXY:-}" ] && CURL_OPTS="$CURL_OPTS -x $VD_PROXY"
@@ -414,7 +413,7 @@ vp_netdiag() { # 输出文件 [服务器根地址]
     elif [ "$sp" -ge 204800 ]; then v=ok; c="网络正常"; l="■ 速度 $(vp_rate $sp)（整包约 $((min + 1)) 分钟）"
     elif [ "$sp" -ge 51200 ]; then v=slow; c="网络慢"; l="□ 速度 $(vp_rate $sp)（整包约 $((min + 1)) 分钟）"
     else v=slow; c="网络很慢"; l="□ 速度 $(vp_rate $sp)（太慢：建议换网络或用离线整包）"; fi
-    w=""; [ "$v" = slow ] && w="不是机器的问题：可以换个网络，或改用离线整包（官网下载，电脑拷进 Kindle）"
+    w=""; [ "$v" = slow ] && w="不是机器的问题：可以换个网络，或改用离线整包（官网下载，电脑拷进 Kobo）"
     vp_kvw "$nf" state=done "verdict=$v" "conclusion=$c" "speed=$sp" "lines=$NC_LINES
 $l" "line2=$w" "start=$t0"
     return 0

@@ -23,16 +23,16 @@ import javax.crypto.spec.PBEKeySpec;
 /**
  * 锁屏密码（docs/host-settings.md 第 9 节）：4–6 位数字，可选，默认关。
  *
- * 什么时候问：Android 开机后桌面第一次起来（HostService.onCreate），和每次从 Kindle 屏保醒来（宿主 sleep.sh 进屏保前、
+ * 什么时候问：Android 开机后桌面第一次起来（HostService.onCreate），和每次从 Kobo 屏保醒来（宿主 sleep.sh 进屏保前、
  * 醒来后各写一次 ctl/act.lock）。界面是一个盖住全屏的悬浮窗（TYPE_SYSTEM_ERROR，比状态栏、下拉面板、导航条都高），
- * 底下的应用不知道它在；“回到 Kindle”按钮、宿主的手势（四角长按回 Kindle）和电源键都不经过这里，照常有效。
+ * 底下的应用不知道它在；“回到 Kobo”按钮、宿主的手势（四角长按回 Kobo）和电源键都不经过这里，照常有效。
  *
  * 存在哪：VeraHome 自己的私有目录（设备加密区，/data/user_de/0/com.veradroid.home/shared_prefs/lock.xml），
  * 只存随机盐和 PBKDF2-SHA1（20000 轮）的结果，不存密码本身。别的应用读不到；/sdcard/.vdhome 里的偏好别的应用能读，所以不放那里。
  *
  * 输错：连续错 5 次，30 秒内不让再输（时间存在文件里，重启 Android 也不清零）；之后每再错 5 次又等 30 秒。
  *
- * 忘了：没有账号可以找回。插 USB，在 Kindle 存储的 veradroid 文件夹里放一个名为 reset-pin.txt 的文件（内容随意），
+ * 忘了：没有账号可以找回。插 USB，在 Kobo 存储的 veradroid 文件夹里放一个名为 reset-pin.txt 的文件（内容随意），
  * 再打开 VeraDroid（或从屏保醒来）：宿主（lib/lock.sh）删掉这个文件并写 ctl/lock.reset，这里清掉密码。
  */
 final class LockScreen {
@@ -233,8 +233,8 @@ final class LockScreen {
 
         View gap = new View(c);
         root.addView(gap, new LinearLayout.LayoutParams(1, 0, 1));
-        // 回 Kindle 不需要密码（Kindle 那边有它自己的锁屏）；宿主的手势和电源键本来就不经过这里
-        Button exit = Ui.button(c, "回到 Kindle", 20, false, new View.OnClickListener() {
+        // 回 Kobo 不需要密码（Kobo 那边有它自己的锁屏）；宿主的手势和电源键本来就不经过这里
+        Button exit = Ui.button(c, "回到 Kobo", 20, false, new View.OnClickListener() {
             @Override public void onClick(View v) { HostLink.cmd("exit"); }
         });
         root.addView(exit, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(Ui.dp(c, 56), sh / 16)));

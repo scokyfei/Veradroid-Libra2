@@ -17,8 +17,7 @@ if [ -z "$bad_sh" ]; then ok "all Kobo shell scripts pass sh -n"
 else fail "sh -n failed:$bad_sh"; fi
 
 # 2. No active Kindle-only runtime calls in host/kobo/boot (ignore comment lines)
-hits=$(grep -rnE '^[[:space:]]*[^#]*\b(lipc-get-prop|lipc-set-prop|lipc-wait-event|lipc-hash-prop|initctl|powerd_test)\b' "$TOP/host/kobo/boot" \
-       | grep -v 'progress\.sh:.*lipc-get-prop' || true)
+hits=$(grep -rnE '^[[:space:]]*[^#]*\b(lipc-get-prop|lipc-set-prop|lipc-wait-event|lipc-hash-prop|initctl|powerd_test)\b' "$TOP/host/kobo/boot" || true)
 if [ -z "$hits" ]; then ok "no active Kindle lipc/initctl calls in host/kobo/boot"
 else fail "unexpected Kindle calls in host/kobo/boot: $hits"; fi
 
@@ -49,12 +48,34 @@ grep -q -- '--swap-xy' "$TOP/input/legacy/vinput.c" && ok "vinput.c has --swap-x
 grep -q -- '--keydev' "$TOP/input/legacy/vinput.c" && ok "vinput.c has --keydev support" || fail "vinput.c missing --keydev"
 grep -q 'input_event_sec' "$TOP/input/legacy/vinput.c" && ok "vinput.c handles musl 64-bit time_t input_event_sec" || fail "vinput.c missing input_event_sec"
 
-# 5. Kobo Libra 2 model profile & launcher files
-[ -f "$TOP/host/kobo/models/libra2.conf" ] && grep -q 'TOUCH_SWAP_XY=1' "$TOP/host/kobo/models/libra2.conf" \
-    && ok "libra2.conf model profile present" || fail "libra2.conf invalid"
+# 5. Kobo Libra 2 model profile, slimming/memory optimizations & launcher files
+[ -f "$TOP/host/kobo/models/libra2.conf" ] \
+    && grep -q 'TOUCH_SWAP_XY=1' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q 'KFB_DIM=off' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q 'KFB_HZ=20' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q 'PROC_LIMIT=2' "$TOP/host/kobo/models/libra2.conf" \
+    && ok "libra2.conf model & memory profile present" || fail "libra2.conf invalid"
+grep -q 'libkobo_madvise.so' "$TOP/host/kobo/boot/lib/afterboot.sh" \
+    && grep -q 'libkobo_madvise.so' "$TOP/host/kobo/boot/ashell.sh" \
+    && ok "adb_sh and ashell.sh export libkobo_madvise.so LD_PRELOAD" || fail "missing LD_PRELOAD in adb_sh/ashell.sh"
+grep -q 'state/kobo-screen.raw' "$TOP/host/kobo/boot/lib/framework.sh" \
+    && ok "framework.sh stores kobo-screen.raw on disk" || fail "framework.sh still uses tmpfs for screen backup"
 [ -f "$TOP/host/kobo/koplugin/veradroid_libra2.koplugin/_meta.lua" ] \
     && [ -f "$TOP/host/kobo/koplugin/veradroid_libra2.koplugin/main.lua" ] \
     && ok "KOReader plugin files present" || fail "KOReader plugin missing"
+
+# 6. UI Kobo rebranding checks (no user-facing Kindle strings in host/kobo or VeraHome)
+kh_host=$(grep -rn 'Kindle' "$TOP/host/kobo/boot" | grep -vE 'KindleLibrary|KindleFonts|appprofiles\.conf|:[0-9]+:[[:space:]]*#' || true)
+if [ -z "$kh_host" ]; then ok "zero user-facing Kindle strings in host/kobo/boot"
+else fail "user-facing Kindle strings in host/kobo/boot: $kh_host"; fi
+
+kh_home=$(grep -rn 'Kindle' "$TOP/android/packages/VeraHome/src" "$TOP/android/packages/VeraHome/assets" \
+          | grep -vE 'KindleLibrary|KindleFonts|isKindleRoot|:[0-9]+:[[:space:]]*(//|\*)' || true)
+if [ -z "$kh_home" ]; then ok "zero user-facing Kindle strings in VeraHome APK/web UI"
+else fail "user-facing Kindle strings in VeraHome: $kh_home"; fi
+
+grep -q 'static boolean isKobo()' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HostLink.java" \
+    && ok "VeraHome HostLink.isKobo() present" || fail "HostLink.isKobo() missing"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"

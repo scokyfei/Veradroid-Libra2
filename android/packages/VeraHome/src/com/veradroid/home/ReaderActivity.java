@@ -72,7 +72,7 @@ public class ReaderActivity extends Activity {
     /** 段距（字高的倍数，0 = 没有）、首行缩进（字数）、极简全屏（不显示页脚）、点按方式（0 左边上一页 / 1 全屏下一页）。 */
     private float paraSpacing = 0f;
     private int indent = 0, tapMode = 0;
-    /** 点按翻页：0 左边四分之一上一页（Kindle）、1 全屏下一页、2 三栏（左上一页 / 中间菜单 / 右下一页） */
+    /** 点按翻页：0 左边四分之一上一页（Kobo）、1 全屏下一页、2 三栏（左上一页 / 中间菜单 / 右下一页） */
     static final String[] TAP_L = { "左边上一页", "全屏下一页", "三栏" };
     private boolean minimal;
     /** 方块风格（主页设置里选的界面风格）：点屏幕中间出上下两条工具栏，下面六个按钮各开一张设置单。 */
@@ -153,7 +153,7 @@ public class ReaderActivity extends Activity {
         });
         holder.addView(pdfView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        // 页脚（一直在）：左边“本章还剩几页”，右边“第几页 / 共几页 · 百分比”，和 Kindle 左下角的阅读进度一个意思
+        // 页脚（一直在）：左边“本章还剩几页”，右边“第几页 / 共几页 · 百分比”，和 Kobo 左下角的阅读进度一个意思
         LinearLayout foot = new LinearLayout(this);
         foot.setOrientation(LinearLayout.HORIZONTAL);
         foot.setPadding(dp(marginDp), 0, dp(marginDp), dp(6));
@@ -510,7 +510,7 @@ public class ReaderActivity extends Activity {
     }
 
     /**
-     * 点按区域和 Kindle 一样：屏幕最上面一条 = 叫出 / 收起工具栏；左边四分之一 = 上一页；其余 = 下一页。
+     * 点按区域和 Kobo 一样：屏幕最上面一条 = 叫出 / 收起工具栏；左边四分之一 = 上一页；其余 = 下一页。
      * 工具栏开着时点正文任何地方都是收起它。
      */
     private void turnAt(View v) {
@@ -1629,7 +1629,7 @@ public class ReaderActivity extends Activity {
         bgMode = mode; saveStyle(); applyBackground();
     }
 
-    /** 选背景图：和桌面壁纸同一批文件夹（VeraDroid/wallpaper、Pictures、Download、Kindle 的 documents……）。 */
+    /** 选背景图：和桌面壁纸同一批文件夹（VeraDroid/wallpaper、Pictures、Download、Kobo 的 documents……）。 */
     private void pickBgImage() {
         new Thread(new Runnable() { @Override public void run() {
             final List<File> imgs = Theme.findImages();
@@ -1637,7 +1637,7 @@ public class ReaderActivity extends Activity {
                 if (isDestroyed()) return;
                 if (imgs.isEmpty()) {
                     new VeraDialog.Builder(ReaderActivity.this).title("阅读背景")
-                        .message("没有找到图片。\n\n用传书网页上传，或者把 jpg / png 放进内部存储的 VeraDroid/wallpaper 文件夹、Kindle 的 documents 文件夹，再来选。")
+                        .message("没有找到图片。\n\n用传书网页上传，或者把 jpg / png 放进内部存储的 VeraDroid/wallpaper 文件夹、Kobo 的 documents 文件夹，再来选。")
                         .positive("知道了", null).show();
                     return;
                 }
@@ -2261,10 +2261,10 @@ public class ReaderActivity extends Activity {
             @Override public void onStep(int i) { tapMode = i; saveStyle(); } }).wrap());
     }
 
-    /** 系统：书签、跳转、清残影、面板、回桌面、回 Kindle。 */
+    /** 系统：书签、跳转、清残影、面板、回桌面、回 Kobo。 */
     private void sheetSystem() {
         sheetHead("System", "系统");
-        String[][] b = { { bookmarkedHere() ? "去掉书签" : "加书签", "跳转…", "整屏刷新" }, { "下拉面板", "回到桌面", "回 Kindle" } };
+        String[][] b = { { bookmarkedHere() ? "去掉书签" : "加书签", "跳转…", "整屏刷新" }, { "下拉面板", "回到桌面", "回 Kobo" } };
         for (int r = 0; r < 2; r++) {
             LinearLayout row = new LinearLayout(this);
             for (int k = 0; k < 3; k++) {

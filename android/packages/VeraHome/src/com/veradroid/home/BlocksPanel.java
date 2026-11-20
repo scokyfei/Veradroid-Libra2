@@ -25,7 +25,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 方块风格的下拉面板，照 Kindle 自己的快捷设置：一排最多 5 个方块开关、亮度（有暖光的机型再加暖光）、回到 Kindle，
+ * 方块风格的下拉面板，照 Kobo 自己的快捷设置：一排最多 5 个方块开关、亮度（有暖光的机型再加暖光）、回到 Kobo，
  * 有通知时下面列出通知。其余的（刷新方式、对比度、全刷周期、字号、自动休眠、手势、切换应用、关机……）都在 我的 → 各设置页里。
  *
  * 和经典面板一样是常驻的悬浮窗口：打开只是设成可见、按状态文件核对一遍（变了的控件才改），所以只刷一次；
@@ -53,7 +53,7 @@ final class BlocksPanel {
         } catch (Throwable t) { return ""; }
     }
 
-    /** 方块面板一排最多 5 个（Kindle 的快捷设置也是 5 个）。 */
+    /** 方块面板一排最多 5 个（Kobo 的快捷设置也是 5 个）。 */
     static final int MAX_TILES = 5;
 
     private final Context ctx;
@@ -210,7 +210,7 @@ final class BlocksPanel {
         lightBox = g;
         body.addView(g, Blocks.gap(ctx, 12));
 
-        // 优化机器状态：一条和“回到 Kindle”一样宽的方框，点了按顺序清后台 / 提速 / 省电，下面出一张结果卡片
+        // 优化机器状态：一条和“回到 Kobo”一样宽的方框，点了按顺序清后台 / 提速 / 省电，下面出一张结果卡片
         optBar = new LinearLayout(ctx);
         optBar.setGravity(Gravity.CENTER_VERTICAL);
         optBar.setBackground(Blocks.plain(ctx));
@@ -257,14 +257,14 @@ final class BlocksPanel {
         appBar.setVisibility(View.GONE);
         body.addView(appBar, Blocks.gap(ctx, 12));
 
-        // 回到桌面 | 回到 Kindle：在任何应用里下拉面板都能一下回到 VeraDroid 桌面
+        // 回到桌面 | 回到 Kobo：在任何应用里下拉面板都能一下回到 VeraDroid 桌面
         LinearLayout go = new LinearLayout(ctx);
         go.addView(Blocks.button(ctx, "回到桌面", false, new View.OnClickListener() {
             @Override public void onClick(View v) { goHome(); }
         }), Blocks.weight(1));
         LinearLayout.LayoutParams kp = Blocks.weight(1);
         kp.leftMargin = dp(8);
-        go.addView(Blocks.button(ctx, "回到 Kindle", false, new View.OnClickListener() {
+        go.addView(Blocks.button(ctx, "回到 Kobo", false, new View.OnClickListener() {
             @Override public void onClick(View v) { HostLink.cmd("exit"); finish(); }
         }), kp);
         body.addView(go, Blocks.gap(ctx, 12));

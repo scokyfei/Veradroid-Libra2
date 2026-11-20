@@ -25,7 +25,7 @@ import java.util.Map;
 
 /**
  * 蓝牙翻页器：扫描、配对、连接、取消配对，选翻页键发成什么键。
- * 蓝牙芯片和协议栈归 Kindle（com.lab126.btfd），Android 里没有蓝牙服务（BluetoothAdapter 扫不到任何东西），
+ * 蓝牙芯片和协议栈归 Kobo（com.lab126.btfd），Android 里没有蓝牙服务（BluetoothAdapter 扫不到任何东西），
  * 所以这里只是界面：命令经 FIFO 发给宿主（"bt scan" / "bt bond MAC" …，见 host/boot/lib/bt.sh），
  *   ctl/bt.list    名字\tMAC\t已配对\t已连接，一行一个（宿主扫描时每 3 秒重写一次）
  *   ctl/bt.result  这次操作：state=running|done，op，mac，ok，error，secs
@@ -56,7 +56,7 @@ public class BluetoothActivity extends Activity {
         c.startActivity(i);
     }
 
-    /** 宿主报告这台机器有 Kindle 的蓝牙栈（旧宿主没有这个键：当没有）。 */
+    /** 宿主报告这台机器有 Kobo 的蓝牙栈（旧宿主没有这个键：当没有）。 */
     static boolean supported() {
         return "1".equals(HostLink.kv(HostLink.CTL + "status").get("btsupported"));
     }
@@ -193,11 +193,11 @@ public class BluetoothActivity extends Activity {
         if (sup == null) {
             power.setText("宿主程序太旧，不支持在这里配对");
             powerBtn.setVisibility(View.GONE);
-            status.setText("请先更新 VeraDroid；或回到 Kindle，在“设置 → 蓝牙设备”里配对。");
+            status.setText("请先更新 VeraDroid；或回到 Kobo，在“设置 → 蓝牙设备”里配对。");
             return;
         }
         if (!"1".equals(sup)) {
-            power.setText("这台 Kindle 没有蓝牙");
+            power.setText("这台 Kobo 没有蓝牙");
             powerBtn.setVisibility(View.GONE);
             return;
         }
@@ -215,7 +215,7 @@ public class BluetoothActivity extends Activity {
             for (String d : dev.split(",")) {
                 int c = d.indexOf(':');
                 String n = c >= 0 ? d.substring(c + 1) : d;
-                if (n.equals("kindle-input-pt")) n = "Kindle 翻页器";
+                if (n.equals("kindle-input-pt")) n = "Kobo 翻页器";
                 names += (names.length() > 0 ? "、" : "") + n;
             }
         }
@@ -348,7 +348,7 @@ public class BluetoothActivity extends Activity {
         int s = (int) ((System.currentTimeMillis() - busySince) / 1000);
         if (s > busySecs + 15) {   // 宿主一直没回：放弃等
             busy = false;
-            status.setText(opName(busyOp) + "没有回应。宿主程序可能太旧，或 Kindle 的蓝牙服务没响应。");
+            status.setText(opName(busyOp) + "没有回应。宿主程序可能太旧，或 Kobo 的蓝牙服务没响应。");
             return;
         }
         if (s >= 3) {
@@ -380,8 +380,8 @@ public class BluetoothActivity extends Activity {
         String msg;
         if ("busy".equals(e)) { msg = "宿主正在做另一项蓝牙操作，请稍等再试。"; busy = wasBusy; }
         else if ("off".equals(e)) msg = "蓝牙没有打开：先点上面的“打开蓝牙”。";
-        else if ("unsupported".equals(e)) msg = "这台 Kindle 没有蓝牙。";
-        else if ("lipc".equals(e)) msg = "Kindle 的蓝牙服务没有响应，请稍后再试；一直不行就回 Kindle 的设置里关开一次蓝牙。";
+        else if ("unsupported".equals(e)) msg = "这台 Kobo 没有蓝牙。";
+        else if ("lipc".equals(e)) msg = "Kobo 的蓝牙服务没有响应，请稍后再试；一直不行就回 Kobo 的设置里关开一次蓝牙。";
         else if ("badmac".equals(e)) msg = "设备地址不对。";
         else if ("scan".equals(op)) msg = ok ? "扫描完成：找到 " + devices.size() + " 个设备。没看到翻页器就让它重新进入配对模式再扫一次。" : "扫描失败。";
         else if ("bond".equals(op)) {
@@ -393,7 +393,7 @@ public class BluetoothActivity extends Activity {
         else if ("connect".equals(op)) msg = ok ? "已连接：" + name : "notpaired".equals(e) ? "还没配对，先点它配对。" : "没连上 " + name + "：按一下翻页器的键唤醒它，再点一次。";
         else if ("disconnect".equals(op)) msg = ok ? "已断开：" + name : "断开超时。";
         else if ("unbond".equals(op)) msg = ok ? "已取消配对：" + name : "取消配对超时，请再试一次。";
-        else if ("power".equals(op)) msg = ok ? ("1".equals(r.get("on")) ? "蓝牙已打开。" : "蓝牙已关闭。") : "蓝牙开关没有响应，请回 Kindle 的设置里试试。";
+        else if ("power".equals(op)) msg = ok ? ("1".equals(r.get("on")) ? "蓝牙已打开。" : "蓝牙已关闭。") : "蓝牙开关没有响应，请回 Kobo 的设置里试试。";
         else msg = "";
         status.setText(msg);
         HostLink.cmd("status");

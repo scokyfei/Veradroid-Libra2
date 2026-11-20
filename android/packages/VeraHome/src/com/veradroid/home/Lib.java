@@ -480,9 +480,9 @@ final class Lib {
 
     static boolean isBook(String n) {
         String s = n.toLowerCase(Locale.US);
-        // 越狱工具放在 Kindle 书库里的标记文件，不是书
+        // 越狱工具放在 Kobo 书库里的标记文件，不是书
         if (s.startsWith("jailbroken") || s.startsWith(".")) return false;
-        // Kindle 自己往 documents 里丢的崩溃报告（KPPMainApp…_crash_….txt）也不是书
+        // Kobo 自己往 documents 里丢的崩溃报告（KPPMainApp…_crash_….txt）也不是书
         if (s.contains("_crash_") || s.startsWith("kppmainapp")) return false;
         return s.endsWith(".epub") || s.endsWith(".pdf") || s.endsWith(".txt")
             || s.endsWith(".mobi") || s.endsWith(".azw3") || s.endsWith(".azw")

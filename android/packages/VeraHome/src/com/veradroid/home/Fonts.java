@@ -14,8 +14,8 @@ import java.io.File;
  *   方块风格界面字重选“粗”时正文也用它的合成粗体（这种字体一般只有一种字重，没有真粗体可换）。
  * - 经典风格：系统默认字体（Roboto + DroidSansFallback），和以前一样。
  * - 方块风格：界面字重（显示与刷新 → 界面字重，键 ui_weight：0 常规 / 1 中粗 / 2 粗，默认 2）。
- *   中粗 / 粗用真正的粗字形，不是把细字描粗：英文和数字用 Kindle 自带的 Amazon Ember（Medium / Bold / Heavy），
- *   中文用 Kindle 自带的华文黑体（STHeitiMedium / STHeitiBold）。这些字体只在运行时从机器上读
+ *   中粗 / 粗用真正的粗字形，不是把细字描粗：英文和数字用 Kobo 自带的 Amazon Ember（Medium / Bold / Heavy），
+ *   中文用 Kobo 自带的华文黑体（STHeitiMedium / STHeitiBold）。这些字体只在运行时从机器上读
  *   （宿主把 /usr/java/lib/fonts 只读挂在 /data/media/0/KindleFonts），不拷进镜像、不进仓库。
  *   机器上没有这些字体时退回系统的 Roboto Bold + DroidSansFallback（中文是合成粗体）。
  *

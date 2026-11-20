@@ -82,8 +82,8 @@ final class StoreNet {
         return sb.toString();
     }
 
-    /** Ping the host every minute while a download / install runs: "poke" resets the Kindle's screensaver timer (the same
-     * thing a touch does), so the Kindle does not go to the screensaver - which freezes Android - in the middle of it. */
+    /** Ping the host every minute while a download / install runs: "poke" resets the Kobo's screensaver timer (the same
+     * thing a touch does), so the Kobo does not go to the screensaver - which freezes Android - in the middle of it. */
     static Thread keepAwake() {
         Thread k = new Thread(new Runnable() {
             @Override public void run() {

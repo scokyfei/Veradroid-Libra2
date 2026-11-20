@@ -17,9 +17,9 @@ import java.util.ArrayList;
 import java.util.Map;
 
 /**
- * 设置 → 设备与更新 → 存储空间：Android 用的系统盘（Kindle 存储上的一个镜像文件）有多大、用了多少，可以调大调小。
+ * 设置 → 设备与更新 → 存储空间：Android 用的系统盘（Kobo 存储上的一个镜像文件）有多大、用了多少，可以调大调小。
  * 宿主那边是 boot/lib/storage.sh：`storage info` 把数字写到 ctl/storage（st.键=值，单位 MB），`storage resize N` 的
- * 答复在 ctl/storage.result。PW6 没有镜像（和 Kindle 共用空间），这里只显示剩余空间。
+ * 答复在 ctl/storage.result。PW6 没有镜像（和 Kobo 共用空间），这里只显示剩余空间。
  */
 public class StorageActivity extends Activity {
     private static final String INFO = HostLink.CTL + "storage", RESULT = HostLink.CTL + "storage.result";
@@ -87,17 +87,17 @@ public class StorageActivity extends Activity {
         list.removeAllViews();
         targetView = null; applyBtn = null; hintView = null;
         if ("shared".equals(st.get("st.mode"))) {
-            line("与 Kindle 共用空间，无需调整", 22, true);
-            bar("Kindle 存储", n("kindle_total") - n("kindle_free"), n("kindle_total"),
+            line("与 Kobo 共用空间，无需调整", 22, true);
+            bar("Kobo 存储", n("kindle_total") - n("kindle_free"), n("kindle_total"),
                 "剩余 " + size(n("kindle_free")) + " / 共 " + size(n("kindle_total")));
-            line("这台机器上 Android 直接用 Kindle 的剩余空间：书和应用占多少就用多少，删掉就还回去。", 16, false);
+            line("这台机器上 Android 直接用 Kobo 的剩余空间：书和应用占多少就用多少，删掉就还回去。", 16, false);
             return;
         }
         if (!"image".equals(st.get("st.mode"))) { line("读不到存储信息。", 18, false); return; }
         final int image = n("image"), min = n("min"), max = n("max");
         bar("Android 存储（系统、应用和书）", n("used"), Math.max(1, n("total")),
             "已用 " + size(n("used")) + "，剩余 " + size(n("free")) + " / 共 " + size(image));
-        bar("Kindle 这边", Math.max(0, n("kindle_total") - n("kindle_free")), Math.max(1, n("kindle_total")),
+        bar("Kobo 这边", Math.max(0, n("kindle_total") - n("kindle_free")), Math.max(1, n("kindle_total")),
             "剩余 " + size(n("kindle_free")) + " / 共 " + size(n("kindle_total")));
         list.addView(Ui.rule(this, 2, Color.BLACK));
 
@@ -106,8 +106,8 @@ public class StorageActivity extends Activity {
         target = Math.max(min, Math.min(max, target));
         list.addView(Blocks.sectionTitle(this, "调整大小", 20));
         String range = "可调范围 " + size(min) + " – " + size(max) + "。";
-        if ("fat".equals(st.get("st.cap"))) range += "Kindle 存储是 FAT 格式，单个文件最大 4 GB。";
-        else range += "始终给 Kindle 留至少 " + n("keep") + " MB。";
+        if ("fat".equals(st.get("st.cap"))) range += "Kobo 存储是 FAT 格式，单个文件最大 4 GB。";
+        else range += "始终给 Kobo 留至少 " + n("keep") + " MB。";
         line(range, 15, false);
 
         LinearLayout row = new LinearLayout(this);
@@ -158,7 +158,7 @@ public class StorageActivity extends Activity {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         col.addView(Ui.text(this, "快满时自动扩大", 20, true));
-        col.addView(Ui.text(this, "剩余不到 200 MB、Kindle 还有地方时，每次扩大 512 MB。", 14, false));
+        col.addView(Ui.text(this, "剩余不到 200 MB、Kobo 还有地方时，每次扩大 512 MB。", 14, false));
         ar.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         ar.addView(Ui.button(this, auto ? "开" : "关", 16, auto, new View.OnClickListener() {
             @Override public void onClick(View v) { HostLink.cmd("storage auto " + (auto ? "off" : "on")); handler.postDelayed(new Runnable() { @Override public void run() { ask(); } }, 300); }
@@ -180,7 +180,7 @@ public class StorageActivity extends Activity {
         if (!change) hint = max <= image && min >= image ? "现在不能调整：已经是能用的最小 / 最大值。" : "选一个大小，再点“调整”。";
         else if (target > image && "1".equals(st.get("st.online"))) hint = "扩大 " + size(target - image) + "：直接完成，不用重启 Android。";
         else if (target > image) hint = "扩大 " + size(target - image) + "：Android 要关闭再重新启动，约几分钟。";
-        else hint = "缩小 " + size(image - target) + "，这些空间还给 Kindle：Android 要关闭再重新启动，约几分钟。";
+        else hint = "缩小 " + size(image - target) + "，这些空间还给 Kobo：Android 要关闭再重新启动，约几分钟。";
         hintView.setText(hint);
     }
 
@@ -191,7 +191,7 @@ public class StorageActivity extends Activity {
             ? "把 Android 存储从 " + size(image) + " 扩大到 " + size(to) + "。不用重启，几秒到一分钟完成。"
             : "把 Android 存储从 " + size(image) + (to > image ? " 扩大到 " : " 缩小到 ") + size(to) + "。\n\n"
               + "Android 会关闭，屏幕上显示进度，完成后自动重新启动（约几分钟）。正在运行的应用会被关掉。\n"
-              + "期间请不要关机或重启 Kindle；电量低时请先充电。书和应用数据不受影响。";
+              + "期间请不要关机或重启 Kobo；电量低时请先充电。书和应用数据不受影响。";
         new VeraDialog.Builder(this).title("调整存储空间？").message(msg).negative("取消", null)
             .positive("调整", new Runnable() { @Override public void run() { send(to); } }).show();
     }
@@ -201,7 +201,7 @@ public class StorageActivity extends Activity {
         HostLink.cmd("storage resize " + to);
         list.removeAllViews();
         line("正在调整，请稍候…", 20, true);
-        line("在线扩大时这里会停留几十秒（Kindle 存储是 FAT 格式时要真的写满新增的空间）。", 14, false);
+        line("在线扩大时这里会停留几十秒（Kobo 存储是 FAT 格式时要真的写满新增的空间）。", 14, false);
         handler.removeCallbacksAndMessages(null);
         handler.postDelayed(new Runnable() {
             int n = 0;
@@ -223,15 +223,15 @@ public class StorageActivity extends Activity {
     static String reason(String e) {
         if (e == null) return "宿主没有答复";
         if (e.equals("small")) return "比已经用掉的空间加安全余量还小";
-        if (e.equals("nospace")) return "Kindle 剩余空间不够（要给 Kindle 留 256 MB）";
-        if (e.equals("fatlimit")) return "Kindle 存储是 FAT 格式，单个文件最大 4 GB";
+        if (e.equals("nospace")) return "Kobo 剩余空间不够（要给 Kobo 留 256 MB）";
+        if (e.equals("fatlimit")) return "Kobo 存储是 FAT 格式，单个文件最大 4 GB";
         if (e.equals("toobig")) return "超过上限";
         if (e.equals("same")) return "和现在一样大";
         if (e.equals("busy")) return "上一次调整还没结束";
         if (e.equals("battery")) return "电量太低，请先充电";
-        if (e.equals("shared")) return "这台机器与 Kindle 共用空间，无需调整";
+        if (e.equals("shared")) return "这台机器与 Kobo 共用空间，无需调整";
         if (e.equals("notool")) return "缺少调整工具";
-        if (e.equals("extend")) return "Kindle 存储写不进去（空间不够？）";
+        if (e.equals("extend")) return "Kobo 存储写不进去（空间不够？）";
         if (e.equals("fsck") || e.equals("fsck-after")) return "文件系统检查没通过";
         if (e.equals("interrupted")) return "上次被中断，已恢复原样";
         return e;

@@ -7,7 +7,7 @@ import android.view.ViewConfiguration;
 import android.widget.LinearLayout;
 
 /**
- * 一页内容的容器：手指在上面横着或竖着划一段，抬手时翻一页（左划 / 上划 = 下一页），和 Kindle 书库一样。
+ * 一页内容的容器：手指在上面横着或竖着划一段，抬手时翻一页（左划 / 上划 = 下一页），和 Kobo 书库一样。
  * 不跟手、不滚动、没有惯性：墨水屏上只换一次画面。划动时里面的格子收不到点击。
  */
 class PagedBox extends LinearLayout {

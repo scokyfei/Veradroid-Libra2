@@ -12,7 +12,7 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** Send-to-Kindle inbox: shows the device email and pulls pending files to Books/. */
+/** Send-to-Kobo inbox: shows the device email and pulls pending files to Books/. */
 public class InboxActivity extends Activity {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private TextView status;
@@ -57,7 +57,7 @@ public class InboxActivity extends Activity {
             @Override public void onClick(View v) { sync(); }
         }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         page.addView(actions);
-        Blocks.restyle(this, page, title, actions, "Inbox / mail to Kindle");
+        Blocks.restyle(this, page, title, actions, "Inbox / mail to Kobo");
 
         sync();
     }

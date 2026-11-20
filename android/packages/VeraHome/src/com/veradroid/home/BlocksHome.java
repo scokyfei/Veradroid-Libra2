@@ -649,7 +649,7 @@ final class BlocksHome {
         head.addView(all);
         box.addView(head);
         // 刚读过的书排第一（就算“继续阅读”卡片里也是它）：以前这里把继续阅读那本拿掉、又按“上次阅读和放进来的时间哪个新”排，
-        // 读完一本回来列表看着没变，新传进来 / 被改写过的文件（比如 Kindle 书库里的状态文件）反而排在前面
+        // 读完一本回来列表看着没变，新传进来 / 被改写过的文件（比如 Kobo 书库里的状态文件）反而排在前面
         List<Lib.Book> list = Lib.recentlyRead(3);
         if (list.isEmpty()) {
             box.addView(Blocks.empty(a, Icons.Kind.BOOK, "书库里还没有书", "用传书网页传进来，或者放进 Books 文件夹", false), Blocks.match());
@@ -1220,7 +1220,7 @@ final class BlocksHome {
         String[][] rows = {
             { "首页卡片", "继续阅读 · 天气 · 日历 · 小部件…" },
             { "显示与刷新", "亮度 · 刷新档位 · 全刷 · 界面风格" },
-            { "电源与时间", "自动休眠 · 回 Kindle · 时间格式" },
+            { "电源与时间", "自动休眠 · 回 Kobo · 时间格式" },
             { "存储与连接", "Wi-Fi · 蓝牙 · Web 文件管理 · 存储空间" },
             { "设备与关于", "版本 · 更新 · 日志 · 全部设置" } };
         final int[] keys = { S_CARDS, S_DISPLAY, S_POWER, S_STORAGE, S_ABOUT };

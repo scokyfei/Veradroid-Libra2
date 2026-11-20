@@ -8,9 +8,9 @@ import java.io.File;
 import java.util.Map;
 
 /**
- * 无线调试（adb over Wi-Fi）：默认关，开着时电脑用 `adb connect <Kindle 的地址>:5555` 连进 Android 管理文件和应用
+ * 无线调试（adb over Wi-Fi）：默认关，开着时电脑用 `adb connect <Kobo 的地址>:5555` 连进 Android 管理文件和应用
  * （adb push / pull / install / shell）。只认用户自己电脑的 adb 公钥（~/.android/adbkey.pub，在传书网页“SSH 与诊断”里添加，
- * 或插 USB 拷成 Kindle 的 veradroid/adb/adb_keys），到时间自动关。真正的开关、公钥和端口都在宿主（webadmin.sh 的 adb*）。
+ * 或插 USB 拷成 Kobo 的 veradroid/adb/adb_keys），到时间自动关。真正的开关、公钥和端口都在宿主（webadmin.sh 的 adb*）。
  * 没有 IPv6 的老机型内核上 Android 7.1 的 adbd 开不了监听，宿主会回 noipv6。
  */
 final class AdbWifi {
@@ -25,7 +25,7 @@ final class AdbWifi {
     static boolean on() { return new File(HostLink.CTL + "adb.on").exists(); }
 
     static String error(String e) {
-        if (e.equals("noipv6")) return "这台 Kindle 的内核没有 IPv6，Android 7.1 的 adb 在它上面开不了无线调试；请用传书网页或 USB 管理文件";
+        if (e.equals("noipv6")) return "这台 Kobo 的内核没有 IPv6，Android 7.1 的 adb 在它上面开不了无线调试；请用传书网页或 USB 管理文件";
         if (e.equals("nokey")) return "还没有 adb 公钥：先在传书网页的“SSH 与诊断”里添加电脑上 ~/.android/adbkey.pub 的内容";
         if (e.equals("notbooted")) return "Android 还没开机完成，请稍后再试";
         if (e.equals("badkey")) return "公钥格式不对：要的是电脑上 ~/.android/adbkey.pub 里那一整行（QAAAA 开头）";
@@ -60,7 +60,7 @@ final class AdbWifi {
         return f[0] + (comment.length() > 0 ? " " + comment : "");
     }
 
-    /** 设置里的开关：在后台问宿主，结果用提示条说；done 在主线程跑。设备上的开关不再要 PIN（人就在 Kindle 前面）。 */
+    /** 设置里的开关：在后台问宿主，结果用提示条说；done 在主线程跑。设备上的开关不再要 PIN（人就在 Kobo 前面）。 */
     static void set(final Context c, final boolean on, final int min, final Runnable done) {
         new Thread(new Runnable() { @Override public void run() {
             final Map<String, String> kv = HostReq.kv(HostReq.run(c, on ? "adbstart" : "adbstop", on ? String.valueOf(minutes(min)) : null, null, 30000));
@@ -70,7 +70,7 @@ final class AdbWifi {
                 else if (err != null) VeraToast.show(c, error(err));
                 else if (on) {
                     String ip = kv.get("adb.ip");
-                    VeraToast.show(c, "无线调试已打开：电脑上 adb connect " + (ip == null || ip.length() == 0 ? "<Kindle 的地址>" : ip) + ":" + PORT + "，" + minutes(min) + " 分钟后自动关闭");
+                    VeraToast.show(c, "无线调试已打开：电脑上 adb connect " + (ip == null || ip.length() == 0 ? "<Kobo 的地址>" : ip) + ":" + PORT + "，" + minutes(min) + " 分钟后自动关闭");
                 } else VeraToast.show(c, "无线调试已关闭");
                 if (done != null) done.run();
             } });
@@ -78,6 +78,6 @@ final class AdbWifi {
     }
 
     /** 设置行的说明文字。 */
-    static final String DESC = "电脑和 Kindle 连同一个 Wi-Fi，用 adb connect 连进 Android 传文件、装应用（adb push / pull / install）。"
+    static final String DESC = "电脑和 Kobo 连同一个 Wi-Fi，用 adb connect 连进 Android 传文件、装应用（adb push / pull / install）。"
         + "只认你在传书网页里添加过的电脑公钥；打开后这台电脑能完全控制 Android，用完请关，到时间也会自动关。";
 }

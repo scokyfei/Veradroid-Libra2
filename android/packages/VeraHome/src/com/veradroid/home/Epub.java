@@ -189,7 +189,7 @@ final class Epub {
 
     /**
      * 第一次打开：只读书脊里第一个够长的文件（就是 load() 里的第 0 章）先显示出来，整本在后台读。
-     * 以前第一次打开要先把整本读完才出第一页（1200 章的书在 1 GHz 的 Kindle 上要半分钟）。
+     * 以前第一次打开要先把整本读完才出第一页（1200 章的书在 1 GHz 的 Kobo 上要半分钟）。
      */
     static Chapter firstChapter(File f) throws Exception {
         ZipFile z = new ZipFile(f);

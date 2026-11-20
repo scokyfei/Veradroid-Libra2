@@ -136,7 +136,7 @@ final class WebFiles {
             if (f.isDirectory() && (WebAdmin.readOnlyWhy(sr, f) != null || lockedInside(f, 0, new int[] { 200000 }))) { failed.put(n + "（里面有脚本或受保护的文件）"); continue; }
             File target = unique(dd, n);
             boolean ok = !copy && f.renameTo(target);
-            if (!ok) {   // 复制；或者跨文件系统的移动（Android 存储 <-> Kindle 书库）：复制后删除
+            if (!ok) {   // 复制；或者跨文件系统的移动（Android 存储 <-> Kobo 书库）：复制后删除
                 long need = f.isDirectory() ? size(f, 0) : f.length();
                 if (need > dd.getUsableSpace() - 64L * 1024 * 1024) { failed.put(n + "（空间不够）"); continue; }
                 // 移动时隐藏文件也搬过去：后面会把原文件夹整个删掉，以前 .nomedia、应用的点文件就这样丢了（lockedInside 已经拦下了危险的点文件）
@@ -276,7 +276,7 @@ final class WebFiles {
         long[] total = { 0 };
         String zipName;
         if (namesJson == null || namesJson.length() == 0) {
-            zipName = d.equals(WebAdmin.rootDir(which)) ? ("kindle".equals(which) ? "Kindle书库" : "Android存储") : d.getName();
+            zipName = d.equals(WebAdmin.rootDir(which)) ? ("kindle".equals(which) ? "Kobo书库" : "Android存储") : d.getName();
             collect(d, zipName + "/", items, total, 0);
         } else {
             JSONArray names;
@@ -373,7 +373,7 @@ final class WebFiles {
         } catch (IOException e) {
             tmp.delete();
             String m = String.valueOf(e.getMessage());
-            return err(m.contains("Required key not available") ? "这台 Kindle 的书库是加密的，Android 这边写不进去" : "保存失败：" + m);
+            return err(m.contains("Required key not available") ? "这台 Kobo 的书库是加密的，Android 这边写不进去" : "保存失败：" + m);
         }
         tmp.setReadable(true, false);
         if (!tmp.renameTo(f)) { tmp.delete(); return err("保存失败"); }

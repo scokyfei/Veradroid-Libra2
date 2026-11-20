@@ -17,7 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 设置 → 设备与更新 → 已备份的数据：安装器每次更新前做的备份（Kindle 上 veradroid/backup 里）占多少地方，可以删掉不要的。
+ * 设置 → 设备与更新 → 已备份的数据：安装器每次更新前做的备份（Kobo 上 veradroid/backup 里）占多少地方，可以删掉不要的。
  * 也管“更新前备份”这个设置（{@link #choose}）：设置、阅读进度和书（默认）/ 只备份设置和阅读进度 / 不备份。
  *
  * 容器里看不到 veradroid/，列出和删除都由宿主做（boot/lib/backup.sh），走管理请求 {@link HostReq}（别的应用冒充不了）：
@@ -50,7 +50,7 @@ public class BackupActivity extends Activity {
 
     /** 设置页那一行的说明。 */
     static String desc() {
-        String s = "更新系统前先在 Kindle 上备份，更新出问题时自动找回。默认备份设置、阅读进度和 300 MB 以内的书。当前：" + MODE_L[mode()] + "。";
+        String s = "更新系统前先在 Kobo 上备份，更新出问题时自动找回。默认备份设置、阅读进度和 300 MB 以内的书。当前：" + MODE_L[mode()] + "。";
         if (off()) s += "\n注意：" + OFF_WARN;
         return s;
     }
@@ -179,7 +179,7 @@ public class BackupActivity extends Activity {
 
     static String kindLabel(String kind, boolean light) {
         if ("user".equals(kind)) return light ? "更新前备份（设置和阅读进度）" : "更新前备份";
-        if ("cc".equals(kind)) return "Kindle 书库索引";
+        if ("cc".equals(kind)) return "Kobo 书库索引";
         if ("docs".equals(kind)) return "旧版书库备份";
         if ("docsr".equals(kind)) return "旧版书库备份（已恢复过一次）";
         if ("media".equals(kind)) return "卸载时留下的内部存储";
@@ -188,7 +188,7 @@ public class BackupActivity extends Activity {
 
     private static String what(Item it) {
         if ("user".equals(it.kind)) return it.light ? "设置、阅读进度和笔记，不含书。" : "设置、阅读进度、笔记和一部分书。";
-        if ("cc".equals(it.kind)) return "Kindle 自己的书库目录数据库，书库出问题时用。";
+        if ("cc".equals(it.kind)) return "Kobo 自己的书库目录数据库，书库出问题时用。";
         if ("docs".equals(it.kind)) return "老版本做的书库备份，下次更新时会用它补回缺的书一次。";
         if ("docsr".equals(it.kind)) return "老版本做的书库备份，已经用来补过书。";
         if ("media".equals(it.kind)) return "卸载 VeraDroid 时留下的 Android 内部存储（书、下载的文件），重新安装时放回去。";
@@ -204,7 +204,7 @@ public class BackupActivity extends Activity {
         final List<Item> items = items();
         int deletable = 0, delKb = 0;
         for (Item it : items) if (!it.locked()) { deletable++; delKb += it.kb; }
-        line("共 " + items.size() + " 份，占 " + size(HostLink.num(st, "total_kb", 0)) + "；Kindle 剩余 " + size(HostLink.num(st, "free_kb", 0)) + "。", 18, true);
+        line("共 " + items.size() + " 份，占 " + size(HostLink.num(st, "total_kb", 0)) + "；Kobo 剩余 " + size(HostLink.num(st, "free_kb", 0)) + "。", 18, true);
         // 现在的设置 + 更改
         LinearLayout mr = new LinearLayout(this);
         mr.setGravity(Gravity.CENTER_VERTICAL);
@@ -231,7 +231,7 @@ public class BackupActivity extends Activity {
             col.setOrientation(LinearLayout.VERTICAL);
             col.addView(Ui.text(this, kindLabel(it.kind, it.light), 18, true));
             String sub = (it.time == null || it.time.length() == 0 ? "" : it.time + " · ") + size(it.kb);
-            if ("root".equals(it.where)) sub += " · 在 Kindle 根目录（旧版位置）";
+            if ("root".equals(it.where)) sub += " · 在 Kobo 根目录（旧版位置）";
             col.addView(Ui.text(this, sub, 14, false));
             String w = what(it);
             if (w.length() > 0) col.addView(Ui.text(this, w, 13, false));

@@ -19,7 +19,7 @@ import java.util.Map;
  * 以前只有宿主 / 传书网页才能改的设置，在设备上给一个入口。两页，Intent extra "page"：
  *   display  显示与刷新：旋转（KFB_ROTATE）、显示档位（KFB_SMOOTH）、局部刷新（KFB_MODE）、快速滑动（KFB_SCROLLDU）、图片灰度（KFB_IMG）、整页刷新（KFB_REAGL_MIN）、整屏闪刷（KFB_FLASH）、
  *            浅色过滤（KFB_LIGHTF）、深色加深（KFB_DARKEN）
- *   system   系统与性能：Wi-Fi 省电（WIFI_PS）、小内存模式（LOWMEM）、Kindle 界面（KINDLE_UI）、应用预编译（APP_COMPILE + ctl/compile.status + 全部优化）
+ *   system   系统与性能：Wi-Fi 省电（WIFI_PS）、小内存模式（LOWMEM）、Kobo 界面（KINDLE_UI）、应用预编译（APP_COMPILE + ctl/compile.status + 全部优化）
  * 每项一行“< 值 >”步进：点一下只改那一行的字（一次小刷新），同时经 HostLink.settings 写给宿主（ctl/settings.new + apply → settings.conf）。
  * 不搭列表、不滚动：一页放得下；小屏放不下时用 PageScrollView 整页翻。
  */
@@ -162,8 +162,8 @@ public class HostSettingsActivity extends Activity {
         list.addView(smoothNote);
         smoothNote(host.get("KFB_SMOOTH"));
         section("局部刷新（屏幕上一小块变化：点按钮、翻列表）");
-        stepper("局部刷新方式", "均衡：快，残影少；灰度最准：颜色最准，稍慢；最快：只有黑白，最灵敏，残影多；自动：和 Kindle 自己一样由驱动选。",
-            "KFB_MODE", new String[] { "均衡", "灰度最准", "最快", "自动（同 Kindle）" }, new String[] { "0", "1", "2", "3" }, "0", null);
+        stepper("局部刷新方式", "均衡：快，残影少；灰度最准：颜色最准，稍慢；最快：只有黑白，最灵敏，残影多；自动：和 Kobo 自己一样由驱动选。",
+            "KFB_MODE", new String[] { "均衡", "灰度最准", "最快", "自动（同 Kobo）" }, new String[] { "0", "1", "2", "3" }, "0", null);
         stepper("快速滑动", "滚动、拖动列表时先用黑白快刷跟上手指，停下约 0.3 秒后再用 16 级灰度补刷一遍（清掉残影）。滑动时字会粗糙一点。",
             "KFB_SCROLLDU", new String[] { "关（默认）", "开" }, new String[] { "0", "300" }, "0", null);
         stepper("图片灰度", "均衡方式下，小块变化里是图片（封面、头像、照片）的部分用 16 级灰度刷，不再变成黑白点阵；文字照旧快刷。图片会慢约 70 毫秒。",
@@ -171,7 +171,7 @@ public class HostSettingsActivity extends Activity {
         section("整页刷新（翻页、换页面）");
         stepper("多大算整页", "一次变化超过屏幕的这么多，就用 16 级灰度的整页波形（清残影，约慢 70 毫秒）；小于它按局部刷新。",
             "KFB_REAGL_MIN", new String[] { "三成", "翻页（默认）", "一半", "七成", "接近整屏" }, new String[] { "30", "35", "50", "70", "85" }, "35", null);
-        stepper("整屏闪刷", "每翻这么多页，整个屏幕黑白闪一下，彻底清掉残影（和 Kindle 的“页面刷新”一样）。",
+        stepper("整屏闪刷", "每翻这么多页，整个屏幕黑白闪一下，彻底清掉残影（和 Kobo 的“页面刷新”一样）。",
             "KFB_FLASH", new String[] { "不按页数闪", "每页", "每 3 页", "每 6 页", "每 8 页", "每 10 页", "每 20 页" },
             new String[] { "0", "1", "3", "6", "8", "10", "20" }, "8", null);
         section("画面");
@@ -196,13 +196,18 @@ public class HostSettingsActivity extends Activity {
 
     private void buildSystem() {
         section("Wi-Fi");
-        stepper("Wi-Fi 省电", "自动：平时省电，传书开着或大量下载时临时关掉省电；始终省电：下载慢、最省电；运行时关闭：下载快、耗电多。回到 Kindle 和屏保时一律还给 Kindle。",
+        stepper("Wi-Fi 省电", "自动：平时省电，传书开着或大量下载时临时关掉省电；始终省电：下载慢、最省电；运行时关闭：下载快、耗电多。回到 Kobo 和屏保时一律还给 Kobo。",
             "WIFI_PS", new String[] { "自动", "始终省电", "运行时关闭" }, new String[] { "auto", "on", "off" }, "auto", null);
         section("内存");
-        stepper("小内存模式", "自动：内存不到约 700 MB 的机型（PW5、KT5、KT6）自动开。开着时 Kindle 的书库程序停掉腾内存、回 Kindle 完全退出（再进要重新开机）。下次启动 Android 生效。",
+        boolean kobo = HostLink.isKobo();
+        stepper("小内存模式", kobo
+                ? "自动：512 MB 内存机型（Kobo Libra 2）自动开启，停掉不需要的后台服务并优化内存阈值。下次启动 Android 生效。"
+                : "自动：内存不到约 700 MB 的机型自动开。开着时 Kobo 的书库程序停掉腾内存、回 Kobo 完全退出（再进要重新开机）。下次启动 Android 生效。",
             "LOWMEM", new String[] { "自动", "开", "关" }, new String[] { "auto", "on", "off" }, "auto", null);
-        stepper("Android 运行时 Kindle 界面", "只暂停：回 Kindle 最快；冻结：再把 Kindle 的后台程序冻住；停掉：腾出最多内存，回 Kindle 约一分钟。自动：小内存模式用“停掉”，否则“冻结”。下次启动 Android 生效。",
-            "KINDLE_UI", new String[] { "自动", "只暂停", "冻结", "停掉" }, new String[] { "auto", "keep", "freeze", "stop" }, "auto", null);
+        if (!kobo) {
+            stepper("Android 运行时 Kobo 界面", "只暂停：回 Kobo 最快；冻结：再把 Kobo 的后台程序冻住；停掉：腾出最多内存，回 Kobo 约一分钟。自动：小内存模式用“停掉”，否则“冻结”。下次启动 Android 生效。",
+                "KINDLE_UI", new String[] { "自动", "只暂停", "冻结", "停掉" }, new String[] { "auto", "keep", "freeze", "stop" }, "auto", null);
+        }
         section("应用预编译");
         stepper("自动优化新装的应用", "装好后在后台把应用编译成机器码，打开更快（微信读书冷启动约快一倍）。自动优化等你 5 分钟不碰屏幕才开始；"
             + "点下面的“立即优化”马上开始。电量低、内存不够、应用在前台、Android 冻结时都会先等。",

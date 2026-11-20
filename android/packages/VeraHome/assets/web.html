@@ -211,7 +211,7 @@ img.shot{max-width:100%;max-height:75vh;border-radius:10px;border:1px solid var(
 </head>
 <body>
 <div id="login" hidden><div class="card"><div class="brand" style="justify-content:center"><div class="logo">V</div><div style="text-align:left"><b>VeraDroid 管理</b><small>传书与设备管理</small></div></div>
-<p class="sub" id="lmsgTop">输入 Kindle 屏幕上显示的 4 位 PIN</p>
+<p class="sub" id="lmsgTop">输入 Kobo 屏幕上显示的 4 位 PIN</p>
 <input id="pin" type="text" inputmode="numeric" maxlength="4" autocomplete="one-time-code" aria-label="PIN"><p id="lmsg" style="color:var(--err);min-height:1.4em;margin:8px 0"></p>
 <button class="btn pri" id="loginBtn" style="width:100%">进入</button></div></div>
 
@@ -235,7 +235,7 @@ img.shot{max-width:100%;max-height:75vh;border-radius:10px;border:1px solid var(
   <div class="card"><div class="h"><svg class="i" data-i="battery"></svg>电池与网络</div><div class="stat"><svg class="donut" viewBox="0 0 84 84" id="dBat"></svg><dl class="kv" id="ovNet"></dl></div></div>
  </div>
  <div class="grid" style="margin-top:16px">
-  <div class="card"><div class="h"><svg class="i" data-i="cpu"></svg>内存与 CPU<span class="sp"></span><span class="sub">Kindle 和 Android 共用</span></div>
+  <div class="card"><div class="h"><svg class="i" data-i="cpu"></svg>内存与 CPU<span class="sp"></span><span class="sub">Kobo 和 Android 共用</span></div>
    <div class="stat" style="margin-bottom:12px"><svg class="donut" viewBox="0 0 84 84" id="dMem"></svg><div class="legend" id="lgMem"></div></div>
    <div id="ovCpu"></div></div>
   <div class="card"><div class="h"><svg class="i" data-i="drive"></svg>存储<span class="sp"></span><button class="btn sm" id="duBtn"><svg class="i" data-i="search"></svg>计算占用</button></div>
@@ -279,13 +279,13 @@ img.shot{max-width:100%;max-height:75vh;border-radius:10px;border:1px solid var(
 <!-- ================================================================ 传书 -->
 <section id="s-up" data-title="传书" hidden>
  <div class="grid">
-  <div class="card"><div class="h"><svg class="i" data-i="book"></svg>把书传到 Kindle</div>
+  <div class="card"><div class="h"><svg class="i" data-i="book"></svg>把书传到 Kobo</div>
    <div class="set"><span class="lbl">存到哪里<span class="sub">APK 安装包不受影响：上传后自动安装</span></span>
-    <span class="seg" id="upTo"><button data-v="books" class="on">Android 的 Books</button><button data-v="kindle">Kindle 书库</button></span></div>
+    <span class="seg" id="upTo"><button data-v="books" class="on">Android 的 Books</button><button data-v="kindle">Kobo 书库</button></span></div>
    <div class="drop" id="upDrop" style="margin-top:12px"><svg class="i" data-i="upload" style="width:30px;height:30px"></svg><p>把书（epub、pdf、mobi、azw3、txt…）或 APK 拖到这里</p><button class="btn pri" id="upPick">选择文件</button><input type="file" id="upFile" multiple hidden></div></div>
-  <div class="card"><div class="h"><svg class="i" data-i="link"></svg>从链接下载</div><p class="sub">粘贴 http(s) 直链，Kindle 自己去下载。</p>
+  <div class="card"><div class="h"><svg class="i" data-i="link"></svg>从链接下载</div><p class="sub">粘贴 http(s) 直链，Kobo 自己去下载。</p>
    <div class="btns"><input type="text" id="link" placeholder="https://…" style="flex:1"><button class="btn pri" id="linkBtn">开始下载</button></div>
-   <div class="h" style="margin-top:18px"><svg class="i" data-i="list"></svg>Kindle 上的任务</div><div id="tlist" class="sub">还没有任务</div></div>
+   <div class="h" style="margin-top:18px"><svg class="i" data-i="list"></svg>Kobo 上的任务</div><div id="tlist" class="sub">还没有任务</div></div>
  </div>
 </section>
 
@@ -307,9 +307,9 @@ img.shot{max-width:100%;max-height:75vh;border-radius:10px;border:1px solid var(
  <div class="card"><div class="h"><svg class="i" data-i="activity"></svg>Android 进程<span class="sp"></span><span class="sub" id="runSum"></span>
   <label class="sub" style="display:flex;align-items:center;gap:6px"><span class="switch"><input type="checkbox" id="runAuto" checked><span></span></span>自动刷新</label><button class="btn sm" id="runBtn"><svg class="i" data-i="refresh"></svg></button></div>
   <div class="scroll"><table class="t" id="ptab"></table></div></div>
- <div class="card"><div class="h"><svg class="i" data-i="tablet"></svg>Kindle 这边<span class="badge">只读</span><span class="sp"></span><span id="hostSum"></span></div>
+ <div class="card"><div class="h"><svg class="i" data-i="tablet"></svg>Kobo 这边<span class="badge">只读</span><span class="sp"></span><span id="hostSum"></span></div>
   <div class="scroll"><table class="t" id="htab"></table></div>
-  <p class="sub">“已暂停”是正常的：Android 在前台时 Kindle 界面的窗口管理器被暂停，回到 Kindle 时恢复。</p></div>
+  <p class="sub">“已暂停”是正常的：Android 在前台时 Kobo 界面的窗口管理器被暂停，回到 Kobo 时恢复。</p></div>
 </section>
 
 <!-- ================================================================ 日志 -->
@@ -331,7 +331,7 @@ img.shot{max-width:100%;max-height:75vh;border-radius:10px;border:1px solid var(
   <div class="card"><div class="h"><svg class="i" data-i="terminal"></svg>SSH 诊断<span class="sp"></span><span id="sshBadge"></span></div>
    <div id="sshState"><div class="skel"></div><div class="skel"></div></div>
    <div class="btns" style="margin-top:12px"><button class="btn pri" id="sshStart">打开 SSH</button><button class="btn" id="sshStop">关闭 SSH</button></div>
-   <div class="note">SSH 登录进去就是 Kindle 的 root。<b>只认你自己的公钥</b>，没有密码登录；用完请关（开着时 Kindle 不进屏保）；重启 Kindle 后自动关闭。需要先把 SSH 诊断包（VeraDroid-SSH 文件夹）拷进 Kindle 的 documents。</div></div>
+   <div class="note">SSH 登录进去就是 Kobo 的 root。<b>只认你自己的公钥</b>，没有密码登录；用完请关（开着时 Kobo 不进屏保）；重启 Kobo 后自动关闭。需要先把 SSH 诊断包（VeraDroid-SSH 文件夹）拷进 Kobo 的 documents。</div></div>
   <div class="card"><div class="h"><svg class="i" data-i="key"></svg>允许登录的公钥</div><div id="sshKeys" class="list"></div>
    <p class="sub">添加你自己的公钥：电脑上 <code>~/.ssh/id_ed25519.pub</code> 那一整行。<b>不要</b>贴私钥。改了公钥要关掉 SSH 再打开才生效。</p>
    <textarea id="sshKey" rows="3" placeholder="ssh-ed25519 AAAAC3Nza… you@computer"></textarea>
@@ -359,24 +359,24 @@ img.shot{max-width:100%;max-height:75vh;border-radius:10px;border:1px solid var(
  <div class="grid">
   <div class="card" style="grid-column:1/-1"><div class="h"><svg class="i" data-i="camera"></svg>屏幕<span class="sp"></span>
    <label class="sub" style="display:flex;align-items:center;gap:6px"><span class="switch"><input type="checkbox" id="shotAuto"><span></span></span>每 10 秒刷新</label>
-   <button class="btn sm pri" id="shotBtn">截取当前屏幕</button><button class="btn sm" id="clearBtn">清除残影</button><a class="btn sm" id="shotSave" hidden download="kindle-screen.png"><svg class="i" data-i="download"></svg>PNG</a></div>
-   <div id="shotBox" class="empty"><svg class="i" data-i="camera"></svg>点“截取当前屏幕”看看 Kindle 上现在显示的是什么</div></div>
+   <button class="btn sm pri" id="shotBtn">截取当前屏幕</button><button class="btn sm" id="clearBtn">清除残影</button><a class="btn sm" id="shotSave" hidden download="kobo-screen.png"><svg class="i" data-i="download"></svg>PNG</a></div>
+   <div id="shotBox" class="empty"><svg class="i" data-i="camera"></svg>点“截取当前屏幕”看看 Kobo 上现在显示的是什么</div></div>
   <div class="card"><div class="h"><svg class="i" data-i="sun"></svg>显示<span class="sp"></span><span class="sub">和下拉面板同步，立即生效</span></div><div id="dispSets"><div class="skel"></div><div class="skel"></div></div></div>
   <div class="card"><div class="h"><svg class="i" data-i="refresh"></svg>更新</div><div id="updSets"></div>
    <div class="btns" style="margin-top:10px"><button class="btn sm" id="updBtn">检查更新</button></div><div id="updInfo" class="sub" style="margin-top:8px"></div>
    <p class="sub">这里只查看服务器上的版本，不会下载安装。</p></div>
   <div class="card" id="lightCard" hidden><div class="h"><svg class="i" data-i="sun"></svg>前光</div><div id="lightSets"></div></div>
-  <div class="card"><div class="h"><svg class="i" data-i="clipboard"></svg>发送文字到 Kindle</div><p class="sub">放进 Android 的剪贴板，在应用里长按输入框“粘贴”。</p>
+  <div class="card"><div class="h"><svg class="i" data-i="clipboard"></svg>发送文字到 Kobo</div><p class="sub">放进 Android 的剪贴板，在应用里长按输入框“粘贴”。</p>
    <textarea id="clip" rows="3" placeholder="网址、验证码、一段话…"></textarea><div class="btns" style="margin-top:8px"><button class="btn pri sm" id="clipBtn">发送</button></div></div>
-  <div class="card"><div class="h"><svg class="i" data-i="power"></svg>电源</div><div class="btns"><button class="btn" id="rebootBtn">重启 Android</button><button class="btn" id="exitBtn">返回 Kindle</button></div>
-   <p class="sub">两个操作都会让这个网页断开，要在 Kindle 上重新打开传输。</p></div>
+  <div class="card"><div class="h"><svg class="i" data-i="power"></svg>电源</div><div class="btns"><button class="btn" id="rebootBtn">重启 Android</button><button class="btn" id="exitBtn">返回 Kobo</button></div>
+   <p class="sub">两个操作都会让这个网页断开，要在 Kobo 上重新打开传输。</p></div>
  </div>
 </section>
 
 <!-- ================================================================ 主题 -->
 <section id="s-theme" data-title="壁纸与图标" hidden>
  <div class="card"><div class="h"><svg class="i" data-i="image"></svg>壁纸<span class="sp"></span><button class="btn sm pri" id="galPick"><svg class="i" data-i="plus"></svg>添加到图库</button><input type="file" id="galFile" accept="image/png,image/jpeg,image/webp" multiple hidden></div>
-  <p class="sub">图库是 Android 存储里的 <code>VeraDroid/wallpaper</code>，在 Kindle 上选壁纸、换图标时最先列出这里的图片。点一张图可以设成壁纸、用作应用图标或删除。可以直接把图片拖进来。</p>
+  <p class="sub">图库是 Android 存储里的 <code>VeraDroid/wallpaper</code>，在 Kobo 上选壁纸、换图标时最先列出这里的图片。点一张图可以设成壁纸、用作应用图标或删除。可以直接把图片拖进来。</p>
   <div class="thumbs" id="galList"></div></div>
  <div class="card"><div class="h"><svg class="i" data-i="grid"></svg>应用图标<span class="sp"></span><span class="sub">点一个应用：用图库里的图、上传 PNG，或恢复默认</span></div><div class="icons" id="iconList"></div></div>
  <div class="grid">
@@ -384,7 +384,7 @@ img.shot{max-width:100%;max-height:75vh;border-radius:10px;border:1px solid var(
    <div class="set"><span>显示时间</span><label class="switch"><input type="checkbox" id="sb_clock" checked><span></span></label></div>
    <div class="set"><span>显示电量</span><label class="switch"><input type="checkbox" id="sb_battery" checked><span></span></label></div>
    <div class="set"><span>时间格式</span><select id="sb_fmt"><option value="HH:mm">14:05</option><option value="h:mm">2:05</option><option value="M/d HH:mm">11/7 14:05</option></select></div>
-   <div class="set"><span>左侧文字</span><input id="sb_text" type="text" maxlength="20" placeholder="比如：我的 Kindle"></div>
+   <div class="set"><span>左侧文字</span><input id="sb_text" type="text" maxlength="20" placeholder="比如：我的 Kobo"></div>
    <div class="btns" style="margin-top:10px"><button class="btn pri sm" id="sbSave">保存状态栏</button></div></div>
   <div class="card"><div class="h"><svg class="i" data-i="archive"></svg>主题包</div><p class="sub">一个 .zip，里面可以有 wallpaper.jpg、icons/包名.png、statusbar.json，一次换好。</p>
    <div class="btns"><button class="btn pri sm" id="zipPick">选择 .zip</button><input type="file" id="zipFile" accept=".zip" hidden><button class="btn sm dan" id="themeReset">全部恢复默认</button></div></div>
@@ -489,13 +489,13 @@ function api(path,opt){opt=opt||{};opt.credentials='same-origin';
 function post(path,obj){return api(path,{method:'POST',headers:{'Content-Type':'application/json','X-VD-Token':TOKEN},body:JSON.stringify(obj||{})})}
 function refreshToken(){return fetch('/api/state',{credentials:'same-origin'}).then(function(r){if(r.status==401){sessionExpired();throw new Error('login')}return r.json()}).then(function(j){if(j.token)TOKEN=j.token})}
 function sessionExpired(){if(!$('login').hidden)return;var was=LOGGED;LOGGED=false;stopTimers();
- $('lmsgTop').textContent=was?'登录已过期（Kindle 上的传输重新打开过，或者 PIN 换了）。请输入 Kindle 屏幕上现在的 PIN。':'输入 Kindle 屏幕上显示的 4 位 PIN';
+ $('lmsgTop').textContent=was?'登录已过期（Kobo 上的传输重新打开过，或者 PIN 换了）。请输入 Kobo 屏幕上现在的 PIN。':'输入 Kobo 屏幕上显示的 4 位 PIN';
  $('login').hidden=false;setTimeout(function(){$('pin').focus()},50)}
 $('loginBtn').onclick=login;$('pin').addEventListener('keydown',function(e){if(e.key==='Enter')login()});
 $('pin').addEventListener('input',function(){if(/^\d{4}$/.test(this.value))login()});
 function login(){var b=$('loginBtn');b.disabled=true;
  fetch('/login',{method:'POST',credentials:'same-origin',body:'pin='+encodeURIComponent($('pin').value)}).then(function(r){return r.json()}).then(function(j){b.disabled=false;
-  if(j.ok){$('login').hidden=true;$('pin').value='';$('lmsg').textContent='';init()}else{$('lmsg').textContent=j.msg||'PIN 不对';$('pin').select()}}).catch(function(){b.disabled=false;$('lmsg').textContent='连不上 Kindle：传输是不是关了？'})}
+  if(j.ok){$('login').hidden=true;$('pin').value='';$('lmsg').textContent='';init()}else{$('lmsg').textContent=j.msg||'PIN 不对';$('pin').select()}}).catch(function(){b.disabled=false;$('lmsg').textContent='连不上 Kobo：传输是不是关了？'})}
 
 /* =================================================================== navigation */
 var NAV=[['ov','概览','home'],['files','文件','folder'],['up','传书','book'],['apps','应用','grid'],['run','运行','activity'],['sys','系统','settings'],['theme','壁纸与图标','palette'],['ssh','SSH 与诊断','terminal'],['log','日志','list'],['-'],['bt','蓝牙','bluetooth'],['storage','存储空间','drive']];
@@ -536,14 +536,14 @@ function chip(cls,icon,text,title){return '<span class="badge '+cls+'"'+(title?'
 var OV={};
 function loadOv(){api('/api/overview').then(function(j){OV=j;var h=j.hostinfo||{},st=j.status||{},m=j.mem||{};
  $('ovUpd').textContent=!j.hostBusy?'刚刚更新':j.host?'宿主正忙，先显示 '+(j.hostAge||0)+' 秒前的信息，稍后自动刷新':'宿主正忙（可能刚开机），稍后自动刷新…';
- setHTML('ovDev',kv([['机型',h.model||''],['Kindle 固件',(h.firmware||'').replace(/\s*\(.*\)$/,'')],['VeraDroid',h.vdversion||''],['桌面应用',j.home||''],['Android',j.android?j.android+' · '+j.abi:''],['内核',h.kernel||'']]));
+ setHTML('ovDev',kv([['机型',h.model||''],['Kobo 固件',(h.firmware||'').replace(/\s*\(.*\)$/,'')],['VeraDroid',h.vdversion||''],['桌面应用',j.home||''],['Android',j.android?j.android+' · '+j.abi:''],['内核',h.kernel||'']]));
  var s='';s+=chip(h.frozen==='1'?'warn':'ok','',h.frozen==='1'?'Android 已冻结':'Android 运行中');
- s+=chip(h.fwpaused==='1'?'acc':'','',h.fwpaused==='1'?'Kindle 界面已暂停':'Kindle 界面运行中');
+ s+=chip(h.fwpaused==='1'?'acc':'','',h.fwpaused==='1'?'Kobo 界面已暂停':'Kobo 界面运行中');
  s+=chip(j.sshRunning?'warn':'','terminal',j.sshRunning?'SSH 开着':'SSH 关闭');
  s+=chip(h.autoupdate==='0'?'':'ok','refresh',h.autoupdate==='0'?'自动更新关':'自动更新开');
  if(h.mode==='chroot')s+=chip('','', 'chroot 模式');
  setHTML('ovState',s);
- setHTML('ovTimes',kv([['Kindle 已开机',dur(h.uptime||j.uptime)],['Android 已运行',h.androidup?dur(h.androidup):'']]));
+ setHTML('ovTimes',kv([['Kobo 已开机',dur(h.uptime||j.uptime)],['Android 已运行',h.androidup?dur(h.androidup):'']]));
  var bat=+st.battery;donut($('dBat'),bat,isNaN(bat)?'—':bat+'%',bat<15?'var(--err)':bat<30?'var(--warn)':'var(--ok)');
  var ssid='';(j.wifiList||'').split('\n').forEach(function(l){if(l.charAt(0)==='*')ssid=l.slice(1)});
  setHTML('ovNet',kv([['电量',isNaN(bat)?'—':bat+'%'+(st.charging==='1'?'（充电中）':'')],['Wi-Fi',st.wifi==='0'?'关闭':'开启'+(ssid?' · '+ssid:'')],['IP 地址',st.lanip||location.hostname],['前光',st.haslight==='1'?st.light+' / '+st.lightmax:''],['自动休眠',st.hassleeptime==='1'&&st.sleep?Math.round(st.sleep/60)+' 分钟':'']]));
@@ -551,13 +551,13 @@ function loadOv(){api('/api/overview').then(function(j){OV=j;var h=j.hostinfo||{
  setHTML('lgMem','<span class="t">已用 '+fmtK(mt-ma)+'</span><span class="sub">共 '+fmtK(mt)+' · 可用 '+fmtK(ma)+'</span>'+(m.SwapTotal?'<span class="sub">交换区 '+fmtK(su)+' / '+fmtK(m.SwapTotal)+'</span>':''));
  setHTML('ovCpu','<div class="btns" style="justify-content:space-between"><span>CPU（'+j.ncpu+' 核）</span><span class="sub">'+(j.cpu!=null?j.cpu+'%':'')+' · 负载 '+esc((j.load||'').split(' ').slice(0,3).join(' '))+'</span></div>'+meter(j.cpu||0));
  var dk=(h['df.kindle']||'').split(' ');
- if(dk.length>=3){var t=+dk[0],u=+dk[1],a=+dk[2];donut($('dDisk'),pct(u,t));setHTML('lgDisk','<span class="t">Kindle 用户存储 · 已用 '+fmtK(u)+'</span><span class="sub">共 '+fmtK(t)+' · 剩 '+fmtK(a)+'</span><span class="sub">书、VeraDroid 程序和数据都在这里</span>')}
+ if(dk.length>=3){var t=+dk[0],u=+dk[1],a=+dk[2];donut($('dDisk'),pct(u,t));setHTML('lgDisk','<span class="t">Kobo 用户存储 · 已用 '+fmtK(u)+'</span><span class="sub">共 '+fmtK(t)+' · 剩 '+fmtK(a)+'</span><span class="sub">书、VeraDroid 程序和数据都在这里</span>')}
  var d2='',da=h['df.android'],dr=(h['df.root']||'').split(' ');
  if(da&&da!==h['df.kindle']){var x=da.split(' ');d2+=row2('Android 系统盘镜像',+x[1],+x[0])}
- if(dr.length>=3)d2+=row2('Kindle 系统分区（只读）',+dr[1],+dr[0]);
+ if(dr.length>=3)d2+=row2('Kobo 系统分区（只读）',+dr[1],+dr[0]);
  setHTML('ovDisk2',d2);showDu(h)}).catch(function(e){if(e.message!=='login')$('ovUpd').textContent='刷新失败'})}
 function row2(l,u,t){return '<div style="margin:8px 0"><div class="btns" style="justify-content:space-between"><span>'+esc(l)+'</span><span class="sub">'+fmtK(u)+' / '+fmtK(t)+'</span></div>'+meter(pct(u,t))+'</div>'}
-function showDu(h){if(!h['du.time'])return;var rows=[['Android 系统',h['du.system']],['已装应用',h['du.apps']],['应用数据',h['du.appdata']],['Android 共享存储',h['du.media']],['VeraDroid 程序',h['du.program']],['Kindle 书库',h['du.kindledocs']]];
+function showDu(h){if(!h['du.time'])return;var rows=[['Android 系统',h['du.system']],['已装应用',h['du.apps']],['应用数据',h['du.appdata']],['Android 共享存储',h['du.media']],['VeraDroid 程序',h['du.program']],['Kobo 书库',h['du.kindledocs']]];
  var mx=0;rows.forEach(function(r){mx=Math.max(mx,+r[1]||0)});
  setHTML('ovDu','<div class="sub" style="margin:12px 0 4px">占用明细 · '+rel(h['du.time']*1000)+'计算</div>'+rows.map(function(r){return '<div style="margin:6px 0"><div class="btns" style="justify-content:space-between"><span>'+r[0]+'</span><span class="sub">'+fmtK(+r[1]||0)+'</span></div>'+meter(pct(+r[1]||0,mx))+'</div>'}).join(''))}
 $('duBtn').onclick=function(){var b=this;b.disabled=true;b.innerHTML='<span class="spin"></span>正在计算…';
@@ -627,7 +627,7 @@ function ext(n){var d=n.lastIndexOf('.');return d<0?'':n.slice(d+1).toLowerCase(
 function kind(f){if(f.link)return'lnk';if(f.dir)return'dir';var e=ext(f.name);for(var k in EXT)if((' '+EXT[k]+' ').indexOf(' '+e+' ')>=0)return k;return'file'}
 var KIND_IC={dir:'folder',img:'image',book:'book',zip:'archive',apk:'android',txt:'text',font:'font',lnk:'link',file:'file'};
 function full(n){return(FS.path?FS.path+'/':'')+n}
-function rootName(r){return r==='kindle'?'Kindle 书库':'Android 存储'}
+function rootName(r){return r==='kindle'?'Kobo 书库':'Android 存储'}
 function fsOpen(root,path,focusName){FS.root=root;FS.path=path||'';FS.sel={};FS.cur=-1;FS.anchor=-1;$('fFilter').value='';FS.filter='';
  if(!FS.items.length)$('fmList').innerHTML='<div style="padding:12px">'+skel(6)+'</div>';
  return api('/api/fs/list?'+q({root:root,path:FS.path})).then(function(j){
@@ -807,7 +807,7 @@ function fsDu(){var t=toastWait('正在计算每个文件夹的大小…');api('
  FS.items.forEach(function(x){if(x.dir&&j.sizes[x.name]!=null)x.du=j.sizes[x.name]});if(FS.sort==='size')FS.items.forEach(function(x){if(x.dir)x.size=x.du});renderFs();
  toast('这个文件夹共 '+fmt(j.total)+(j.partial?'（太大，只算了一部分）':''),'ok')}).catch(t)}
 /* folder picker for move / copy */
-function pickDest(title){var st={root:FS.root,path:FS.path};return modal({title:title,body:'<div class="btns" style="margin-bottom:8px"><span class="seg" id="pkRoot"><button data-r="sdcard">Android 存储</button><button data-r="kindle">Kindle 书库</button></span></div><div class="crumb" id="pkCrumb" style="cursor:default"></div><div class="list" id="pkList" style="max-height:50vh;overflow:auto"></div>',ok:title+'这里',
+function pickDest(title){var st={root:FS.root,path:FS.path};return modal({title:title,body:'<div class="btns" style="margin-bottom:8px"><span class="seg" id="pkRoot"><button data-r="sdcard">Android 存储</button><button data-r="kindle">Kobo 书库</button></span></div><div class="crumb" id="pkCrumb" style="cursor:default"></div><div class="list" id="pkList" style="max-height:50vh;overflow:auto"></div>',ok:title+'这里',
  init:function(bg){function load(){bg.querySelector('#pkRoot').querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-r')===st.root)});
    var parts=st.path?st.path.split('/'):[],c='<a data-p="">'+rootName(st.root)+'</a>';parts.forEach(function(p,i){c+='<span class="sep">›</span><a data-p="'+esc(parts.slice(0,i+1).join('/'))+'">'+esc(p)+'</a>'});bg.querySelector('#pkCrumb').innerHTML=c;
    bg.querySelector('#pkList').innerHTML=skel(3);
@@ -875,18 +875,18 @@ function renderApps(){var qq=$('appQ').value.trim().toLowerCase(),s=$('appSort')
 function appSelUpd(){var n=Object.keys(ASEL).length;$('appSel').hidden=!n;$('appSelN').textContent='已选 '+n+' 个应用'}
 $('alist').onclick=function(e){var c=e.target.getAttribute('data-s');if(c){if(e.target.checked)ASEL[c]=1;else delete ASEL[c];appSelUpd();return}
  var b=e.target.closest('[data-a]');if(!b)return;var p=b.getAttribute('data-p'),a=APPS.filter(function(x){return x.pkg===p})[0],act=b.getAttribute('data-a');
- if(act==='open')post('/api/open',{pkg:p}).then(function(j){toast(j.ok?'已在 Kindle 上打开':(j.msg||'打不开'),j.ok?'ok':'err')});
+ if(act==='open')post('/api/open',{pkg:p}).then(function(j){toast(j.ok?'已在 Kobo 上打开':(j.msg||'打不开'),j.ok?'ok':'err')});
  if(act==='more'){var r=b.getBoundingClientRect();ctxMenu(r.left-170,r.bottom+2,[
-  a.launch&&!a.self?['open','在 Kindle 上打开',function(){post('/api/open',{pkg:p}).then(function(j){toast(j.ok?'已打开':(j.msg||'失败'),j.ok?'ok':'err')})}]:null,
+  a.launch&&!a.self?['open','在 Kobo 上打开',function(){post('/api/open',{pkg:p}).then(function(j){toast(j.ok?'已打开':(j.msg||'失败'),j.ok?'ok':'err')})}]:null,
   !a.self&&!a.persistent?['stop','强行停止',function(){appStop([p])}]:null,
   ['zap','优化（预编译）',function(){post('/api/app/compile',{pkg:p}).then(function(j){toast(j.ok?'已排队优化：编好后打开会快很多':(j.msg||'失败'),j.ok?'ok':'err');loadCompile()})}],
   ['trash','清除缓存',function(){post('/api/app/clearcache',{pkg:p}).then(function(j){toast(j.ok?'缓存已清除':(j.msg||'失败'),j.ok?'ok':'err');setTimeout(loadApps,800)})}],
-  a.launch?['sun','显示设置（在 Kindle 上）',function(){post('/api/app/display',{pkg:p}).then(function(j){toast(j.ok?'已在 Kindle 上打开这个应用的显示设置':(j.msg||'失败'))})}]:null,
+  a.launch?['sun','显示设置（在 Kobo 上）',function(){post('/api/app/display',{pkg:p}).then(function(j){toast(j.ok?'已在 Kobo 上打开这个应用的显示设置':(j.msg||'失败'))})}]:null,
   a.launch&&!a.self?['image','换图标…',function(){iconDialog(p,a.label)}]:null,
   !a.system&&!a.self?'-':null,!a.system&&!a.self?['trash','卸载',function(){appDel([p])},1]:null])}};
 function appStop(ps){Promise.all(ps.map(function(p){return post('/api/app/stop',{pkg:p})})).then(function(rs){var bad=rs.filter(function(j){return!j.ok});toast(bad.length?bad[0].msg:'已停止 '+ps.length+' 个','ok');setTimeout(loadApps,800)})}
 function appDel(ps){confirmBox('卸载 '+ps.length+' 个应用？',ps.map(esc).join('<br>')+'<br>它们的数据也会一起删除。','卸载',true).then(function(ok){if(!ok)return;
- var i=0;(function next(){if(i>=ps.length){toast('已交给 Kindle 卸载','ok');ASEL={};setTimeout(loadApps,3500);return}post('/api/uninstall',{pkg:ps[i++]}).then(next,next)})()})}
+ var i=0;(function next(){if(i>=ps.length){toast('已交给 Kobo 卸载','ok');ASEL={};setTimeout(loadApps,3500);return}post('/api/uninstall',{pkg:ps[i++]}).then(next,next)})()})}
 $('appBatchDel').onclick=function(){appDel(Object.keys(ASEL))};$('appBatchStop').onclick=function(){appStop(Object.keys(ASEL))};$('appSelNone').onclick=function(){ASEL={};renderApps()};
 $('compAll').onclick=function(){post('/api/app/compile',{pkg:'all'}).then(function(j){toast(j.ok?'所有还没优化的应用都排上了':(j.msg||'失败'),j.ok?'ok':'err');loadCompile()})};
 function loadCompile(){api('/api/compile').then(function(j){var was=COMP.state==='running'?COMP.pkg:null;COMP=j;var on=j.state&&j.state!=='idle';$('compCard').hidden=!on&&!j.last;
@@ -913,9 +913,9 @@ function renderRun(){var j=PROCS;if(!j)return;var mt=j.memTotal||0,ma=j.memAvail
   +'<td class="r">'+fmtK(p.mem)+' <span class="sub">'+(p.pss!=null?'PSS':'RSS')+'</span></td><td class="r">'+(p.cpu!=null?(p.cpu>=10?'<b>'+p.cpu+'%</b>':p.cpu+'%'):'')+'</td><td class="hide-s">'+stBadge(p.state)+'</td>'
   +'<td class="r">'+(p.app&&p.pkg&&p.pkg!=='com.veradroid.home'&&p.pkg!=='android'?'<button class="btn sm" data-stop="'+esc(p.pkg)+'">停止</button>':'')+'</td></tr>'});
  $('ptab').innerHTML=h+'</tbody>';
- setHTML('hostSum',j.host?chip(j.frozen?'warn':'ok','',j.frozen?'Android 已冻结':'Android 运行中'+(j.androidup?' '+dur(j.androidup):''))+' '+chip(j.fwpaused?'acc':'','',j.fwpaused?'Kindle 界面已暂停':'Kindle 界面运行中'):chip('err','','宿主没有回应'));
+ setHTML('hostSum',j.host?chip(j.frozen?'warn':'ok','',j.frozen?'Android 已冻结':'Android 运行中'+(j.androidup?' '+dur(j.androidup):''))+' '+chip(j.fwpaused?'acc':'','',j.fwpaused?'Kobo 界面已暂停':'Kobo 界面运行中'):chip('err','','宿主没有回应'));
  var hh='<thead><tr><th>进程</th><th class="r">PID</th><th class="r">内存 (RSS)</th><th>状态</th></tr></thead><tbody>';
- var NM={'veradroid-epd':'显示桥（把 Android 画面送到墨水屏）','veradroid-input':'触摸 / 手势','slirp4netns':'Android 的网络',vdshutwatch:'关机保护',cmd:'命令监听（脚本）',watchdog:'看门狗（脚本）',sleep:'休眠监视（脚本）',autoupdate:'自动更新（脚本）',boot:'开机进度（脚本）',shutw:'关机钩子',awesome:'Kindle 窗口管理器',cvm:'Kindle 界面（Java）',dropbear:'SSH 服务'};
+ var NM={'veradroid-epd':'显示桥（把 Android 画面送到墨水屏）','veradroid-input':'触摸 / 手势','slirp4netns':'Android 的网络',vdshutwatch:'关机保护',cmd:'命令监听（脚本）',watchdog:'看门狗（脚本）',sleep:'休眠监视（脚本）',autoupdate:'自动更新（脚本）',boot:'开机进度（脚本）',shutw:'关机钩子',awesome:'Kobo 窗口管理器',cvm:'Kobo 界面（Java）',dropbear:'SSH 服务'};
  (j.hostprocs||[]).forEach(function(p){hh+='<tr><td>'+esc(p.name)+(NM[p.name]?'<div class="sub">'+NM[p.name]+'</div>':'')+'</td><td class="r">'+esc(p.pid)+'</td><td class="r">'+fmtK(+p.rss)+'</td><td>'+stBadge(p.state)+'</td></tr>'});
  $('htab').innerHTML=hh+'</tbody>'}
 $('ptab').onclick=function(e){var th=e.target.closest('th[data-k]');if(th){var k=th.getAttribute('data-k');if(PSORT.k===k)PSORT.asc=!PSORT.asc;else{PSORT.k=k;PSORT.asc=k==='name'}renderRun();return}
@@ -940,7 +940,7 @@ function renderLog(){var pre=$('logText'),atBottom=pre.scrollHeight-pre.scrollTo
 function sshRender(j){var on=j.running==='1';
  setHTML('sshBadge',j.ok===false&&!j.running?chip('err','',j.msg||'失败'):on?chip('warn','','运行中'):chip('','','关闭'));
  var s='<dl class="kv">'+kv([['地址',j.ip?j.ip+' : '+(j.port||2222):'（没有 Wi-Fi 地址）'],['连接命令',on&&j.ip?'<code>ssh -p '+esc(j.port||2222)+' root@'+esc(j.ip)+'</code> <button class="btn sm ghost" data-copy="ssh -p '+esc(j.port||2222)+' root@'+esc(j.ip)+'">'+svg('copy')+'</button>':'',1],
-  ['主机密钥',j.hostkeytype?esc(j.hostkeytype)+(j.fingerprint?'<br><code>'+esc(j.fingerprint)+'</code>':''):'（第一次打开时在 Kindle 上生成）',1],['诊断包',j.script==='1'?chip('ok','check','已在 Kindle 上'):chip('err','x','没找到 documents/VeraDroid-SSH'),1],['最近一条记录',j.last||'']])+'</dl>';
+  ['主机密钥',j.hostkeytype?esc(j.hostkeytype)+(j.fingerprint?'<br><code>'+esc(j.fingerprint)+'</code>':''):'（第一次打开时在 Kobo 上生成）',1],['诊断包',j.script==='1'?chip('ok','check','已在 Kobo 上'):chip('err','x','没找到 documents/VeraDroid-SSH'),1],['最近一条记录',j.last||'']])+'</dl>';
  if(j.ok===false&&j.msg)s='<div class="note err">'+esc(j.msg)+'</div>'+s;
  if(j.out)s+='<pre class="pre" style="margin-top:10px;max-height:140px;overflow:auto">'+esc(j.out)+'</pre>';
  setHTML('sshState',s);$('sshStart').disabled=on||j.script!=='1';$('sshStop').disabled=!on;
@@ -956,7 +956,7 @@ $('sshKeyFile').onchange=function(){var f=this.files[0];if(!f)return;if(f.size>1
 $('sshAdd').onclick=function(){var k=$('sshKey').value.trim();if(!k){toast('先贴上公钥','err');return}
  if(/PRIVATE KEY/.test(k)){toast('这是私钥！私钥绝不要传给任何设备。请用 .pub 文件里的公钥。','err');return}
  if(k.split(/\r?\n/).filter(function(l){return l.trim()}).length>1){toast('一次只能添加一把公钥（一行）','err');return}
- if(!$('sshPin').value){toast('为了安全，添加公钥前要再输一次 Kindle 上的 PIN','err');$('sshPin').focus();return}
+ if(!$('sshPin').value){toast('为了安全，添加公钥前要再输一次 Kobo 上的 PIN','err');$('sshPin').focus();return}
  post('/api/ssh/key',{key:k,pin:$('sshPin').value}).then(function(j){$('sshPin').value='';if(j.ok){$('sshKey').value='';toast(j.msg==='exists'?'这把公钥已经在里面了':'公钥已添加'+(j.running==='1'?'：关掉 SSH 再打开后生效':''),'ok');sshRender(j)}else toast(j.msg||'失败','err')})};
 $('sshKeys').onclick=function(e){var n=e.target.getAttribute('data-kdel');if(!n)return;confirmBox('删除这把公钥？','它的主人以后就不能登录了（开着的 SSH 要关掉再开才生效）。','删除',true).then(function(ok){if(ok)post('/api/ssh/keydel',{n:+n}).then(function(j){if(!j.ok)toast(j.msg||'失败','err');sshRender(j)})})};
 /* =================================================================== 无线调试（adb） */
@@ -964,13 +964,13 @@ function adbRender(j){var on=j.running==='1',sup=j.supported!=='0',ep=j.ip?j.ip+
  setHTML('adbBadge',!sup?chip('err','','不支持'):on?chip('warn','','开着'+(j.left?'（还有 '+j.left+' 分钟）':'')):chip('','','关闭'));
  var s='<dl class="kv">'+kv([['地址',ep||'（没有 Wi-Fi 地址）'],['连接命令',on&&ep?'<code>adb connect '+esc(ep)+'</code> <button class="btn sm ghost" data-copy="adb connect '+esc(ep)+'">'+svg('copy')+'</button>':'',1],
   ['传文件示例',on&&ep?'<code>adb -s '+esc(ep)+' push 书.epub /sdcard/Books/</code>':'',1]])+'</dl>';
- if(!sup)s='<div class="note err">这台 Kindle 的内核没有 IPv6，Android 7.1 的 adb 在它上面开不了无线调试。请用这个网页的“文件”或 USB 管理文件。</div>'+s;
+ if(!sup)s='<div class="note err">这台 Kobo 的内核没有 IPv6，Android 7.1 的 adb 在它上面开不了无线调试。请用这个网页的“文件”或 USB 管理文件。</div>'+s;
  if(j.ok===false&&j.msg)s='<div class="note err">'+esc(j.msg)+'</div>'+s;
  setHTML('adbState',s);$('adbStart').disabled=on||!sup;$('adbStop').disabled=!on;
  var k='';(j.keys||[]).forEach(function(x){k+='<div class="item">'+svg('key')+'<div class="grow"><div class="ell"><code>…'+esc(x.tail)+'</code></div><div class="sub">'+esc(x.comment||'（没有注释）')+'</div></div><button class="btn sm dan" data-adel="'+esc(x.n)+'">删除</button></div>'});
  setHTML('adbKeys',k||empty('key','还没有公钥：没有公钥时无线调试不会打开'))}
 function loadAdb(){api('/api/adb').then(adbRender).catch(function(){})}
-$('adbStart').onclick=function(){if(!$('adbPin').value){toast('为了安全，打开无线调试前要再输一次 Kindle 上的 PIN','err');$('adbPin').focus();return}
+$('adbStart').onclick=function(){if(!$('adbPin').value){toast('为了安全，打开无线调试前要再输一次 Kobo 上的 PIN','err');$('adbPin').focus();return}
  var b=$('adbStart');b.disabled=true;b.innerHTML='<span class="spin"></span>正在打开';
  post('/api/adb/start',{min:+$('adbMin').value,pin:$('adbPin').value}).then(function(j){$('adbPin').value='';b.textContent='打开无线调试';adbRender(j);toast(j.running==='1'?'无线调试已打开':(j.msg||'没打开'),j.running==='1'?'ok':'err')}).catch(function(){b.disabled=false})};
 $('adbStop').onclick=function(){post('/api/adb/stop').then(function(j){adbRender(j);toast('无线调试已关闭','ok')})};
@@ -978,7 +978,7 @@ $('adbKeyPick').onclick=function(){$('adbKeyFile').click()};
 $('adbKeyFile').onchange=function(){var f=this.files[0];if(!f)return;if(f.size>4096){toast('这不像 adbkey.pub（太大了）','err');return}var r=new FileReader();r.onload=function(){$('adbKey').value=String(r.result).trim()};r.readAsText(f);this.value=''};
 $('adbAdd').onclick=function(){var k=$('adbKey').value.trim();if(!k){toast('先贴上公钥','err');return}
  if(/PRIVATE KEY/.test(k)){toast('这是私钥 adbkey！请用同一个文件夹里的 adbkey.pub。','err');return}
- if(!$('adbKeyPin').value){toast('为了安全，添加公钥前要再输一次 Kindle 上的 PIN','err');$('adbKeyPin').focus();return}
+ if(!$('adbKeyPin').value){toast('为了安全，添加公钥前要再输一次 Kobo 上的 PIN','err');$('adbKeyPin').focus();return}
  post('/api/adb/key',{key:k,pin:$('adbKeyPin').value}).then(function(j){$('adbKeyPin').value='';if(j.ok){$('adbKey').value='';toast(j.msg==='exists'?'这把公钥已经在里面了':'公钥已添加','ok');adbRender(j)}else toast(j.msg||'失败','err')})};
 $('adbKeys').onclick=function(e){var n=e.target.getAttribute('data-adel');if(!n)return;confirmBox('删除这把公钥？','这台电脑以后就连不上无线调试了。','删除',true).then(function(ok){if(ok)post('/api/adb/keydel',{n:+n}).then(function(j){if(!j.ok)toast(j.msg||'失败','err');adbRender(j)})})};
 $('diagBtn').onclick=function(){confirmBox('上传诊断日志？','把 VeraDroid 的日志和系统状态上传到 VeraDroid 服务器（不含你的书和账号密码）。','上传').then(function(ok){if(!ok)return;var b=$('diagBtn');b.disabled=true;$('diagSt').innerHTML='<span class="spin"></span> 正在收集并上传，要一两分钟…';
@@ -993,14 +993,14 @@ var SETS={};
 function loadSys(){api('/api/sys/settings').then(function(j){SETS=j.settings||{};var st=j.status||{};
  $('dispSets').innerHTML=DISP.map(function(d){var v=SETS[d[0]];return'<div class="set"><span class="lbl">'+d[1]+(d[2]?'<span class="sub">'+d[2]+'</span>':'')+'</span><span class="seg" data-k="'+d[0]+'">'+d[3].map(function(o){return'<button data-v="'+o[0]+'" class="'+(String(v)===o[0]||(d[0]==='KFB_ANIM_MODE'&&o[0]==='1'&&+v>0)?'on':'')+'">'+o[1]+'</button>'}).join('')+'</span></div>'}).join('');
  var l='';if(st.haslight==='1')l+=slider('light','亮度',st.light,st.lightmax);if(st.haswarmth==='1')l+=slider('warmth','色温',st.warmth,24);$('lightCard').hidden=!l;$('lightSets').innerHTML=l;
- $('updSets').innerHTML='<div class="set"><span class="lbl">自动更新 VeraDroid<span class="sub">整包；每 6 小时看一次，只在回到 Kindle 时安装'+(j.vdversion?' · 当前 '+esc(j.vdversion):'')+'</span></span><label class="switch"><input type="checkbox" data-au="host"'+(j.hostAutoUpdate!==false?' checked':'')+'><span></span></label></div>'
+ $('updSets').innerHTML='<div class="set"><span class="lbl">自动更新 VeraDroid<span class="sub">整包；每 6 小时看一次，只在回到 Kobo 时安装'+(j.vdversion?' · 当前 '+esc(j.vdversion):'')+'</span></span><label class="switch"><input type="checkbox" data-au="host"'+(j.hostAutoUpdate!==false?' checked':'')+'><span></span></label></div>'
   +'<div class="set"><span class="lbl">自动更新桌面应用<span class="sub">'+(j.home?'当前 '+esc(j.home):'')+'</span></span><label class="switch"><input type="checkbox" data-au="app"'+(j.appAutoUpdate?' checked':'')+'><span></span></label></div>'}).catch(function(){})}
 function slider(w,l,v,mx){return'<div class="set"><span class="lbl">'+l+' <b id="v-'+w+'">'+esc(v)+'</b><span class="sub">0 – '+esc(mx)+'</span></span><input type="range" min="0" max="'+esc(mx)+'" value="'+esc(v)+'" data-l="'+w+'" style="flex:1;max-width:260px"></div>'}
 $('dispSets').onclick=function(e){var b=e.target.closest('button[data-v]');if(!b)return;var s=b.parentNode,k=s.getAttribute('data-k'),v=b.getAttribute('data-v');if(b.classList.contains('on'))return;
  var prev=s.querySelector('.on');var bs=s.querySelectorAll('button');for(var i=0;i<bs.length;i++)bs[i].classList.remove('on');b.classList.add('on','pending');
  post('/api/sys/display',{key:k,value:v}).then(function(j){if(!j.ok)throw new Error(j.msg||'失败');var n=0;
   (function check(){api('/api/sys/settings').then(function(r){var got=(r.settings||{})[k];if(String(got)===v||(k==='KFB_ANIM_MODE'&&v==='1'&&+got>0)){b.classList.remove('pending');toast('已生效','ok');SETS=r.settings}
-   else if(++n<10)setTimeout(check,600);else{b.classList.remove('pending');toast('Kindle 那边没有确认，请稍后再看看','err')}})})()})
+   else if(++n<10)setTimeout(check,600);else{b.classList.remove('pending');toast('Kobo 那边没有确认，请稍后再看看','err')}})})()})
   .catch(function(err){b.classList.remove('on','pending');if(prev)prev.classList.add('on');toast(err.message,'err')})};
 $('lightSets').oninput=function(e){var w=e.target.getAttribute('data-l');if(w)$('v-'+w).textContent=e.target.value};
 $('lightSets').onchange=function(e){var w=e.target.getAttribute('data-l');if(w)post('/api/sys/light',{what:w,value:+e.target.value}).then(function(j){toast(j.ok?'已调整':(j.msg||'失败'),j.ok?'ok':'err')})};
@@ -1008,16 +1008,16 @@ $('updSets').onchange=function(e){var w=e.target.getAttribute('data-au');if(!w)r
 var shotURL='';
 function shot(){var b=$('shotBtn');b.disabled=true;b.innerHTML='<span class="spin"></span>截屏中';
  fetch('/api/screenshot?t='+Date.now(),{credentials:'same-origin'}).then(function(r){if(r.status==401){sessionExpired();throw new Error('login')}if(!r.ok)throw new Error('截屏失败');return r.blob()}).then(function(bl){
-  if(shotURL)URL.revokeObjectURL(shotURL);shotURL=URL.createObjectURL(bl);$('shotBox').className='';$('shotBox').innerHTML='<img class="shot" alt="Kindle 屏幕截图" src="'+shotURL+'"><div class="sub" style="margin-top:6px">'+date(Date.now())+' · '+fmt(bl.size)+'</div>';
-  var a=$('shotSave');a.href=shotURL;a.hidden=false;a.download='kindle-'+date(Date.now()).replace(/[^0-9]/g,'')+'.png';b.disabled=false;b.textContent='重新截屏'}).catch(function(e){b.disabled=false;b.textContent='截取当前屏幕';if(e.message!=='login')toast(e.message,'err')})}
+  if(shotURL)URL.revokeObjectURL(shotURL);shotURL=URL.createObjectURL(bl);$('shotBox').className='';$('shotBox').innerHTML='<img class="shot" alt="Kobo 屏幕截图" src="'+shotURL+'"><div class="sub" style="margin-top:6px">'+date(Date.now())+' · '+fmt(bl.size)+'</div>';
+  var a=$('shotSave');a.href=shotURL;a.hidden=false;a.download='kobo-'+date(Date.now()).replace(/[^0-9]/g,'')+'.png';b.disabled=false;b.textContent='重新截屏'}).catch(function(e){b.disabled=false;b.textContent='截取当前屏幕';if(e.message!=='login')toast(e.message,'err')})}
 $('shotBtn').onclick=shot;$('shotAuto').onchange=function(){if(this.checked){shot();every('shot',10000,shot)}else{clearInterval(timers.shot);delete timers.shot}};
 $('clearBtn').onclick=function(){post('/api/sys/refresh').then(function(){toast('已整屏刷新','ok');if($('shotAuto').checked)setTimeout(shot,1500)})};
-$('clipBtn').onclick=function(){var t=$('clip').value;if(!t)return;post('/api/sys/clipboard',{text:t}).then(function(j){toast(j.ok?'已发送到 Kindle 的剪贴板':(j.msg||'失败'),j.ok?'ok':'err');if(j.ok)$('clip').value=''})};
+$('clipBtn').onclick=function(){var t=$('clip').value;if(!t)return;post('/api/sys/clipboard',{text:t}).then(function(j){toast(j.ok?'已发送到 Kobo 的剪贴板':(j.msg||'失败'),j.ok?'ok':'err');if(j.ok)$('clip').value=''})};
 $('updBtn').onclick=function(){$('updInfo').innerHTML='<span class="spin"></span> 正在查询…';api('/api/sys/update').then(function(j){var s=[];
  if(j.latest)s.push('VeraDroid：当前 '+esc(j.current||'?')+'，服务器上 '+esc(j.latest)+' '+(j.current&&j.latest!==j.current?chip('acc','','有新版本'):chip('ok','check','已是最新')));else if(j.latestError)s.push('VeraDroid：'+esc(j.latestError));
  s.push(j.homeError?'桌面：'+esc(j.homeError):'桌面应用：当前 '+esc(j.home||'?')+' '+(j.homeUpdate?chip('acc','','有新版本 '+(j.homeLatest||'')):chip('ok','check','已是最新')));$('updInfo').innerHTML=s.join('<br>')})};
-function power(w,msg){confirmBox(w==='restart'?'重启 Android？':'返回 Kindle？',msg,w==='restart'?'重启':'返回 Kindle',true).then(function(ok){if(ok)post('/api/sys/'+w).then(function(){toast(w==='restart'?'正在重启 Android，大约半分钟…':'正在返回 Kindle…')})})}
-$('rebootBtn').onclick=function(){power('restart','大约半分钟后重新开机。这个网页会断开，传输要在 Kindle 上重新打开。')};
+function power(w,msg){confirmBox(w==='restart'?'重启 Android？':'返回 Kobo？',msg,w==='restart'?'重启':'返回 Kobo',true).then(function(ok){if(ok)post('/api/sys/'+w).then(function(){toast(w==='restart'?'正在重启 Android，大约半分钟…':'正在返回 Kobo…')})})}
+$('rebootBtn').onclick=function(){power('restart','大约半分钟后重新开机。这个网页会断开，传输要在 Kobo 上重新打开。')};
 $('exitBtn').onclick=function(){power('exit','Android 会被冻结，这个网页也会断开，直到再次打开 VeraDroid。')};
 
 /* =================================================================== 壁纸与图标 */
@@ -1065,7 +1065,7 @@ function btTrack(){var r=BT.result||{};
  if(btPend){
   var fresh=r.mtime>=btPend.since-1000;
   if(fresh&&r.state==='done'&&btSeen!==r.mtime+r.op){btSeen=r.mtime+r.op;var m=btMsg(r);btPend=null;toast(m[0],m[1],m[1]==='err'?8000:5000);setTimeout(function(){loadBt()},400);return}
-  if(Date.now()-btPend.local>(btPend.secs+20)*1000){toast(btOpName(btPend.op)+'没有回应。宿主程序可能太旧，或 Kindle 的蓝牙服务没响应。','err');btPend=null}
+  if(Date.now()-btPend.local>(btPend.secs+20)*1000){toast(btOpName(btPend.op)+'没有回应。宿主程序可能太旧，或 Kobo 的蓝牙服务没响应。','err');btPend=null}
  }}
 function btRunning(){var r=BT.result||{};
  if(btPend)return{op:btPend.op,mac:btPend.mac,secs:btPend.secs,start:btPend.since};
@@ -1074,8 +1074,8 @@ function btRunning(){var r=BT.result||{};
 function btMsg(r){var op=r.op,e=r.error||'',ok=r.ok==='1',n=btName(r.mac);
  if(e==='busy')return['宿主正在做另一项蓝牙操作，请稍等再试。','err'];
  if(e==='off')return['蓝牙没有打开：先打开蓝牙。','err'];
- if(e==='unsupported')return['这台 Kindle 没有蓝牙。','err'];
- if(e==='lipc')return['Kindle 的蓝牙服务没有响应，请稍后再试；一直不行就回 Kindle 的设置里关开一次蓝牙。','err'];
+ if(e==='unsupported')return['这台 Kobo 没有蓝牙。','err'];
+ if(e==='lipc')return['Kobo 的蓝牙服务没有响应，请稍后再试；一直不行就回 Kobo 的设置里关开一次蓝牙。','err'];
  if(e==='badmac')return['设备地址不对。','err'];
  if(op==='scan')return[ok?'扫描完成：找到 '+(BT.devices||[]).length+' 个设备。没看到翻页器就让它重新进入配对模式再扫一次。':'扫描失败。',ok?'ok':'err'];
  if(op==='bond'){if(ok)return['已配对并连接：'+n+'。打开阅读应用按翻页器试试。','ok'];
@@ -1085,7 +1085,7 @@ function btMsg(r){var op=r.op,e=r.error||'',ok=r.ok==='1',n=btName(r.mac);
  if(op==='connect')return[ok?'已连接：'+n:e==='notpaired'?'还没配对，先配对。':'没连上 '+n+'：按一下翻页器的键唤醒它，再试一次。',ok?'ok':'err'];
  if(op==='disconnect')return[ok?'已断开：'+n:'断开超时。',ok?'ok':'err'];
  if(op==='unbond')return[ok?'已取消配对：'+n:'取消配对超时，请再试一次。',ok?'ok':'err'];
- if(op==='power')return[ok?(r.on==='1'?'蓝牙已打开。':'蓝牙已关闭。'):'蓝牙开关没有响应，请回 Kindle 的设置里试试。',ok?'ok':'err'];
+ if(op==='power')return[ok?(r.on==='1'?'蓝牙已打开。':'蓝牙已关闭。'):'蓝牙开关没有响应，请回 Kobo 的设置里试试。',ok?'ok':'err'];
  return['','']}
 function btSend(op,mac,name){if(btRunning()){toast('请等当前操作做完（'+btOpName(btRunning().op)+'）','err');return}
  post('/api/bt/cmd',{op:op,mac:mac||''}).then(function(j){if(!j.ok){toast(j.msg||'失败','err');return}
@@ -1097,12 +1097,12 @@ function btDev(d,busy){var h='<div class="dev"><div class="grow"><div class="nm 
  else{h+=d.connected?'<button class="btn sm" data-bt="disconnect"'+a+'>断开</button>':'<button class="btn sm pri" data-bt="connect"'+a+'>连接</button>';h+='<button class="btn sm dan" data-bt="unbond"'+a+'>取消配对</button>'}
  return h+'</div></div>'}
 function renderBt(){var b=$('btBody');if(!b)return;
- if(BT.supported==='old'){b.innerHTML='<div class="card">'+empty('bluetooth','宿主程序太旧，不支持在这里配对。请先更新 VeraDroid；或回到 Kindle，在“设置 → 蓝牙设备”里配对。')+'</div>';return}
- if(BT.supported==='no'){b.innerHTML='<div class="card">'+empty('bluetooth','这台 Kindle 没有蓝牙。')+'</div>';return}
+ if(BT.supported==='old'){b.innerHTML='<div class="card">'+empty('bluetooth','宿主程序太旧，不支持在这里配对。请先更新 VeraDroid；或回到 Kobo，在“设置 → 蓝牙设备”里配对。')+'</div>';return}
+ if(BT.supported==='no'){b.innerHTML='<div class="card">'+empty('bluetooth','这台 Kobo 没有蓝牙。')+'</div>';return}
  var run=btRunning(),busy=!!run,devs=BT.devices||[],on=!!BT.on;
  var paired=devs.filter(function(d){return d.paired}),near=devs.filter(function(d){return !d.paired});
  var h='<div class="card"><div class="h">'+svg('bluetooth')+'蓝牙'+chip(on?'ok':'','',on?'已打开':'已关闭')+'<span class="sp"></span><label class="switch" title="打开 / 关闭蓝牙"><input type="checkbox" id="btPower"'+(on?' checked':'')+(busy?' disabled':'')+'><span></span></label></div>'
-  +'<p class="sub" style="margin:0">蓝牙芯片和协议栈由 Kindle 管，这里和 Kindle 设置里的蓝牙开关是同一个。支持翻页器和蓝牙键盘。</p></div>';
+  +'<p class="sub" style="margin:0">蓝牙芯片和协议栈由 Kobo 管，这里和 Kobo 设置里的蓝牙开关是同一个。支持翻页器和蓝牙键盘。</p></div>';
  h+='<div class="card"><div class="h">'+svg('search')+'设备<span class="sp"></span><button class="btn sm pri" data-bt="scan"'+(busy||!on?' disabled':'')+'>'+(run&&run.op==='scan'?'<span class="spin"></span>扫描中…':'扫描')+'</button></div>';
  if(run){var el=Math.max(0,(BT.now-run.start)/1000),p=Math.min(95,el/run.secs*100);
   h+='<div class="note info"><b>'+esc(btOpName(run.op))+(run.mac?' '+esc(btName(run.mac)):'')+'中…</b>（已等 '+Math.round(el)+' 秒，最多 '+run.secs+' 秒）'
@@ -1129,7 +1129,7 @@ document.addEventListener('change',function(e){if(e.target.id==='btPower'){var o
 
 /* =================================================================== 存储空间（宿主 storage.sh：/api/sys/storage、/resize、/auto；格式见 docs/host-settings.md 第 7 节） */
 var STO=null,STO_OFF=null,stoBusy=false,stoMb='';
-var STO_ERR={small:'比已用空间加安全余量还小',nospace:'Kindle 剩余空间不够（要给 Kindle 留 256 MB）',fatlimit:'Kindle 存储是 FAT 格式，单个文件最大 4 GB',toobig:'超过上限',same:'和现在一样大（差不到 16 MB）',busy:'上一次调整还没结束',battery:'电量太低，请先充电',shared:'这台机器与 Kindle 共用空间，无需调整',notool:'缺少调整工具',extend:'Kindle 存储写不进去（空间不够？）',fsck:'文件系统检查没通过','fsck-after':'文件系统检查没通过',interrupted:'上次被中断，已恢复原样',nan:'大小不对'};
+var STO_ERR={small:'比已用空间加安全余量还小',nospace:'Kobo 剩余空间不够（要给 Kobo 留 256 MB）',fatlimit:'Kobo 存储是 FAT 格式，单个文件最大 4 GB',toobig:'超过上限',same:'和现在一样大（差不到 16 MB）',busy:'上一次调整还没结束',battery:'电量太低，请先充电',shared:'这台机器与 Kobo 共用空间，无需调整',notool:'缺少调整工具',extend:'Kobo 存储写不进去（空间不够？）',fsck:'文件系统检查没通过','fsck-after':'文件系统检查没通过',interrupted:'上次被中断，已恢复原样',nan:'大小不对'};
 function stoErr(e){return STO_ERR[e]||e||'失败'}
 function sN(k){return +(STO&&STO['st.'+k])||0}
 function mb(n){return fmt(n*1048576)}
@@ -1144,23 +1144,23 @@ function stoHint(v){var img=sN('image'),min=sN('min'),max=sN('max');v=+v;
  if(!(v>0))return['sub','输入想要的大小（MB），或点上面的常用大小。'];
  if(Math.abs(v-img)<16)return['sub','和现在差不到 16 MB，不用调整。'];
  if(v<min)return['err','太小：至少 '+mb(min)+'（已用空间加安全余量）。'];
- if(v>max)return['err','太大：最多 '+mb(max)+(STO['st.cap']==='fat'?'（Kindle 存储是 FAT，单个文件最大 4 GB）':STO['st.cap']==='space'?'（受 Kindle 剩余空间限制，要给 Kindle 留 '+sN('keep')+' MB）':'')+'。'];
+ if(v>max)return['err','太大：最多 '+mb(max)+(STO['st.cap']==='fat'?'（Kobo 存储是 FAT，单个文件最大 4 GB）':STO['st.cap']==='space'?'（受 Kobo 剩余空间限制，要给 Kobo 留 '+sN('keep')+' MB）':'')+'。'];
  if(v>img&&STO['st.online']==='1')return['ok','扩大 '+mb(v-img)+'：在线完成，不用重启 Android。'+(STO['st.kfs']==='vfat'||STO['st.kfs']==='fat'?'FAT 上要真的写满新增空间，可能要一两分钟。':'')];
  if(v>img)return['warn','扩大 '+mb(v-img)+'：需要重启 Android（离线调整，约几分钟）。'];
- return['warn','缩小 '+mb(img-v)+'，这些空间还给 Kindle：需要重启 Android（离线调整，约几分钟）。']}
+ return['warn','缩小 '+mb(img-v)+'，这些空间还给 Kobo：需要重启 Android（离线调整，约几分钟）。']}
 function renderStorage(){var j=STO,b=$('stoBody');if(!b||!j)return;
  if(j.ok===false&&!j['st.mode']){b.innerHTML='<div class="card">'+errBox(j.msg||'宿主没有回应（VeraDroid 宿主程序是不是旧版本？）','loadStorage()')+'</div>';return}
  var h='',kt=sN('kindle_total');
  if(j['st.mode']==='shared'){var ku=sN('kindle_used'),kf=sN('kindle_free');
   h+='<div class="card"><div class="h">'+svg('drive')+'存储空间<span class="sp"></span><button class="btn sm" id="stoRef">'+svg('refresh')+'刷新</button></div>'
-   +'<div class="stat"><svg class="donut" viewBox="0 0 84 84" id="dSto"></svg><div class="legend"><span class="t">Kindle 用户存储 · 已用 '+mb(ku)+'</span><span class="sub">共 '+mb(kt)+' · 剩 '+mb(kf)+'</span><span class="sub">文件系统：'+esc(j['st.kfs']||'—')+'</span></div></div>'
-   +'<div class="note info">这台机器的 Android 与 Kindle <b>共用空间</b>：Android 直接用 Kindle 的剩余空间，没有独立的系统盘镜像，所以不需要、也不能调整大小。想腾出空间就清理书或应用数据。</div></div>';
+   +'<div class="stat"><svg class="donut" viewBox="0 0 84 84" id="dSto"></svg><div class="legend"><span class="t">Kobo 用户存储 · 已用 '+mb(ku)+'</span><span class="sub">共 '+mb(kt)+' · 剩 '+mb(kf)+'</span><span class="sub">文件系统：'+esc(j['st.kfs']||'—')+'</span></div></div>'
+   +'<div class="note info">这台机器的 Android 与 Kobo <b>共用空间</b>：Android 直接用 Kobo 的剩余空间，没有独立的系统盘镜像，所以不需要、也不能调整大小。想腾出空间就清理书或应用数据。</div></div>';
   b.innerHTML=h;donut($('dSto'),pct(ku,kt));return}
  var img=sN('image'),min=sN('min'),max=sN('max'),tot=sN('total'),used=sN('used'),free=sN('free'),kfree=sN('kindle_free');
  h+='<div class="grid"><div class="card"><div class="h">'+svg('android')+'Android 存储<span class="sp"></span><button class="btn sm" id="stoRef">'+svg('refresh')+'刷新</button></div>'
   +'<div class="stat"><svg class="donut" viewBox="0 0 84 84" id="dSto"></svg><div class="legend"><span class="t">已用 '+mb(used)+'</span><span class="sub">可用 '+mb(free)+' · 文件系统 '+mb(tot)+'</span><span class="sub">镜像 '+mb(img)+(sN('alloc')?'（实际占用 '+mb(sN('alloc'))+'）':'')+' · '+esc(j['st.fs']||'')+'</span></div></div></div>'
-  +'<div class="card"><div class="h">'+svg('book')+'Kindle 用户存储</div><div class="stat"><svg class="donut" viewBox="0 0 84 84" id="dSto2"></svg><div class="legend"><span class="t">剩余 '+mb(kfree)+'</span><span class="sub">共 '+mb(kt)+' · 文件系统 '+esc(j['st.kfs']||'—')+'</span><span class="sub">书和 Android 镜像都在这里；缩小镜像会把空间还给 Kindle</span></div></div></div></div>';
- if(STO_OFF)h+='<div class="note"><b>正在离线调整到 '+mb(STO_OFF.to)+'。</b>Android 会关闭、屏幕上显示进度，完成后自动重新启动（约几分钟）。这个网页会断线，重新开机后在 Kindle 上重新打开传输、输入新的 PIN，这里会显示“上次结果”。</div>';
+  +'<div class="card"><div class="h">'+svg('book')+'Kobo 用户存储</div><div class="stat"><svg class="donut" viewBox="0 0 84 84" id="dSto2"></svg><div class="legend"><span class="t">剩余 '+mb(kfree)+'</span><span class="sub">共 '+mb(kt)+' · 文件系统 '+esc(j['st.kfs']||'—')+'</span><span class="sub">书和 Android 镜像都在这里；缩小镜像会把空间还给 Kobo</span></div></div></div></div>';
+ if(STO_OFF)h+='<div class="note"><b>正在离线调整到 '+mb(STO_OFF.to)+'。</b>Android 会关闭、屏幕上显示进度，完成后自动重新启动（约几分钟）。这个网页会断线，重新开机后在 Kobo 上重新打开传输、输入新的 PIN，这里会显示“上次结果”。</div>';
  var pre=[min<img?min:0,1024,1536,2048,3072,4096,6144,8192,max],seen={},ps='';
  pre.forEach(function(v,i){if(!v||v<min||v>max||seen[v]||Math.abs(v-img)<16)return;seen[v]=1;ps+='<button class="btn sm" data-mb="'+v+'">'+(v===min?'最小 ':v===max&&i===pre.length-1?'最大 ':'')+mb(v)+'</button>'});
  var hint=stoHint(stoMb||'');
@@ -1171,7 +1171,7 @@ function renderStorage(){var j=STO,b=$('stoBody');if(!b||!j)return;
   +'<div class="note'+(hint[0]==='err'?' err':hint[0]==='sub'||hint[0]==='ok'?' info':'')+'" id="stoHint">'+esc(hint[1])+'</div>'
   +(j['st.busy']==='1'?'<div class="note">宿主正在调整，请稍等再刷新。</div>':'')+'</div>';
  var auto=j['st.auto']!=='0';
- h+='<div class="card"><div class="h">'+svg('zap')+'自动扩容</div><div class="set"><span class="lbl">快满时自动扩大<span class="sub">镜像里可用空间不到 200 MB、Kindle 还有地方时，每次扩大 512 MB。能在线就当场做，不能就等下次启动 Android 时做。</span></span><label class="switch"><input type="checkbox" id="stoAuto"'+(auto?' checked':'')+'><span></span></label></div>'
+ h+='<div class="card"><div class="h">'+svg('zap')+'自动扩容</div><div class="set"><span class="lbl">快满时自动扩大<span class="sub">镜像里可用空间不到 200 MB、Kobo 还有地方时，每次扩大 512 MB。能在线就当场做，不能就等下次启动 Android 时做。</span></span><label class="switch"><input type="checkbox" id="stoAuto"'+(auto?' checked':'')+'><span></span></label></div>'
   +(j['st.pending']?'<div class="note info">下次启动 VeraDroid 时会自动扩大到 '+mb(+j['st.pending'])+'。</div>':'')+'</div>';
  var last=stoLast();
  h+='<div class="card"><div class="h">'+svg('clipboard')+'上次结果</div>'+(last?'<p style="margin:0">'+chip(j['st.last.result']==='ok'?'ok':j['st.last.result']==='rolledback'?'warn':'err','',j['st.last.result']==='ok'?'成功':j['st.last.result']==='rolledback'?'已回退':'未完成')+' '+esc(last)+'</p>':'<p class="sub" style="margin:0">还没有调整过。</p>')+'</div>';
@@ -1189,7 +1189,7 @@ function stoApply(){var v=+stoMb,img=sN('image'),min=sN('min'),max=sN('max');
  var h=stoHint(v);if(h[0]==='err'||Math.abs(v-img)<16){toast(h[1],'err');return}
  var online=v>img&&STO['st.online']==='1';
  var body=online?'把 Android 存储从 <b>'+mb(img)+'</b> 扩大到 <b>'+mb(v)+'</b>。<br>在线完成，不用重启 Android，几秒到一分钟（FAT 上可能更久）。'
-  :'把 Android 存储从 <b>'+mb(img)+'</b> '+(v>img?'扩大到':'缩小到')+' <b>'+mb(v)+'</b>。<br><br>Android 会<b>关闭</b>，屏幕上显示进度，完成后自动重新启动（约几分钟）。正在运行的应用会被关掉，这个网页也会断线。期间请不要关机或重启 Kindle；电量低时请先充电。书和应用数据不受影响。';
+  :'把 Android 存储从 <b>'+mb(img)+'</b> '+(v>img?'扩大到':'缩小到')+' <b>'+mb(v)+'</b>。<br><br>Android 会<b>关闭</b>，屏幕上显示进度，完成后自动重新启动（约几分钟）。正在运行的应用会被关掉，这个网页也会断线。期间请不要关机或重启 Kobo；电量低时请先充电。书和应用数据不受影响。';
  confirmBox('调整存储空间？',body,'调整').then(function(ok){if(!ok)return;
   stoBusy=true;renderStorage();var done=toastWait(online?'正在扩大…（最长十几分钟，请别关页面）':'正在请求调整…');
   post('/api/sys/storage/resize',{mb:v}).then(function(j){done();stoBusy=false;
@@ -1201,7 +1201,7 @@ function stoApply(){var v=+stoMb,img=sN('image'),min=sN('min'),max=sN('max');
 /* =================================================================== start */
 fillIcons();buildNav();applyTheme();try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&LOGGED&&cur==='ov')loadOv()});
-fetch('/api/state',{credentials:'same-origin'}).then(function(r){if(r.status==401){sessionExpired();return}init()}).catch(function(){sessionExpired();$('lmsg').textContent='连不上 Kindle：传输是不是关了？'});
+fetch('/api/state',{credentials:'same-origin'}).then(function(r){if(r.status==401){sessionExpired();return}init()}).catch(function(){sessionExpired();$('lmsg').textContent='连不上 Kobo：传输是不是关了？'});
 </script>
 </body>
 </html>

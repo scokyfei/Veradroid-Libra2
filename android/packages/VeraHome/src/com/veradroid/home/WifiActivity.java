@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 无线网络：Kindle（com.lab126.wifid）里存过的网络，点一个就切过去；“附近的网络”扫一遍，没连过的输入密码就能连。
+ * 无线网络：Kobo（com.lab126.wifid）里存过的网络，点一个就切过去；“附近的网络”扫一遍，没连过的输入密码就能连。
  * 列表、扫描和切换都交给宿主（wifilist / wifiscan / wificonnect），这里只显示：ctl/wifi.list 一行一个，第一个字符 '*' = 当前连着的；
  * ctl/wifi.scan 一行一个（已保存 y/n、要密码 y/n、信号、加密、名字，用 TAB 分开）。
  * 网络名以 UTF-8 十六进制发给宿主。新网络的密码不走命令通道（所有应用都能写、会进日志），用 HostReq 的 wifipsk 交给宿主。
@@ -74,7 +74,7 @@ public class WifiActivity extends Activity {
         root.addView(hd);
         root.addView(Ui.rule(this, 2, Color.BLACK));
 
-        TextView hint = Ui.text(this, "下面是在 Kindle 上连过并保存的网络，点一个就切换过去。要连新的网络，点“附近的网络”，选一个输入密码。", 14, false);
+        TextView hint = Ui.text(this, "下面是在 Kobo 上连过并保存的网络，点一个就切换过去。要连新的网络，点“附近的网络”，选一个输入密码。", 14, false);
         hint.setTextColor(Color.DKGRAY); hint.setPadding(0, dp(8), 0, dp(4));
         root.addView(hint);
         status = Ui.text(this, LOADING, 15, false); status.setPadding(0, dp(6), 0, dp(6));
@@ -110,7 +110,7 @@ public class WifiActivity extends Activity {
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(16), 0, dp(16), 0);
-        TextView hint = Ui.text(this, "下面是在 Kindle 上连过并保存的网络，点一个就切换过去。要连新的网络，点右上角“附近”，选一个输入密码。", 13, false);
+        TextView hint = Ui.text(this, "下面是在 Kobo 上连过并保存的网络，点一个就切换过去。要连新的网络，点右上角“附近”，选一个输入密码。", 13, false);
         body.addView(hint);
         status = Ui.text(this, LOADING, 15, true);
         status.setPadding(0, dp(8), 0, dp(8));
@@ -164,15 +164,15 @@ public class WifiActivity extends Activity {
         else {
             String e = m.get("error");
             boolean fresh = newNet != null && newNet.equals(name);
-            String why = "timeout".equals(e) ? (fresh ? "40 秒内没有连上：密码可能不对，或者信号太弱" : "40 秒内没有连上：可能不在信号范围内，或者路由器的密码改过（改过的话请在 Kindle 设置里重新连一次）")
+            String why = "timeout".equals(e) ? (fresh ? "40 秒内没有连上：密码可能不对，或者信号太弱" : "40 秒内没有连上：可能不在信号范围内，或者路由器的密码改过（改过的话请在 Kobo 设置里重新连一次）")
                 : "auth".equals(e) ? "密码不对，路由器拒绝了连接，请重新输入"
                 : "notfound".equals(e) ? "附近没有找到这个网络，靠近路由器后再试"
                 : "needpsk".equals(e) ? "这个网络需要密码"
                 : "badpsk".equals(e) ? "密码要 8–63 个字符，不能含有英文引号 \" 或反斜杠 \\"
-                : "create".equals(e) ? "Kindle 的 Wi-Fi 服务没有接受这个网络，请在 Kindle 设置里连接"
+                : "create".equals(e) ? "Kobo 的 Wi-Fi 服务没有接受这个网络，请在 Kobo 设置里连接"
                 : "wifioff".equals(e) ? "Wi-Fi 打不开（飞行模式是不是开着？）"
-                : "not saved".equals(e) ? "Kindle 里没有这个已保存的网络"
-                : "网络名里有特殊字符，请在 Kindle 设置里连接";
+                : "not saved".equals(e) ? "Kobo 里没有这个已保存的网络"
+                : "网络名里有特殊字符，请在 Kobo 设置里连接";
             String back = unhex(m.get("restored")), kept = unhex(m.get("kept"));
             status.setText("连接 " + name + " 失败：" + why + (back != null && back.length() > 0 ? "。已回到原来的网络 " + back + "。"
                 : kept != null && kept.length() > 0 ? "。仍连着原来的网络 " + kept + "。" : "。"));
@@ -289,17 +289,17 @@ public class WifiActivity extends Activity {
     }
 
     private void askPassword(final String name, String mgmt) {
-        if (mgmt != null && mgmt.toUpperCase(java.util.Locale.US).contains("WEP")) { status.setText(name + " 用的是 WEP 加密，请在 Kindle 设置里连接"); return; }
+        if (mgmt != null && mgmt.toUpperCase(java.util.Locale.US).contains("WEP")) { status.setText(name + " 用的是 WEP 加密，请在 Kobo 设置里连接"); return; }
         final android.widget.EditText in = new android.widget.EditText(this);
         in.setSingleLine(true);
-        // 墨水屏上看不见输入的字很容易输错：密码直接显示（Kindle 自己的“显示密码”也是这样）
+        // 墨水屏上看不见输入的字很容易输错：密码直接显示（Kobo 自己的“显示密码”也是这样）
         in.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         in.setHint("密码");
-        new VeraDialog.Builder(this).title("连接 " + name).message("输入这个网络的密码。连上以后 Kindle 会把它存为已保存的网络（密码不上传）。")
+        new VeraDialog.Builder(this).title("连接 " + name).message("输入这个网络的密码。连上以后 Kobo 会把它存为已保存的网络（密码不上传）。")
             .view(in).negative("取消", null).positive("连接", new Runnable() { @Override public void run() {
                 final String pw = in.getText().toString();
                 if (pw.length() < 8 || pw.length() > 63) { status.setText("密码要 8–63 个字符"); return; }
-                if (pw.indexOf('"') >= 0 || pw.indexOf('\\') >= 0) { status.setText("密码里有英文引号 \" 或反斜杠 \\：这种密码请在 Kindle 设置里连接"); return; }
+                if (pw.indexOf('"') >= 0 || pw.indexOf('\\') >= 0) { status.setText("密码里有英文引号 \" 或反斜杠 \\：这种密码请在 Kobo 设置里连接"); return; }
                 final String hn = hex(name);
                 if (hn == null) { status.setText("这个网络名太长或含有特殊字符，无法连接"); return; }
                 pending = name; newNet = name;

@@ -171,7 +171,7 @@ final class WebAdmin {
     // ================================================================== bluetooth
 
     // 和 BluetoothActivity 一样经命令 FIFO 发 "bt …" 给宿主（host/*/boot/lib/bt.sh），读 ctl/bt.list、ctl/bt.result、ctl/status。
-    // 这些命令没有 root 级后果（只是 Kindle 的蓝牙配对 / 按键映射），所以不走 HostReq；
+    // 这些命令没有 root 级后果（只是 Kobo 的蓝牙配对 / 按键映射），所以不走 HostReq；
     // 宿主自己也会校验参数。这里再严格校验一次：操作白名单、MAC 必须是大写的 AA:BB:CC:DD:EE:FF。
     private static final java.util.regex.Pattern BT_MAC = java.util.regex.Pattern.compile("^([0-9A-F]{2}:){5}[0-9A-F]{2}$");
 
@@ -192,7 +192,7 @@ final class WebAdmin {
         if (dev != null && dev.length() > 0) for (String d : dev.split(",")) {
             int c = d.indexOf(':');
             String n = c >= 0 ? d.substring(c + 1) : d;
-            used.put(n.equals("kindle-input-pt") ? "Kindle 翻页器" : n);
+            used.put(n.equals("kindle-input-pt") ? "Kobo 翻页器" : n);
         }
         o.put("devUsed", used);
         org.json.JSONArray devs = new org.json.JSONArray();
@@ -368,7 +368,7 @@ final class WebAdmin {
 
     // ================================================================== files
 
-    /** Root of a file area, canonical. "kindle" = the Kindle's documents folder (bind-mounted into Android). */
+    /** Root of a file area, canonical. "kindle" = the Kobo's documents folder (bind-mounted into Android). */
     static File rootDir(String which) {
         try { return new File("kindle".equals(which) ? Transfer.KINDLE : SD).getCanonicalFile(); }
         catch (IOException e) { return new File("kindle".equals(which) ? Transfer.KINDLE : SD); }
@@ -427,7 +427,7 @@ final class WebAdmin {
     }
 
     /**
-     * Folders whose content the page must not change. KindleFonts is the Kindle's own system font folder. In the Kindle
+     * Folders whose content the page must not change. KindleFonts is the Kobo's own system font folder. In the Kobo
      * library a folder holding a scriptlet (.sh) is read-only: scriptlets run as root and may use the files next to
      * them (the SSH diagnostics package runs the dropbear beside it) -- except the library root itself, where the books
      * are (our own scriptlets there use nothing from that folder).
@@ -435,11 +435,11 @@ final class WebAdmin {
     static String readOnlyWhy(String which, File dir) {
         String rel = relOf(which, dir);
         if (!"kindle".equals(which)) {
-            if (rel.equals("KindleFonts") || rel.startsWith("KindleFonts/")) return "Kindle 自带字体，只读";
-            if (rel.equals("KindleLibrary") || rel.startsWith("KindleLibrary/")) return "Kindle 书库请在“Kindle 书库”里管理";
+            if (rel.equals("KindleFonts") || rel.startsWith("KindleFonts/")) return "Kobo 自带字体，只读";
+            if (rel.equals("KindleLibrary") || rel.startsWith("KindleLibrary/")) return "Kobo 书库请在“Kobo 书库”里管理";
             return null;
         }
-        if (rel.length() > 0 && hasScriptChild(dir)) return dir.list() == null ? "这个文件夹 Android 这边读不了，网页里只读" : "这个文件夹里有 Kindle 脚本，网页里只读";
+        if (rel.length() > 0 && hasScriptChild(dir)) return dir.list() == null ? "这个文件夹 Android 这边读不了，网页里只读" : "这个文件夹里有 Kobo 脚本，网页里只读";
         return null;
     }
 
@@ -555,7 +555,7 @@ final class WebAdmin {
         if (name == null || name.indexOf('/') >= 0 || name.startsWith(".") || isProtected(name)) return Transfer.obj("ok", false, "msg", "这个文件不能改名");
         File f = resolve(which, (path == null ? "" : path) + "/" + name);
         if (f == null || !f.exists() || isLink(f)) return Transfer.obj("ok", false, "msg", "文件不存在");
-        if (f.isDirectory() && (readOnlyWhy(which, f) != null || containsLocked(f, 0, new int[] { 50000 }))) return Transfer.obj("ok", false, "msg", "这个文件夹里有 Kindle 脚本，不能改名");
+        if (f.isDirectory() && (readOnlyWhy(which, f) != null || containsLocked(f, 0, new int[] { 50000 }))) return Transfer.obj("ok", false, "msg", "这个文件夹里有 Kobo 脚本，不能改名");
         if (!"kindle".equals(which) && d.equals(rootDir(which)) && (name.equals("KindleLibrary") || name.equals("KindleFonts") || name.equals("Fonts"))) return Transfer.obj("ok", false, "msg", "这个文件夹不能改名");
         String n = checkName(to);
         if (n == null) return Transfer.obj("ok", false, "msg", "新名字不能用（不能以点开头、不能含 / \\ : * ? \" < > |，也不能是脚本）");
@@ -640,12 +640,13 @@ final class WebAdmin {
         final CountDownLatch latch = new CountDownLatch(shown.size());
         for (PackageInfo pi : shown) {
             try {
-                pm.getPackageSizeInfo(pi.packageName, new IPackageStatsObserver.Stub() {
-                    @Override public void onGetStatsCompleted(PackageStats ps, boolean ok) {
-                        if (ok && ps != null) synchronized (stats) { stats.put(ps.packageName, ps); }
-                        latch.countDown();
-                    }
-                });
+                PackageManager.class.getMethod("getPackageSizeInfo", String.class, IPackageStatsObserver.class)
+                    .invoke(pm, pi.packageName, new IPackageStatsObserver.Stub() {
+                        @Override public void onGetStatsCompleted(PackageStats ps, boolean ok) {
+                            if (ok && ps != null) synchronized (stats) { stats.put(ps.packageName, ps); }
+                            latch.countDown();
+                        }
+                    });
             } catch (Throwable e) { latch.countDown(); }
         }
         latch.await(8, TimeUnit.SECONDS);
@@ -683,7 +684,8 @@ final class WebAdmin {
         if (pkg.equals(ctx.getPackageName()) || pkg.equals("android") || (pi.applicationInfo.flags & ApplicationInfo.FLAG_PERSISTENT) != 0)
             return Transfer.obj("ok", false, "msg", "系统常驻程序不能停止");
         try {
-            ((ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE)).forceStopPackage(pkg);
+            ActivityManager.class.getMethod("forceStopPackage", String.class)
+                .invoke((ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE), pkg);
             return Transfer.obj("ok", true);
         } catch (Throwable e) { return Transfer.obj("ok", false, "msg", "停止失败：" + e.getMessage()); }
     }
@@ -693,9 +695,10 @@ final class WebAdmin {
         final CountDownLatch l = new CountDownLatch(1);
         final AtomicBoolean ok = new AtomicBoolean(false);
         try {
-            ctx.getPackageManager().deleteApplicationCacheFiles(pkg, new IPackageDataObserver.Stub() {
-                @Override public void onRemoveCompleted(String p, boolean succeeded) { ok.set(succeeded); l.countDown(); }
-            });
+            PackageManager.class.getMethod("deleteApplicationCacheFiles", String.class, IPackageDataObserver.class)
+                .invoke(ctx.getPackageManager(), pkg, new IPackageDataObserver.Stub() {
+                    @Override public void onRemoveCompleted(String p, boolean succeeded) { ok.set(succeeded); l.countDown(); }
+                });
             l.await(15, TimeUnit.SECONDS);
         } catch (Throwable e) { return Transfer.obj("ok", false, "msg", "清除失败：" + e.getMessage()); }
         return Transfer.obj("ok", ok.get(), "msg", ok.get() ? "" : "清除失败");
@@ -868,7 +871,7 @@ final class WebAdmin {
     }
 
     private static String sshError(String e) {
-        if (e.equals("noscript")) return "Kindle 上还没有 SSH 诊断包：把 VeraDroid-SSH 文件夹拷进 Kindle 的 documents（见说明）";
+        if (e.equals("noscript")) return "Kobo 上还没有 SSH 诊断包：把 VeraDroid-SSH 文件夹拷进 Kobo 的 documents（见说明）";
         if (e.equals("badkey")) return "公钥格式不对";
         if (e.equals("toomany")) return "公钥太多了（最多 20 把）";
         if (e.equals("symlink")) return "公钥文件是一个链接，拒绝写入";
@@ -913,7 +916,7 @@ final class WebAdmin {
     }
 
     private JSONObject sshKey(String key, String pin) throws Exception {
-        // 加公钥 = 让这把钥匙的主人以后能 root 登录 Kindle：再输一次 PIN（和登录共用错误计数 / 锁定）
+        // 加公钥 = 让这把钥匙的主人以后能 root 登录 Kobo：再输一次 PIN（和登录共用错误计数 / 锁定）
         int v = t.checkPin(pin);
         if (v == 2) return Transfer.obj("ok", false, "msg", "输错次数太多，请 1 分钟后再试");
         if (v != 0) return Transfer.obj("ok", false, "msg", "PIN 不对");
@@ -995,7 +998,7 @@ final class WebAdmin {
             }
         }
         if (png == null) { Transfer.send(out, 500, "text/plain; charset=utf-8", "截屏失败".getBytes("UTF-8"), null); return; }
-        String name = "kindle-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new java.util.Date()) + ".png";
+        String name = "kobo-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new java.util.Date()) + ".png";
         Transfer.send(out, 200, "image/png", png, "Content-Disposition: inline; filename=\"" + name + "\"\r\n");
     }
 

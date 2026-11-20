@@ -65,7 +65,7 @@ final class Blocks {
 
     /**
      * 和 {@link Ui#fast} 一样抬手时才生效；动画选“完整”时，按下的那一刻把这个方块反色（墨水屏上是一次很快的小块 DU 刷新），
-     * 抬手时还原，像 Kindle 原生的按下反馈。其余档位不画按下状态（少一次刷新）。
+     * 抬手时还原，像 Kobo 原生的按下反馈。其余档位不画按下状态（少一次刷新）。
      */
     static void fast(final View v) {
         final int slop = android.view.ViewConfiguration.get(v.getContext()).getScaledTouchSlop();

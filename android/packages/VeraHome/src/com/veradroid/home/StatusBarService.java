@@ -24,7 +24,7 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * Kindle 风格的状态栏：顶部一条很窄的白条，左边时间、右边电量，点一下打开下拉面板。
+ * Kobo 风格的状态栏：顶部一条很窄的白条，左边时间、右边电量，点一下打开下拉面板。
  * 只在“设置 → 桌面 → 状态栏”打开时显示；桌面和面板自己已经有顶栏，所以它们在前台时隐藏。
  * 用 TYPE_PHONE 覆盖在别的 App 上；需要 SYSTEM_ALERT_WINDOW（安装后用 appops 放行）。
  */
@@ -42,7 +42,7 @@ public class StatusBarService extends Service {
         }
     };
 
-    /** 系统的分钟广播 / 改时间 / 改时区：马上刷新（Kindle 睡醒后 uptime 计时的 tick 还要再等最多一分钟）。 */
+    /** 系统的分钟广播 / 改时间 / 改时区：马上刷新（Kobo 睡醒后 uptime 计时的 tick 还要再等最多一分钟）。 */
     private final BroadcastReceiver timeReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) { handler.removeCallbacks(tick); tick.run(); }
     };

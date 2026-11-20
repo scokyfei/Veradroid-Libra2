@@ -39,17 +39,17 @@ import java.util.concurrent.Executors;
 
 /**
  * Wireless file transfer: a small web server inside the system. A phone or computer on the same Wi-Fi opens
- * http://<kindle-ip>:8080, types the PIN shown on the Kindle, and can
- *   - upload books (they land in Books/ on the Android storage or in the Kindle library) and APK files (installed at once),
+ * http://<kindle-ip>:8080, types the PIN shown on the Kobo, and can
+ *   - upload books (they land in Books/ on the Android storage or in the Kobo library) and APK files (installed at once),
  *   - see / delete the files, see / open / uninstall the installed apps,
- *   - paste a direct http(s) link to have the Kindle download the file itself.
+ *   - paste a direct http(s) link to have the Kobo download the file itself.
  * It is off until you switch it on (settings -> transfer, or the panel), protected by a PIN, and switches itself off
  * after a while without use. The port is opened to the Wi-Fi by the host scripts (slirp4netns port forward) only
  * while the server is on.
  */
 final class Transfer {
     static final int PORT = 8080;
-    /** 8080 被别的程序占着时依次试这几个（共用 Kindle 网络的老机型上，Kindle 自己的程序也在同一个网络里）。 */
+    /** 8080 被别的程序占着时依次试这几个（共用 Kobo 网络的老机型上，Kobo 自己的程序也在同一个网络里）。 */
     static final int[] PORTS = { PORT, 8081, 8090 };
     static final String BOOKS = "/data/media/0/Books";
     static final String KINDLE = "/data/media/0/KindleLibrary";
@@ -154,7 +154,7 @@ final class Transfer {
     int received() { return received; }
     void setIdleMinutes(int m) { idleMs = Math.max(5, m) * 60 * 1000L; }
 
-    /** Text lines for the Kindle screen. */
+    /** Text lines for the Kobo screen. */
     synchronized String statusText() {
         StringBuilder sb = new StringBuilder();
         for (Task t : tasks) {
@@ -205,7 +205,7 @@ final class Transfer {
         return true;
     }
 
-    /** 监听 port。先按 Android 的默认（"::"，IPv6 双栈）绑；老 Kindle 内核（3.0 / 4.1）没有 IPv6，这样绑一定是
+    /** 监听 port。先按 Android 的默认（"::"，IPv6 双栈）绑；老 Kobo 内核（3.0 / 4.1）没有 IPv6，这样绑一定是
      * 失败（PW4 模拟器 strace：socket 已经是 AF_INET，bind 在 Java 里转换地址时就抛了异常，根本没发 bind 系统调用），以前 start() 就默默返回 false：传书页一直
      * “传输已关闭”，点“打开传输”没反应（用户诊断：PW4 / Oasis，0.8.10）。这时改绑 IPv4 的 0.0.0.0。 */
     static ServerSocket open(int p) throws IOException {
@@ -285,7 +285,7 @@ final class Transfer {
             if (r == null) return;
             r.ip = s.getInetAddress().getHostAddress();
             lastUse = System.currentTimeMillis();
-            if (lastUse - lastPoke > 20000) { lastPoke = lastUse; HostLink.cmd("poke"); }   // somebody is using it: keep the Kindle from going to sleep
+            if (lastUse - lastPoke > 20000) { lastPoke = lastUse; HostLink.cmd("poke"); }   // somebody is using it: keep the Kobo from going to sleep
             route(r, in, out);
             out.flush();
         } catch (Throwable e) {
@@ -389,9 +389,9 @@ final class Transfer {
     }
 
     private void route(Req r, InputStream in, OutputStream out) throws Exception {
-        // 只认用 IP 地址（或 localhost / .local）打开的请求：挡住 DNS 重绑定——恶意网站把自己的域名解析到 Kindle 的 IP，
-        // 浏览器就会让那个网站的脚本来访问这里（比如慢慢试 PIN）。Kindle 屏幕上给的地址本来就是 IP。
-        if (!hostOk(r.h.get("host"))) { send(out, 403, "text/plain; charset=utf-8", "请用 Kindle 屏幕上显示的 IP 地址打开".getBytes("UTF-8"), null); return; }
+        // 只认用 IP 地址（或 localhost / .local）打开的请求：挡住 DNS 重绑定——恶意网站把自己的域名解析到 Kobo 的 IP，
+        // 浏览器就会让那个网站的脚本来访问这里（比如慢慢试 PIN）。Kobo 屏幕上给的地址本来就是 IP。
+        if (!hostOk(r.h.get("host"))) { send(out, 403, "text/plain; charset=utf-8", "请用 Kobo 屏幕上显示的 IP 地址打开".getBytes("UTF-8"), null); return; }
         if (r.method.equals("GET") && (r.path.equals("/") || r.path.equals("/index.html"))) {
             send(out, 200, "text/html; charset=utf-8", page(), null);
             return;
@@ -512,8 +512,8 @@ final class Transfer {
         }
     }
 
-    // Kindle 的书库会把 documents 里的 .sh 当成“书”，点一下就以 root 运行（VeraDroid 自己的启动入口就是这样）。
-    // 传书网页绝不能上传、覆盖或删除这类文件：否则拿到 PIN 的人删掉启动入口再传一个同名脚本，就拿到了整台 Kindle。
+    // Kobo 的书库会把 documents 里的 .sh 当成“书”，点一下就以 root 运行（VeraDroid 自己的启动入口就是这样）。
+    // 传书网页绝不能上传、覆盖或删除这类文件：否则拿到 PIN 的人删掉启动入口再传一个同名脚本，就拿到了整台 Kobo。
     static boolean isScript(String name) {
         String n = name.toLowerCase(Locale.US).trim();
         // vfat 会悄悄去掉结尾的点和空格：“a.sh.” 落盘就是 a.sh
@@ -730,7 +730,7 @@ final class Transfer {
             folder.mkdirs();
             folder.setReadable(true, false); folder.setWritable(true, false); folder.setExecutable(true, false);
         }
-        // 先看空间：不能把 Kindle 写满（Android 和 Kindle 共用这块存储，写满了两边都会出问题）
+        // 先看空间：不能把 Kobo 写满（Android 和 Kobo 共用这块存储，写满了两边都会出问题）
         if (r.length < 0) { json(out, 411, obj("ok", false, "msg", "需要 Content-Length")); return; }
         File space = folder != null ? folder : "kindle".equals(to) ? new File(KINDLE) : new File("/data");
         if (r.length > space.getUsableSpace() - 64L * 1024 * 1024) { json(out, 413, obj("ok", false, "msg", "空间不够：剩余 " + (space.getUsableSpace() >> 20) + " MB（至少要留 64 MB）")); return; }
@@ -756,7 +756,7 @@ final class Transfer {
             // 放进文件夹的先写成隐藏的临时文件、写完再改名：桌面按目录修改时间发现新图片，不能让它读到半个文件
             final File part0 = folder != null ? new File(folder, ".vdpart-" + t.id + "-" + System.currentTimeMillis()) : dest;
             FileOutputStream fo;
-            File lib = null;      // 加密的 Kindle 书库：先收进自己的私有目录，再请宿主（root，有密钥）代写（webadmin.sh libput）
+            File lib = null;      // 加密的 Kobo 书库：先收进自己的私有目录，再请宿主（root，有密钥）代写（webadmin.sh libput）
             String libId = null;
             try {
                 fo = new FileOutputStream(part0);
@@ -771,8 +771,8 @@ final class Transfer {
                     lib = new File(ld, libId + ".part");
                     fo = new FileOutputStream(lib);
                 } else {
-                // 5.20 的 Scribe 等机型上 Kindle 书库是 fscrypt 加密的，密钥只在 root 的钥匙串里：Android 的应用写不进去
-                t.state = "error"; t.msg = m.contains("Required key not available") ? "这台 Kindle 的书库是加密的，这个文件夹写不进去（书请放到书库最外层，或用数据线拷）" : "不能写入：" + m;
+                // 5.20 的 Scribe 等机型上 Kobo 书库是 fscrypt 加密的，密钥只在 root 的钥匙串里：Android 的应用写不进去
+                t.state = "error"; t.msg = m.contains("Required key not available") ? "这台 Kobo 的书库是加密的，这个文件夹写不进去（书请放到书库最外层，或用数据线拷）" : "不能写入：" + m;
                 // 跳过这一个、接着收后面的：以前直接答复并关连接，请求体剩下的没读，浏览器看到的是连接被重置，前面传好的结果也没了
                 mp.skip();
                 results.put(obj("ok", false, "name", part.filename, "msg", t.msg));
@@ -794,8 +794,8 @@ final class Transfer {
             if (lib != null) {
                 java.util.Map<String, String> kv = HostReq.kv(HostReq.run(ctx, "libput", libId, dest.getName(), 600000));
                 lib.delete();
-                if ("1".equals(kv.get("ok"))) { received++; t.state = "done"; t.msg = "已由宿主写进加密的 Kindle 书库：" + kv.get("name"); }
-                else { t.state = "error"; t.msg = "写进加密的 Kindle 书库失败（" + (kv.isEmpty() ? "宿主没有回应" : kv.get("error")) + "）"; }
+                if ("1".equals(kv.get("ok"))) { received++; t.state = "done"; t.msg = "已由宿主写进加密的 Kobo 书库：" + kv.get("name"); }
+                else { t.state = "error"; t.msg = "写进加密的 Kobo 书库失败（" + (kv.isEmpty() ? "宿主没有回应" : kv.get("error")) + "）"; }
                 results.put(obj("ok", "done".equals(t.state), "name", kv.containsKey("name") ? kv.get("name") : dest.getName(), "task", t.id, "state", t.state, "msg", t.msg));
                 continue;
             }

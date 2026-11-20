@@ -33,7 +33,7 @@ final class BlocksSettings {
     static final int[] SLEEP_S = { 300, 600, 1800, 3600 };
     static final String[] RETURN_L = { "挂起", "关闭" };
     static final String[] RETURN_V = { "freeze", "off" };
-    static final String[] TIME_L = { "跟随 Kindle", "24 小时", "12 小时" };
+    static final String[] TIME_L = { "跟随 Kobo", "24 小时", "12 小时" };
     static final String[] TIME_V = { "auto", "24", "12" };
     static final String[] MODE_L = { "均衡", "灰度最准", "最快" };
     static final String[] MODE_V = { "0", "1", "2" };
@@ -229,11 +229,11 @@ final class BlocksSettings {
             add(g, Blocks.row(a, "自动休眠", "Auto lock", new Blocks.Stepper(a, SLEEP_L, bi, new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { HostLink.cmd("sleeptime " + SLEEP_S[i]); } })));
         }
-        add(g, Blocks.row(a, "回到 Kindle", "Return mode", new Blocks.Stepper(a, RETURN_L, idx(RETURN_V, cfg.get("RETURN_MODE"), 0), new Blocks.Stepper.Listener() {
+        add(g, Blocks.row(a, "回到 Kobo", "Return mode", new Blocks.Stepper(a, RETURN_L, idx(RETURN_V, cfg.get("RETURN_MODE"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("RETURN_MODE=" + RETURN_V[i]); } })));
         LinearLayout btns = new LinearLayout(a);
         btns.setPadding(dp(10), dp(10), dp(10), dp(10));
-        btns.addView(Blocks.button(a, "回 Kindle", false, new View.OnClickListener() { @Override public void onClick(View v) { HostLink.cmd("exit"); } }), Blocks.weight(1));
+        btns.addView(Blocks.button(a, "回 Kobo", false, new View.OnClickListener() { @Override public void onClick(View v) { HostLink.cmd("exit"); } }), Blocks.weight(1));
         View s1 = new View(a); btns.addView(s1, Blocks.lp(dp(8), 1));
         btns.addView(Blocks.button(a, "重启系统", false, new View.OnClickListener() { @Override public void onClick(View v) { a.confirmRestart(); } }), Blocks.weight(1));
         View s2 = new View(a); btns.addView(s2, Blocks.lp(dp(8), 1));
@@ -272,10 +272,10 @@ final class BlocksSettings {
             } })));
         java.util.TimeZone tz = java.util.TimeZone.getDefault();
         int off = tz.getOffset(System.currentTimeMillis()) / 60000;
-        add(t, Blocks.row(a, "时区", "Time zone", Ui.text(a, "GMT" + (off >= 0 ? "+" : "-") + Math.abs(off) / 60 + (off % 60 != 0 ? ":" + Math.abs(off % 60) : "") + "（跟随 Kindle）", 15, false)));
+        add(t, Blocks.row(a, "时区", "Time zone", Ui.text(a, "GMT" + (off >= 0 ? "+" : "-") + Math.abs(off) / 60 + (off % 60 != 0 ? ":" + Math.abs(off % 60) : "") + "（跟随 Kobo）", 15, false)));
         java.util.Calendar cal = java.util.Calendar.getInstance();
         add(t, Blocks.row(a, "日期", "Date", Ui.text(a, cal.get(java.util.Calendar.YEAR) + " 年 " + (cal.get(java.util.Calendar.MONTH) + 1) + " 月 " + cal.get(java.util.Calendar.DAY_OF_MONTH) + " 日", 15, false)));
-        TextView note = Ui.text(a, "日期、时间和时区跟 Kindle 同步（Kindle 联网自动对时）。要改请回到 Kindle 的“设置／设备选项／设备时间”。", 12, false);
+        TextView note = Ui.text(a, "日期、时间和时区跟 Kobo 同步（Kobo 联网自动对时）。要改请回到 Kobo 的“设置／设备选项／设备时间”。", 12, false);
         note.setPadding(dp(12), dp(6), dp(12), dp(10));
         add(t, note);
         return shell("System / power", "电源与时间", c);
@@ -322,7 +322,7 @@ final class BlocksSettings {
             } })));
         String ip = st.get("lanip");
         TextView addr = Ui.text(a, t.running() ? (ip == null || ip.length() == 0 ? "正在获取地址…" : "http://" + ip + ":" + t.port()) + "\nPIN  " + t.pin()
-            : "打开后，手机和 Kindle 连同一个 Wi-Fi，在浏览器里输入这里显示的地址和 PIN。", t.running() ? 20 : 13, t.running());
+            : "打开后，手机和 Kobo 连同一个 Wi-Fi，在浏览器里输入这里显示的地址和 PIN。", t.running() ? 20 : 13, t.running());
         addr.setPadding(dp(12), dp(8), dp(12), dp(10));
         add(w, addr);
         add(w, Blocks.navRow(a, "传书页面", "大字显示地址和 PIN", new View.OnClickListener() {
@@ -412,12 +412,14 @@ final class BlocksSettings {
         // 系统更新的进度（宿主写 ctl/update.status；没有在更新时不占地方）
         c.addView(new TaskCards.Update(a, false), Blocks.gap(a, 14));
         LinearLayout m = group(c, "维护");
+        boolean kobo = HostLink.isKobo();
         String[][] rows = {
-            { "系统与性能", "Wi-Fi 省电 · 低内存 · Kindle 界面 · 应用编译" },
+            { "系统与性能", kobo ? "Wi-Fi 省电 · 低内存 · 应用编译" : "Wi-Fi 省电 · 低内存 · Kobo 界面 · 应用编译" },
             { "检查系统更新", "有新版本优先下载增量补丁" }, { "使用统计", "电量和阅读时长，只在本机" }, { "问题反馈", "连同系统日志一起上传" },
-            { "设备与更新", "绑定账号 · 日志 · 重启 · 恢复默认 · 卸载" }, { "手势", "边缘滑动 · 双指 · 四角长按 · 导航键" },
+            { "设备与管理", "日志 · 重启 · 恢复默认" }, { "手势", "边缘滑动 · 双指 · 四角长按 · 导航键" },
             { "应用与桌面", "壁纸 · 图标 · 面板 · 状态栏 · 输入法" }, { "传书", "无线传输的开关、地址、自动关闭" }, { "全部设置", "所有设置的分类列表" } };
         for (int i = 0; i < rows.length; i++) {
+            if (kobo && i == 1) continue;
             final int k = i;
             add(m, Blocks.navRow(a, rows[i][0], rows[i][1], new View.OnClickListener() { @Override public void onClick(View v) {
                 switch (k) {

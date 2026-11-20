@@ -42,7 +42,7 @@ public class StoreActivity extends Activity {
     // 一次只下载 / 安装一个，进度和结果放在静态字段里（Scribe 用户：商店装微信读书“失败”，同一个 APK 侧载能装）：
     //  - 以前下载线程只往开着的那个界面上写字：用户离开商店（或界面被系统重建）以后，进度和失败原因谁也看不到；
     //  - 再点一次“安装”会再起一条线程，两条线程往同一个文件里写，SHA-256 必然失败；
-    //  - 127 MB 要下好几分钟，Kindle 10 分钟没碰就进屏保，宿主在屏保时冻结 Android，下载就断在那里。
+    //  - 127 MB 要下好几分钟，Kobo 10 分钟没碰就进屏保，宿主在屏保时冻结 Android，下载就断在那里。
     private static volatile String jobPkg;      // 正在处理的包名，null = 没有
     private static volatile String jobMsg;      // 当前进度 / 最近一次的结果（重新打开商店时显示）
     private static StoreActivity live;          // 正在前台的商店界面（进度写到它上面），只在主线程读写
@@ -374,7 +374,7 @@ public class StoreActivity extends Activity {
         if (e instanceof java.net.UnknownHostException) return "域名解析失败（DNS）：连不上 " + Dl.host(StoreNet.base()) + "，检查 Wi-Fi 或换个网络";
         if (e instanceof java.net.SocketTimeoutException) return "网络太慢，" + (m != null && m.contains("connect") ? "连接服务器超时" : "1 分钟没有收到数据") + "。再点一次安装会从断点继续";
         if (e instanceof java.net.ConnectException) return "连不上服务器（连接被拒绝 / 被拦截）：换个网络再试";
-        if (e instanceof javax.net.ssl.SSLException) return "安全连接（HTTPS）失败：检查 Kindle 的日期时间，或换个网络（" + m + "）";
+        if (e instanceof javax.net.ssl.SSLException) return "安全连接（HTTPS）失败：检查 Kobo 的日期时间，或换个网络（" + m + "）";
         if (e instanceof OutOfMemoryError) return "内存不够：重启 VeraDroid 后再试";
         if (m != null && (m.contains("ENOSPC") || m.contains("No space left"))) return "存储空间不够：设置 → 存储空间 里扩大系统盘，或删掉一些应用 / 书";
         if (m != null && (m.contains("reset") || m.contains("unexpected end of stream") || m.contains("closed"))) return "网络连接中断（" + m + "）。再点一次安装会从断点继续";

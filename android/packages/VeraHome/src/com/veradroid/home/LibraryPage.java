@@ -20,7 +20,7 @@ import java.util.List;
 
 /**
  * “书库”页（主页底栏的第二个标签），控件树挂在 HomeActivity 下面，和主页、设置一样只切换可见性。
- * 布局照 Kindle 的书库：顶栏（和主页同一条）→ 一行“筛选 / 排序 / 封面·列表” → 一页封面（或列表）→ 页码 → 底栏。
+ * 布局照 Kobo 的书库：顶栏（和主页同一条）→ 一行“筛选 / 排序 / 封面·列表” → 一页封面（或列表）→ 页码 → 底栏。
  * 一页一页翻（划动或点箭头），不滚动。数据全部来自 {@link Lib}，搭页面时不读文件系统。
  */
 final class LibraryPage {
@@ -174,7 +174,7 @@ final class LibraryPage {
     private int gap() { return dp(10); }
     private int side() { return dp(14); }
     private int cellW() { return (a.getResources().getDisplayMetrics().widthPixels - 2 * side() - (cols() - 1) * gap()) / cols(); }
-    /** 一页放几行封面：封面按 2:3，放不下整行时允许压扁到 1:1.35（居中裁切），这样 6 寸屏上正好两行六本，和 Kindle 一样。 */
+    /** 一页放几行封面：封面按 2:3，放不下整行时允许压扁到 1:1.35（居中裁切），这样 6 寸屏上正好两行六本，和 Kobo 一样。 */
     private int gridRows() { return Math.max(1, (contentHeight() - gap()) / (cellW() * 135 / 100 + gap())); }
     private int cellH() { return Math.min(cellW() * 3 / 2, (contentHeight() - gap()) / gridRows() - gap()); }
     private int listRowH() { return dp(84); }
@@ -233,7 +233,7 @@ final class LibraryPage {
         int from = page * per, to = Math.min(total, from + per);
         if (total == 0) {
             String msg = searching ? (query.length() == 0 ? "" : "没有找到。")
-                : Lib.isEmpty() ? "还没有书。\n\n点右上角菜单里的“传书”，用手机或电脑把书传进来；\n也可以把书放进 Kindle 的 documents 文件夹。"
+                : Lib.isEmpty() ? "还没有书。\n\n点右上角菜单里的“传书”，用手机或电脑把书传进来；\n也可以把书放进 Kobo 的 documents 文件夹。"
                 : "没有符合筛选条件的书。";
             TextView empty = Ui.text(a, msg, 18, false);
             empty.setGravity(Gravity.CENTER);

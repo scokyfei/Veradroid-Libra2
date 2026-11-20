@@ -62,7 +62,13 @@ final class Store {
         Context app = c.getApplicationContext() != null ? c.getApplicationContext() : c;
         File d = dir(null);
         if (!d.canWrite()) return app.getSharedPreferences(name, Context.MODE_PRIVATE);   // fallback: never crash
-        SharedPreferences sp = app.getSharedPreferences(new File(d, name + ".xml"), Context.MODE_PRIVATE);
+        SharedPreferences sp;
+        try {
+            sp = (SharedPreferences) Context.class.getMethod("getSharedPreferences", File.class, int.class)
+                .invoke(app, new File(d, name + ".xml"), Context.MODE_PRIVATE);
+        } catch (Throwable t) {
+            sp = app.getSharedPreferences(name, Context.MODE_PRIVATE);
+        }
         if (!sp.getBoolean("__migrated", false)) {
             SharedPreferences old = app.getSharedPreferences(name, Context.MODE_PRIVATE);
             SharedPreferences.Editor e = sp.edit();

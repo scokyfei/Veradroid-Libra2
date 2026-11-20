@@ -176,7 +176,7 @@ final class Update {
                     ok = j.optBoolean("ok", false);
                     if (ok) {
                         Token.put(c, j.optString("token", ""));
-                        msg = "已绑定这台 Kindle";
+                        msg = "已绑定这台 Kobo";
                     } else {
                         msg = j.optString("error", "绑定失败");
                     }

@@ -17,7 +17,7 @@ final class DiagConsent {
 
     static final String KEY = "crash_upload";
     /** 诊断包里有什么（和宿主 cmd.sh / watchdog.sh 的 diag_save 一致）。设置页和询问框都用这一段。 */
-    static final String CONTENTS = "诊断包包含：机型、固件和 VeraDroid 版本；Kindle 的内核日志（dmesg、last_kmsg）、启动参数（/proc/cmdline）、"
+    static final String CONTENTS = "诊断包包含：机型、固件和 VeraDroid 版本；Kobo 的内核日志（dmesg、last_kmsg）、启动参数（/proc/cmdline）、"
         + "CPU 信息（/proc/cpuinfo，含 CPU 序列号）、系统日志 /var/log/messages、内存 / 挂载 / 进程列表；VeraDroid、显示、输入和安装日志；"
         + "Android 的 logcat、dumpsys、getprop、settings 和崩溃记录（里面可能有打开过的网址和书名）。不含书籍文件、阅读进度和 Wi-Fi 密码。"
         + "经 HTTPS 上传到 VeraDroid 的服务器（veradroid.wenjin.jp），附设备标识和版本，仅用于排查问题；本地也会在 Diagnostics 文件夹留一份。";

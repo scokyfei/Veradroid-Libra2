@@ -158,16 +158,16 @@ tz_prepare() {
         printf '%s' "$z" > $SYS/data/property/persist.sys.timezone && chmod 600 $SYS/data/property/persist.sys.timezone
     fi
     echo "$z" > $W/tz.android
-    t "timezone: kindle rule '$(tz_kindle_rule)' offset $(date +%z) -> $z"
+    t "timezone: kobo rule '$(tz_kindle_rule)' offset $(date +%z) -> $z"
     # 规则不在表里：后台扫 Android 的 tzdata，开机完成后（after_boot 调 tz_sync_live）换成准确的名字
     [ -f $W/tz.search ] && { rm -f $W/tz.search; ( tz_android_name search >/dev/null ) </dev/null >/dev/null 2>&1 & }
     return 0
 }
-# 运行中（解冻时）：Kindle 的时区变了就告诉 Android（AlarmManager.setTimeZone，7.1 的事务号 3）
+# 运行中（解冻时）：Kobo 的时区变了就告诉 Android（AlarmManager.setTimeZone，7.1 的事务号 3）
 tz_sync_live() {
     z=$(tz_android_name); [ -n "$z" ] || return 0
     [ "$z" = "$(cat $W/tz.android 2>/dev/null)" ] && return 0
-    adb_sh "service call alarm 3 s16 $z" >/dev/null 2>&1 && { echo "$z" > $W/tz.android; t "timezone changed on the Kindle -> $z"; }
+    adb_sh "service call alarm 3 s16 $z" >/dev/null 2>&1 && { echo "$z" > $W/tz.android; t "timezone changed on Kobo -> $z"; }
 }
 # 12 / 24 小时制：auto 时读 Kindle；开机完成后调用
 time_format_apply() {

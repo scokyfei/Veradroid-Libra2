@@ -191,6 +191,17 @@ container_start() {
                 && t "container: enabled libkobo_madvise.so in init.kindle.rc LD_PRELOAD"
         fi
     fi
+    # Install Kobo-rebranded VeraHome.apk when staged in $VD/bin/VeraHome.apk
+    if [ -f "$VD/bin/VeraHome.apk" ] && [ -d "$R/system/priv-app/VeraHome" ]; then
+        if ! cmp -s "$VD/bin/VeraHome.apk" "$R/system/priv-app/VeraHome/VeraHome.apk"; then
+            cp "$VD/bin/VeraHome.apk" "$R/system/priv-app/VeraHome/VeraHome.apk.new" \
+                && chmod 644 "$R/system/priv-app/VeraHome/VeraHome.apk.new" \
+                && mv -f "$R/system/priv-app/VeraHome/VeraHome.apk.new" "$R/system/priv-app/VeraHome/VeraHome.apk" \
+                && rm -rf "$R/system/priv-app/VeraHome/oat" \
+                && rm -f "$SYS/data/dalvik-cache/arm/system@priv-app@VeraHome@VeraHome.apk@classes.dex" \
+                && t "container: installed Kobo VeraHome.apk (cleared stale odex)"
+        fi
+    fi
     sysfont_prepare
     fstrim_defuse
     docs_snapshot

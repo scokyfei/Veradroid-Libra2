@@ -28,7 +28,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 下拉面板，照 Kindle 的“快捷操作”：从顶边下划（或点状态栏、点主页顶栏的快捷设置）出来一张盖住上半屏的面板。
+ * 下拉面板，照 Kobo 的“快捷操作”：从顶边下划（或点状态栏、点主页顶栏的快捷设置）出来一张盖住上半屏的面板。
  * 第一屏只有三样：一排圆形开关、亮度条、色温条。墨水屏特有的东西（刷新方式、整屏刷新、对比度、翻页动画、字号、
  * 当前应用的显示效果）收在“显示”一行后面；其余（传书、休眠、切换应用、清理后台、关机）收在“更多”后面；通知在右上角的铃铛里。
  * 这三页是在面板里原地换内容，面板的大小不变，所以每次只是面板这一块刷一次。
@@ -108,7 +108,7 @@ final class Panel {
     // 第一屏的圆形开关（设置里可以自己挑 3 到 6 个、排顺序，键 quick）：id -> 开关
     private final java.util.Map<String, Round> quick = new java.util.LinkedHashMap<String, Round>();
     static final String[] QUICK_ID = { "wifi", "bt", "invert", "clear", "settings", "clean", "xfer", "shot", "kindle", "anim", "switch", "restart", "stop", "lightf", "home" };
-    static final String[] QUICK_NAME = { "Wi-Fi", "蓝牙", "反色", "清残影", "全部设置", "清后台", "传书", "截图", "回 Kindle", "翻页动画", "切换应用", "重启", "关机", "浅色过滤", "回桌面" };
+    static final String[] QUICK_NAME = { "Wi-Fi", "蓝牙", "反色", "清残影", "全部设置", "清后台", "传书", "截图", "回 Kobo", "翻页动画", "切换应用", "重启", "关机", "浅色过滤", "回桌面" };
     /** 浅色过滤（宿主 KFB_LIGHTF）：比阈值浅的颜色变纯白（epd.c build_lut）；深色加深（KFB_DARKEN）：其余部分再压深一档 */
     static final String[] LIGHTF_L = { "关", "弱", "中", "强" };
     static final String[] LIGHTF_V = { "0", "1", "2", "3" };
@@ -116,11 +116,11 @@ final class Panel {
         + "弱：只去接近白的底色；中：一般的浅灰 / 护眼绿底；强：连中浅灰也去掉（浅灰的字和图会丢）。";
     static final String DARKEN_DESC = "没有被滤成白的部分再压深一档：浅灰的字变黑，更清楚；图片会偏暗。";
     static int lightfLast = 2;       // 快捷开关重新打开时用的档位（上次用过的，默认“中”）
-    /** 默认这一排和 Kindle 的一样是五个：联网、蓝牙、深色、（同步换成）清残影、全部设置。没有蓝牙的机型不显示蓝牙。 */
+    /** 默认这一排和 Kobo 的一样是五个：联网、蓝牙、深色、（同步换成）清残影、全部设置。没有蓝牙的机型不显示蓝牙。 */
     static final String QUICK_DEFAULT = "wifi,bt,invert,clear,settings,clean";   // 方块面板最多 5 个：有蓝牙的机型第 6 个“清后台”不显示
 
     private String panelName = "", builtConf = "";
-    private boolean btOk;            // 宿主说这台机器有 Kindle 的蓝牙栈（status 里 btsupported=1）
+    private boolean btOk;            // 宿主说这台机器有 Kobo 的蓝牙栈（status 里 btsupported=1）
     private int btOn = 0;
     private Seg mode, flash, sleep, font;
     private Icons.Toggle animToggle, xferToggle;
@@ -554,8 +554,8 @@ final class Panel {
         finish();
     }
 
-    /** 蓝牙归 Kindle 管（Android 里没有蓝牙服务）。点一下只是开关（和 Wi-Fi 方块一样，用户反馈 PW6 1.01：点了进设置页不符合直觉），
-     *  命令经宿主开关 Kindle 的蓝牙（bt.sh 的 enable / disable，打开最多约 15 秒）；配对、按键映射在长按打开的“蓝牙翻页器”页里。 */
+    /** 蓝牙归 Kobo 管（Android 里没有蓝牙服务）。点一下只是开关（和 Wi-Fi 方块一样，用户反馈 PW6 1.01：点了进设置页不符合直觉），
+     *  命令经宿主开关 Kobo 的蓝牙（bt.sh 的 enable / disable，打开最多约 15 秒）；配对、按键映射在长按打开的“蓝牙翻页器”页里。 */
     private void toggleBt() {
         btOn = btOn == 1 ? 0 : 1;
         HostLink.cmd(btOn == 1 ? "bt enable" : "bt disable");
@@ -678,7 +678,7 @@ final class Panel {
             }
         });
         addCell(go2, cleanLabel);
-        addCell(go2, bigButton("回 Kindle", new View.OnClickListener() { @Override public void onClick(View v) { HostLink.cmd("exit"); finish(); } }));
+        addCell(go2, bigButton("回 Kobo", new View.OnClickListener() { @Override public void onClick(View v) { HostLink.cmd("exit"); finish(); } }));
         offLabel = (TextView) bigButton("关机", new View.OnClickListener() {
             @Override public void onClick(View v) {
                 if (!offArmed) { offArmed = true; offLabel.setText("再点一次关机"); return; }

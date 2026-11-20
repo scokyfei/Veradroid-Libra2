@@ -12,7 +12,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
- * Thin black line icons in the style of the Kindle's own toolbar (house, chevrons, gear, sun ...), drawn with a canvas
+ * Thin black line icons in the style of the Kobo's own toolbar (house, chevrons, gear, sun ...), drawn with a canvas
  * so they stay crisp at any size and need no image files. Each icon is designed on a 24 x 24 grid.
  */
 final class Icons {
@@ -188,7 +188,7 @@ final class Icons {
             c.drawLine(9, 3.5f, 9, 20.5f, p);
             c.drawLine(12, 8, 16, 8, p); c.drawLine(12, 11.5f, 16, 11.5f, p);
             break;
-        case EXIT:   // 回 Kindle：一扇门 + 向外的箭头
+        case EXIT:   // 回 Kobo：一扇门 + 向外的箭头
             poly(c, p, 13, 4, 5, 4, 5, 20, 13, 20);
             c.drawLine(10, 12, 20.5f, 12, p);
             poly(c, p, 16.5f, 8, 20.5f, 12, 16.5f, 16);
@@ -289,11 +289,11 @@ final class Icons {
 
         @Override protected void onDraw(Canvas c) {
             boolean white = isPressed() ? !inverted : inverted;
-            draw(c, kind, Math.min(getWidth(), getHeight()), white ? Color.WHITE : Color.BLACK);
+            Icons.draw(c, kind, Math.min(getWidth(), getHeight()), white ? Color.WHITE : Color.BLACK);
         }
     }
 
-    /** Icon + small caption in a framed tile (like the Kindle quick-settings tiles). Pressed = inverted. */
+    /** Icon + small caption in a framed tile (like the Kobo quick-settings tiles). Pressed = inverted. */
     static LinearLayout tile(Context c, Kind k, String caption, float sp, boolean filled, View.OnClickListener l) {
         LinearLayout t = new LinearLayout(c);
         t.setOrientation(LinearLayout.VERTICAL);

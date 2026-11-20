@@ -18,7 +18,7 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.security.MessageDigest;
 
-/** Background Send-to-Kindle pickup: download pending mail attachments into Books/. */
+/** Background Send-to-Kobo pickup: download pending mail attachments into Books/. */
 final class InboxSync {
     static final String BASE = "https://veradroid.wenjin.jp";
     private static final long EVERY = 15 * 60 * 1000L;

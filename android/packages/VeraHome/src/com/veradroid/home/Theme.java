@@ -37,7 +37,7 @@ import java.util.zip.ZipInputStream;
  *   /sdcard/.vdhome/theme/                 （= /data/media/0/.vdhome/theme，VeraHome 自己的目录）
  *     wallpaper.png|jpg|jpeg|webp          当前壁纸（设置里选的图会复制到这里；传书网页“主题”页上传的也放这里）
  *     icons/<包名>.png                     替换某个应用的图标（长按应用 → 更换图标；或网页上传 icon-<包名>.png）
- *     statusbar.json                       {"clock":true,"battery":true,"clock_format":"HH:mm","text":"我的 Kindle"}
+ *     statusbar.json                       {"clock":true,"battery":true,"clock_format":"HH:mm","text":"我的 Kobo"}
  *   /sdcard/VeraDroid/wallpaper/           放图片的地方：选壁纸 / 图标时最先列出这里的图片（网页或数据线都可以往里放）
  *   /sdcard/VeraDroid/icons/<包名>.png     直接放进来就替换那个应用的图标（优先级低于上面 theme/icons）
  *   /sdcard/Icons/<包名>.png               老版本的位置，仍然认
@@ -124,7 +124,7 @@ final class Theme {
     /**
      * 主线程用：内存里已经处理好的那张（和现在的图、铺法、深浅、屏幕大小都对得上）就返回它，否则返回 null，绝不等。
      * wallpaper() 是 synchronized 的：后台正在处理新壁纸（传书网页换了图、设置里改了深浅 → prepareAsync / setWallpaper）时，
-     * 主线程回到主页要等那张图解码 + 逐像素处理完（Kindle 上 1–5 秒），没有缓存时主线程还会自己解码原图。
+     * 主线程回到主页要等那张图解码 + 逐像素处理完（Kobo 上 1–5 秒），没有缓存时主线程还会自己解码原图。
      * 拿不到时调用方先用白底，再 prepareAsync，做好后再贴上去。
      */
     static Drawable wallpaperIfReady(Context c, int w, int h) {
@@ -419,7 +419,7 @@ final class Theme {
 
     // ------------------------------------------------------------------ picking images
 
-    /** 选壁纸 / 图标时列出的图片：常放图片的几个文件夹（含 Kindle 的 documents），新的在前，最多 200 张。后台线程调用。 */
+    /** 选壁纸 / 图标时列出的图片：常放图片的几个文件夹（含 Kobo 的 documents），新的在前，最多 200 张。后台线程调用。 */
     static List<File> findImages() {
         final List<File> out = new ArrayList<File>();
         new File(USER_WALL).mkdirs();
@@ -456,7 +456,7 @@ final class Theme {
     static String placeLabel(File f) {
         String p = f.getParent() == null ? "" : f.getParent();
         if (p.startsWith(USER_WALL)) return "VeraDroid/wallpaper";
-        if (p.startsWith(Transfer.KINDLE)) return "Kindle 文档" + p.substring(Transfer.KINDLE.length());
+        if (p.startsWith(Transfer.KINDLE)) return "Kobo 文档" + p.substring(Transfer.KINDLE.length());
         if (p.startsWith("/data/media/0/")) return p.substring("/data/media/0/".length());
         if (p.equals("/data/media/0")) return "内部存储";
         return p;

@@ -42,6 +42,7 @@ for b in veradroid-epd veradroid-input pivot_init vdlmk vdloopdio vdmkswap e2fsc
     cp "$BIN_DIR/$b" "$STAGE/bin/$b"
 done
 [ -f "$BIN_DIR/libkobo_madvise.so" ] && cp "$BIN_DIR/libkobo_madvise.so" "$STAGE/bin/libkobo_madvise.so"
+[ -f "$BIN_DIR/VeraHome.apk" ] && cp "$BIN_DIR/VeraHome.apk" "$STAGE/bin/VeraHome.apk"
 
 if [ -n "$LEGACY_DIR" ] && [ -d "$LEGACY_DIR" ]; then
     [ -f "$LEGACY_DIR/bin/hwcomposer.kindle.so" ] && cp "$LEGACY_DIR/bin/hwcomposer.kindle.so" "$STAGE/bin/"

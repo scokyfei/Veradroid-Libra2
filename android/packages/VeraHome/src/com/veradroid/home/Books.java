@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-/** EPUB/PDF 的封面、标题、作者，以及 Kindle 自带字体列表。 */
+/** EPUB/PDF 的封面、标题、作者，以及 Kobo 自带字体列表。 */
 final class Books {
     private Books() { }
 
@@ -134,7 +134,7 @@ final class Books {
                 in.close();
                 byte[] data = bo.toByteArray();
                 // Do not decode a 4000px cover at full size just to shrink it to 180px:
-                // on a 512 MB Kindle that alone can be tens of MB and OOM.
+                // on a 512 MB Kobo that alone can be tens of MB and OOM.
                 BitmapFactory.Options bounds = new BitmapFactory.Options();
                 bounds.inJustDecodeBounds = true;
                 BitmapFactory.decodeByteArray(data, 0, data.length, bounds);
@@ -204,7 +204,7 @@ final class Books {
             for (File f : fs) {
                 String n = f.getName().toLowerCase(Locale.US);
                 if (n.startsWith(".") || !(n.endsWith(".ttf") || n.endsWith(".otf") || n.endsWith(".ttc"))) continue;
-                // Kindle 自带的字体有几十个文件（各种字重、各国文字）：只挑常用的几种。
+                // Kobo 自带的字体有几十个文件（各种字重、各国文字）：只挑常用的几种。
                 // 用户自己导入的字体（Fonts，传书网页上传进来的）一个不漏地列出来——以前这里也套了同一个过滤，
                 // 文件名里没有 song / heiti / kai 的导入字体在“系统字体”里看不到。
                 if (dir.endsWith("/KindleFonts") && !wanted(n)) continue;
@@ -234,8 +234,8 @@ final class Books {
 
     private static String label(String file) {
         String n = file.toLowerCase(Locale.US);
-        if (n.contains("stsong")) return n.contains("tc") ? "宋体（繁）" : "宋体（Kindle）";
-        if (n.contains("stheiti")) return n.contains("tc") ? "黑体（繁）" : "黑体（Kindle）";
+        if (n.contains("stsong")) return n.contains("tc") ? "宋体（繁）" : "宋体（Kobo）";
+        if (n.contains("stheiti")) return n.contains("tc") ? "黑体（繁）" : "黑体（Kobo）";
         if (n.contains("wenkai")) return "楷书（霞鹜文楷）";
         if (n.contains("kaiti")) return "楷体";
         if (n.startsWith("bookerly")) return "Bookerly（英文）";

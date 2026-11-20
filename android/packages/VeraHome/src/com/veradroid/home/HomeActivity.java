@@ -52,7 +52,7 @@ import java.util.Map;
 /**
  * VeraDroid home: a paged grid of the installed apps and a settings page with tabs. White background, black text, no
  * animation - everything is drawn on an e-ink panel, so pages change in one step and then get a flashing refresh.
- * Everything that has to reach the Kindle side goes through {@link HostLink}.
+ * Everything that has to reach the Kobo side goes through {@link HostLink}.
  */
 public class HomeActivity extends Activity {
     // “恢复默认设置”交给宿主恢复默认的设置项（显示、手势、返回方式）
@@ -127,7 +127,7 @@ public class HomeActivity extends Activity {
     };
 
     /**
-     * 系统的分钟广播 / 改时间 / 改时区：马上跑一次 tick。tick 自己按 uptime 排下一次，Kindle 真睡下去时 uptime 不走，
+     * 系统的分钟广播 / 改时间 / 改时区：马上跑一次 tick。tick 自己按 uptime 排下一次，Kobo 真睡下去时 uptime 不走，
      * 醒来后要再等最多一分钟；TIME_TICK 按开机时间（含休眠）到期，醒来就到（宿主 alarmfix 之后 AlarmManager 才按时发它）。
      */
     private final BroadcastReceiver timeReceiver = new BroadcastReceiver() {
@@ -153,7 +153,8 @@ public class HomeActivity extends Activity {
      */
     @Override protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
-        int dev = android.util.DisplayMetrics.DENSITY_DEVICE;
+        int dev = 0;
+        try { dev = android.util.DisplayMetrics.class.getField("DENSITY_DEVICE").getInt(null); } catch (Throwable ignored) { }
         if (dev > 0) {
             android.content.res.Configuration o = new android.content.res.Configuration();
             o.fontScale = 0;   // new Configuration() 的 fontScale 是 1：不清掉会盖住系统的字体缩放
@@ -765,8 +766,8 @@ public class HomeActivity extends Activity {
     }
 
     /**
-     * 顶栏（主页和书库各一份，长得一样）。照 Kindle 主页：最上面一行小字是时间和电量，下面是圆角搜索框，
-     * 右边是快捷设置（打开下拉面板）和菜单；最左边多一个“回到 Kindle”，因为我们是跑在 Kindle 里面的另一个系统。
+     * 顶栏（主页和书库各一份，长得一样）。照 Kobo 主页：最上面一行小字是时间和电量，下面是圆角搜索框，
+     * 右边是快捷设置（打开下拉面板）和菜单；最左边多一个“回到 Kobo”，因为我们是跑在 Kobo 里面的另一个系统。
      */
     View topChrome(final int which) {
         LinearLayout box = new LinearLayout(this);
@@ -828,7 +829,7 @@ public class HomeActivity extends Activity {
         return box;
     }
 
-    /** 底栏：主页 / 书库，和 Kindle 的 Home / Library 一样固定在最下面。当前的那个加粗、上面压一条粗线。 */
+    /** 底栏：主页 / 书库，和 Kobo 的 Home / Library 一样固定在最下面。当前的那个加粗、上面压一条粗线。 */
     View bottomNav(int which) {
         if (!libOn()) { View none = new View(this); none.setVisibility(View.GONE); return none; }   // 只剩“主页”一个标签：整条底栏不要
         LinearLayout box = new LinearLayout(this);
@@ -871,10 +872,10 @@ public class HomeActivity extends Activity {
         return box;
     }
 
-    /** 顶栏右边的菜单（Kindle 主页右上角的三点菜单）。 */
+    /** 顶栏右边的菜单（Kobo 主页右上角的三点菜单）。 */
     void mainMenu() {
         new VeraDialog.Builder(this)
-            .items(new String[] { "传书", "软件商店", "使用统计", "全部设置", "整屏刷新一次", "回到 Kindle", "关机…" }, new VeraDialog.OnPick() {
+            .items(new String[] { "传书", "软件商店", "使用统计", "全部设置", "整屏刷新一次", "回到 Kobo", "关机…" }, new VeraDialog.OnPick() {
                 @Override public void onPick(int which) {
                     switch (which) {
                     case 0: startActivity(new Intent(HomeActivity.this, TransferActivity.class).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)); overridePendingTransition(0, 0); break;
@@ -940,7 +941,7 @@ public class HomeActivity extends Activity {
         }
     };
 
-    /** 长按一本书：和 Kindle 长按封面出来的那张菜单一个思路，只放我们真有的操作。 */
+    /** 长按一本书：和 Kobo 长按封面出来的那张菜单一个思路，只放我们真有的操作。 */
     void bookMenu(final Lib.Book b) {
         final List<String> items = new ArrayList<String>();
         final List<Runnable> acts = new ArrayList<Runnable>();
@@ -1008,8 +1009,8 @@ public class HomeActivity extends Activity {
         gridHolder.removeAllViews();
         // 主页只放已安装的应用；图书馆在底部导航里单独打开。
         java.util.List<ResolveInfo> items = new java.util.ArrayList<ResolveInfo>(apps);
-        // store + stats tiles are always first. The Send-to-Kindle tile was only an instruction dialog
-        // (Amazon delivers to the native Kindle library, not to VeraDroid), so it is gone.
+        // store + stats tiles are always first. The Send-to-Kobo tile was only an instruction dialog
+        // (Amazon delivers to the native Kobo library, not to VeraDroid), so it is gone.
         int total = items.size() + 2;
         int pages = Math.max(1, (total + perPage - 1) / perPage);
         if (gridPage >= pages) gridPage = pages - 1;
@@ -1438,7 +1439,7 @@ public class HomeActivity extends Activity {
     interface PickFile { void picked(File f); }
 
     /**
-     * 选一张图片：在后台把常放图片的几个文件夹（VeraDroid/wallpaper、Pictures、Download、DCIM、Books、Kindle 的 documents……）
+     * 选一张图片：在后台把常放图片的几个文件夹（VeraDroid/wallpaper、Pictures、Download、DCIM、Books、Kobo 的 documents……）
      * 找一遍，再弹一张列表（新的在前）。没有缩略图：几十张图片一张张解码太慢，墨水屏上也看不出多少。
      */
     private void pickImage(final String title, final PickFile cb) {
@@ -1450,7 +1451,7 @@ public class HomeActivity extends Activity {
                         if (isFinishing()) return;
                         if (imgs.isEmpty()) {
                             new VeraDialog.Builder(HomeActivity.this).title(title)
-                                .message("没有找到图片。\n\n用传书网页的“主题”页上传，或者把 jpg / png 放进内部存储的 VeraDroid/wallpaper 文件夹、Kindle 的 documents 文件夹，再来选。")
+                                .message("没有找到图片。\n\n用传书网页的“主题”页上传，或者把 jpg / png 放进内部存储的 VeraDroid/wallpaper 文件夹、Kobo 的 documents 文件夹，再来选。")
                                 .positive("知道了", null).show();
                             return;
                         }
@@ -1579,7 +1580,7 @@ public class HomeActivity extends Activity {
             }
         };
         ((LinearLayout) r.getTag()).addView(bs ? new Blocks.Switch(this, on[0] == 1, wl) : new Icons.Toggle(this, on[0] == 1, wl));
-        action(list, "Wi-Fi 网络", "列出在 Kindle 上保存过的 Wi-Fi，点一个就切换过去；“附近的网络”可以输入密码连接新网络。下拉面板里长按 Wi-Fi 磁贴也能打开。", "选择", new View.OnClickListener() {
+        action(list, "Wi-Fi 网络", "列出在 Kobo 上保存过的 Wi-Fi，点一个就切换过去；“附近的网络”可以输入密码连接新网络。下拉面板里长按 Wi-Fi 磁贴也能打开。", "选择", new View.OnClickListener() {
             @Override public void onClick(View v) { WifiActivity.open(HomeActivity.this); }
         });
     }
@@ -1790,10 +1791,10 @@ public class HomeActivity extends Activity {
             }).show();
     }
 
-    /** 电源菜单：返回 Kindle / 关机，替代 Android 原生关机提示。 */
+    /** 电源菜单：返回 Kobo / 关机，替代 Android 原生关机提示。 */
     void powerMenu() {
-        box("电源", "返回 Kindle：冻结在后台，再打开几秒。\n关机：完全退出，下次打开约 15 秒。",
-            new String[] { "取消", "返回 Kindle", "关机" },
+        box("电源", "返回 Kobo：冻结在后台，再打开几秒。\n关机：完全退出，下次打开约 15 秒。",
+            new String[] { "取消", "返回 Kobo", "关机" },
             new Runnable[] { null,
                 new Runnable() { @Override public void run() { HostLink.cmd("exit"); } },
                 new Runnable() { @Override public void run() { HostLink.cmd("stop"); } } });
@@ -1829,7 +1830,7 @@ public class HomeActivity extends Activity {
         HostLink.cmd("uninstallapp " + pkg);
     }
 
-    // ------------------------------------------------------------------ settings (Kindle 式：一页分类，每类一个子页面)
+    // ------------------------------------------------------------------ settings (Kobo 式：一页分类，每类一个子页面)
 
     /** 分类。tab = -1 是分类列表，0..N-1 是各个子页面。 */
     private static final String[] CATS = { "Wi-Fi 与蓝牙", "显示与刷新", "手势", "应用与桌面", "传书", "设备与更新", "关于" };
@@ -2050,7 +2051,7 @@ public class HomeActivity extends Activity {
             break;
         case 0:
             wifiSwitch(list);
-            // 蓝牙芯片归 Kindle（Android 里没有蓝牙服务）：宿主说这台机器有 Kindle 的蓝牙栈才显示，配对、连接都经宿主做
+            // 蓝牙芯片归 Kobo（Android 里没有蓝牙服务）：宿主说这台机器有 Kobo 的蓝牙栈才显示，配对、连接都经宿主做
             if (BluetoothActivity.supported()) action(list, "蓝牙翻页器", "扫描、配对、连接蓝牙翻页器，选翻页键发成什么键。", "打开", new View.OnClickListener() {
                 @Override public void onClick(View v) { BluetoothActivity.open(HomeActivity.this); }
             });
@@ -2086,13 +2087,13 @@ public class HomeActivity extends Activity {
             hostChoice(list, host, "刷新方式", "屏幕上只有一小块变化时（点按钮、翻列表）用的刷新方式。均衡：反应快，残影少；灰度最准：颜色最准，稍慢；最快：只有黑白，最灵敏，残影多。",
                 "KFB_MODE", MODE_L, MODE_V, "0");
             hostChoice(list, host, "滑动刷新合并", "滑动、翻页动画时只画停下来的那一帧，不画中间帧：残影少、更省电。关掉则每一帧都刷。", "KFB_SETTLE", SETTLE_L, SETTLE_V, "40");
-            hostChoice(list, host, "整屏刷新", "每翻这么多页（大面积变化），整个屏幕闪一下彻底刷新，清掉累积的残影。和老款 Kindle 的“页面刷新”一样。", "KFB_FLASH", FLASH_L, FLASH_V, "8");
+            hostChoice(list, host, "整屏刷新", "每翻这么多页（大面积变化），整个屏幕闪一下彻底刷新，清掉累积的残影。和老款 Kobo 的“页面刷新”一样。", "KFB_FLASH", FLASH_L, FLASH_V, "8");
             localSwitch(list, "换页后整屏刷新", "桌面翻页、进出设置、切换分类后闪一下整屏，清掉上一页的残影。默认关：整页变化改走 MTK 硬件滑动动画。", "flashui", false);
             action(list, "立即整屏刷新", "马上闪一下整个屏幕。屏幕上有残影时用。", "刷新", new View.OnClickListener() {
                 @Override public void onClick(View v) { HostLink.cmd("clear"); }
             });
             section(list, "动画");
-            hostChoice(list, host, "翻页动画", "整页变化时用墨水屏控制器的硬件滑动，和 Kindle 原生翻页同一套。跟随手势：按你滑动或点击的方向；也可以固定方向或关闭。",
+            hostChoice(list, host, "翻页动画", "整页变化时用墨水屏控制器的硬件滑动，和 Kobo 原生翻页同一套。跟随手势：按你滑动或点击的方向；也可以固定方向或关闭。",
                 "KFB_ANIM_MODE", ANIM_L, ANIM_V, "1");
             hostChoice(list, host, "动画速度", "步数越多越慢越细腻；觉得不跟手就选快。", "KFB_ANIM_STEPS", ANIM_STEP_L, ANIM_STEP_V, "12");
             section(list, "画面");
@@ -2105,7 +2106,7 @@ public class HomeActivity extends Activity {
         case 2:
             section(list, "导航");
             navModeChoice(list);
-            hostChoice(list, host, "手势提示", "识别到手势时在屏幕边上闪一下提示；应用卡住、2 秒没反应时提示怎么回到 Kindle。", "GESTURE_HINT",
+            hostChoice(list, host, "手势提示", "识别到手势时在屏幕边上闪一下提示；应用卡住、2 秒没反应时提示怎么回到 Kobo。", "GESTURE_HINT",
                 new String[] { "全部", "只在没响应时", "关" }, new String[] { "all", "stuck", "off" }, "all");
             hostChoice(list, host, "启用手势", "下面所有手势的总开关。关掉后它们都不起作用，单指点按的反应也会快一点；“从最下边往上划：返回”只看它自己的开关。", "KFB_GESTURES", ONOFF_L, ONOFF_V, "1");
             section(list, "单个手势（每个都能单独关，立即生效）");
@@ -2141,7 +2142,7 @@ public class HomeActivity extends Activity {
             section(list, "壁纸与图标");
             final boolean hasWall = Theme.hasWallpaper();
             action(list, "桌面壁纸", (hasWall ? "当前：已设置。" : "当前：没有壁纸（白底）。")
-                + "从内部存储的 VeraDroid/wallpaper、Pictures、Download 或 Kindle 的 documents 里选一张图；传书网页的“主题”页也能上传。转成灰度，只在主页（方块风格是“首页”标签）显示。",
+                + "从内部存储的 VeraDroid/wallpaper、Pictures、Download 或 Kobo 的 documents 里选一张图；传书网页的“主题”页也能上传。转成灰度，只在主页（方块风格是“首页”标签）显示。",
                 "选择", new View.OnClickListener() {
                 @Override public void onClick(View v) { pickWallpaper(); }
             });
@@ -2167,7 +2168,7 @@ public class HomeActivity extends Activity {
             localSwitch(list, "单手模式", "主页的顶栏和应用挪到下半屏，上面多一个大的“下拉面板”按钮。", OneHand.KEY, false);
             localSwitch(list, "状态栏", "在别的应用顶部显示时间和电量，点它打开下拉面板。桌面自己已经有顶栏，所以桌面不重复显示。", "statusbar", true);
             section(list, "下拉面板");
-            action(list, "面板名称", "下拉面板顶部显示的名字，比如“某某的 Kindle”。当前：" + (prefs.getString("panelname", "").length() == 0 ? "（不显示）" : prefs.getString("panelname", "")) + "。", "修改", new View.OnClickListener() {
+            action(list, "面板名称", "下拉面板顶部显示的名字，比如“某某的 Kobo”。当前：" + (prefs.getString("panelname", "").length() == 0 ? "（不显示）" : prefs.getString("panelname", "")) + "。", "修改", new View.OnClickListener() {
                 @Override public void onClick(View v) { textDialog("面板名称", "最多 16 个字；留空就不显示。", "panelname", "", 16); }
             });
             action(list, "面板快捷按钮", "下拉面板最上面一排圆形开关放哪几个、什么顺序。当前 " + prefs.getString("quick", Panel.QUICK_DEFAULT).split(",").length + " 个。", "选择", new View.OnClickListener() {
@@ -2191,43 +2192,50 @@ public class HomeActivity extends Activity {
         case 4:
             buildTransfer(list);
             break;
-        case 5:
-            section(list, "账号与更新");
-            action(list, "绑定账号", "在网站“我的设备”生成 6 位绑定码，填到这里；绑定后可以在后台看到机器和版本。", "绑定", new View.OnClickListener() {
-                @Override public void onClick(View v) { bindDialog(); }
-            });
-            action(list, "检查完整系统更新", "检查最新 VeraDroid 整机版本；有新版本先列出更新内容，再由你选“更新”或“以后再说”。有增量补丁时只下载变了的部分。系统更新会短暂退出 Android。", "检查", new View.OnClickListener() {
-                @Override public void onClick(View v) { fullUpdateDialog(); }
-            });
-            action(list, "自动更新", "自动安装：在你回到 Kindle、不用 Android 时自动装新版本（默认）；只提醒：发现新版本时在桌面列出更新内容，由你决定装不装；关闭：只在你自己检查时更新。当前：" + SysUpdate.MODE_L[SysUpdate.mode()] + "。",
-                "选择", new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    new VeraDialog.Builder(HomeActivity.this).title("自动更新").items(SysUpdate.MODE_L, new VeraDialog.OnPick() {
-                        @Override public void onPick(int which) {
-                            SysUpdate.setMode(HomeActivity.this, which, new View.OnClickListener() { @Override public void onClick(View x) { showSettings(); } });
-                        }
-                    }).selected(SysUpdate.mode()).negative("取消", null).show();
-                }
-            });
-            action(list, "更新前备份", BackupActivity.desc(), "选择", new View.OnClickListener() {
-                @Override public void onClick(View v) { BackupActivity.choose(HomeActivity.this, new Runnable() { @Override public void run() { showSettings(); } }); }
-            });
-            action(list, "已备份的数据", "更新前的备份放在 Kindle 上，占多少地方、哪天做的；不要的可以删掉。", "查看", new View.OnClickListener() {
-                @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, BackupActivity.class)); }
-            });
+        case 5: {
+            boolean kobo = HostLink.isKobo();
+            if (!kobo) {
+                section(list, "账号与更新");
+                action(list, "绑定账号", "在网站“我的设备”生成 6 位绑定码，填到这里；绑定后可以在后台看到机器和版本。", "绑定", new View.OnClickListener() {
+                    @Override public void onClick(View v) { bindDialog(); }
+                });
+                action(list, "检查完整系统更新", "检查最新 VeraDroid 整机版本；有新版本先列出更新内容，再由你选“更新”或“以后再说”。有增量补丁时只下载变了的部分。系统更新会短暂退出 Android。", "检查", new View.OnClickListener() {
+                    @Override public void onClick(View v) { fullUpdateDialog(); }
+                });
+                action(list, "自动更新", "自动安装：在你回到 Kobo、不用 Android 时自动装新版本（默认）；只提醒：发现新版本时在桌面列出更新内容，由你决定装不装；关闭：只在你自己检查时更新。当前：" + SysUpdate.MODE_L[SysUpdate.mode()] + "。",
+                    "选择", new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        new VeraDialog.Builder(HomeActivity.this).title("自动更新").items(SysUpdate.MODE_L, new VeraDialog.OnPick() {
+                            @Override public void onPick(int which) {
+                                SysUpdate.setMode(HomeActivity.this, which, new View.OnClickListener() { @Override public void onClick(View x) { showSettings(); } });
+                            }
+                        }).selected(SysUpdate.mode()).negative("取消", null).show();
+                    }
+                });
+                action(list, "更新前备份", BackupActivity.desc(), "选择", new View.OnClickListener() {
+                    @Override public void onClick(View v) { BackupActivity.choose(HomeActivity.this, new Runnable() { @Override public void run() { showSettings(); } }); }
+                });
+                action(list, "已备份的数据", "更新前的备份放在 Kobo 上，占多少地方、哪天做的；不要的可以删掉。", "查看", new View.OnClickListener() {
+                    @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, BackupActivity.class)); }
+                });
+            }
             section(list, "设备");
             localChoice(list, "后台保留应用", "前台以外最多留几个自己装的应用在后台，多出来的（最久没用的）在换应用 3 秒后停掉，省内存。应用长按 → 保持后台 的不算。",
                 Cleaner.LIMIT_KEY, Cleaner.LIMIT_L, 0, Cleaner.defaultLimit());
-            hostChoice(list, host, "插上 USB 线时询问", "Android 在前台时插上数据线：问要不要切到 USB 传输（退回 Kindle，电脑上就能看到 Kindle 盘）。"
-                + "只用充电器充电、不想被问就选“不询问”。", "USB_ASK", new String[] { "询问", "不询问" }, new String[] { "1", "0" }, "1");
-            hostChoice(list, host, "回到 Kindle 的方式", "挂起：系统暂停在后台，再打开几秒就回到现在的界面，但 Kindle 可用内存会少一些。关闭：系统完全退出，内存全部还给 Kindle。", "RETURN_MODE", RETURN_L, RETURN_V, "freeze");
-            action(list, "系统与性能", "Wi-Fi 省电、小内存模式、Kindle 界面怎么处置、应用预编译（进度和“全部优化”）。", "打开", new View.OnClickListener() {
+            if (!kobo) {
+                hostChoice(list, host, "插上 USB 线时询问", "Android 在前台时插上数据线：问要不要切到 USB 传输（退回 Kobo，电脑上就能看到 Kobo 盘）。"
+                    + "只用充电器充电、不想被问就选“不询问”。", "USB_ASK", new String[] { "询问", "不询问" }, new String[] { "1", "0" }, "1");
+                hostChoice(list, host, "回到 Kobo 的方式", "挂起：系统暂停在后台，再打开几秒就回到现在的界面，但 Kobo 可用内存会少一些。关闭：系统完全退出，内存全部还给 Kobo。", "RETURN_MODE", RETURN_L, RETURN_V, "freeze");
+            }
+            action(list, "系统与性能", kobo
+                    ? "Wi-Fi 省电、小内存模式、应用预编译（进度和“全部优化”）。"
+                    : "Wi-Fi 省电、小内存模式、Kobo 界面怎么处置、应用预编译（进度和“全部优化”）。", "打开", new View.OnClickListener() {
                 @Override public void onClick(View v) { HostSettingsActivity.open(HomeActivity.this, "system"); }
             });
-            action(list, "锁屏密码", "开机和从 Kindle 屏保醒来时要输入 4–6 位数字密码。忘了可以用 USB 重置。", "设置", new View.OnClickListener() {
+            action(list, "锁屏密码", "开机和从 Kobo 屏保醒来时要输入 4–6 位数字密码。忘了可以用 USB 重置。", "设置", new View.OnClickListener() {
                 @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, LockSettingsActivity.class)); }
             });
-            action(list, "屏保", "休眠时显示什么：Kindle 自带的、轮换你的图片，或者只用一张。", "选择", new View.OnClickListener() {
+            action(list, "屏保", "休眠时显示什么：Kobo 自带的、轮换你的图片，或者只用一张。", "选择", new View.OnClickListener() {
                 @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, ScreensaverActivity.class)); }
             });
             action(list, "存储空间", "Android 用的空间有多大、用了多少；可以调大调小，快满时自动扩大。", "查看", new View.OnClickListener() {
@@ -2236,13 +2244,13 @@ public class HomeActivity extends Activity {
             action(list, "使用统计", "本机记录电量和阅读时长，不上传。", "查看", new View.OnClickListener() {
                 @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, StatsActivity.class)); }
             });
-            action(list, "重启系统", "只重启系统，大约 20 秒后回到桌面，Kindle 界面不会出来。应用卡住、反应异常时可以试试。", "重启", new View.OnClickListener() {
+            action(list, "重启系统", "只重启系统，大约 20 秒后回到桌面，Kobo 界面不会出来。应用卡住、反应异常时可以试试。", "重启", new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     confirm("重启系统？", "正在运行的应用会被关闭。", new Runnable() { @Override public void run() { HostLink.cmd("restart"); } });
                 }
             });
             section(list, "日志");
-            action(list, "保存完整系统日志", "保存 Kindle dmesg、Android 全部 logcat buffer、所有 dumpsys、getprop、settings、网络、进程和挂载信息到 Diagnostics。日志里可能有打开过的网址和书名。", "保存", new View.OnClickListener() {
+            action(list, "保存完整系统日志", "保存 Kobo dmesg、Android 全部 logcat buffer、所有 dumpsys、getprop、settings、网络、进程和挂载信息到 Diagnostics。日志里可能有打开过的网址和书名。", "保存", new View.OnClickListener() {
                 @Override public void onClick(View v) { HostLink.cmd("diag"); ((TextView) v).setText("已保存"); }
             });
             action(list, "上传完整系统日志", "保存并上传诊断包，按设备 ID 存服务器。" + DiagConsent.CONTENTS, "上传", new View.OnClickListener() {
@@ -2266,14 +2274,17 @@ public class HomeActivity extends Activity {
                     } });
                 }
             });
-            action(list, "卸载 VeraDroid", "退出 Android，删除 VeraDroid 系统和 Android 数据；Books、书和绑定 token 保留。需要重新安装才能使用。", "卸载", new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    confirm("卸载 VeraDroid？", "会退出 Android 并删除系统/Android 应用数据。Books 和绑定 token 保留。", new Runnable() {
-                        @Override public void run() { say("正在卸载…"); HostLink.cmd("uninstall"); }
-                    });
-                }
-            });
+            if (!kobo) {
+                action(list, "卸载 VeraDroid", "退出 Android，删除 VeraDroid 系统和 Android 数据；Books、书和绑定 token 保留。需要重新安装才能使用。", "卸载", new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        confirm("卸载 VeraDroid？", "会退出 Android 并删除系统/Android 应用数据。Books 和绑定 token 保留。", new Runnable() {
+                            @Override public void run() { say("正在卸载…"); HostLink.cmd("uninstall"); }
+                        });
+                    }
+                });
+            }
             break;
+        }
         default:
             ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
             ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
@@ -2320,9 +2331,9 @@ public class HomeActivity extends Activity {
         list.addView(Ui.rule(this, 1, Color.BLACK));
     }
 
-    /** 设置页右上角的菜单（Kindle 设置页的三点菜单：更新、设备信息、重启）。 */
+    /** 设置页右上角的菜单（Kobo 设置页的三点菜单：更新、设备信息、重启）。 */
     private void settingsMenu() {
-        new VeraDialog.Builder(this).items(new String[] { "检查系统更新", "设备信息", "重启系统", "回到 Kindle", "关机…" }, new VeraDialog.OnPick() {
+        new VeraDialog.Builder(this).items(new String[] { "检查系统更新", "设备信息", "重启系统", "回到 Kobo", "关机…" }, new VeraDialog.OnPick() {
             @Override public void onPick(int which) {
                 switch (which) {
                 case 0: fullUpdateDialog(); break;
@@ -2354,7 +2365,7 @@ public class HomeActivity extends Activity {
         if (t.running()) {
             Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
             String ip = st.get("lanip");
-            sb.append(ip == null || ip.length() == 0 ? "正在获取地址…（一直这样的话，请先把 Kindle 连上 Wi-Fi）" : "http://" + ip + ":" + t.port());
+            sb.append(ip == null || ip.length() == 0 ? "正在获取地址…（一直这样的话，请先把 Kobo 连上 Wi-Fi）" : "http://" + ip + ":" + t.port());
             sb.append("\nPIN  ").append(t.pin());
             String work = t.statusText();
             if (work.length() > 0) sb.append("\n\n").append(work.trim());
@@ -2367,7 +2378,7 @@ public class HomeActivity extends Activity {
 
     private void buildTransfer(LinearLayout list) {
         final Transfer t = Transfer.get(this);
-        LinearLayout r = row(list, "无线传输", "手机和 Kindle 连同一个 Wi-Fi，在手机浏览器打开下面的地址，输入 PIN，就能上传书和 APK（APK 会自动安装），也能粘贴 http(s) 直链下载。");
+        LinearLayout r = row(list, "无线传输", "手机和 Kobo 连同一个 Wi-Fi，在手机浏览器打开下面的地址，输入 PIN，就能上传书和 APK（APK 会自动安装），也能粘贴 http(s) 直链下载。");
         Icons.Toggle.Listener xl = new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) {
                 if (on) {
@@ -2529,9 +2540,9 @@ public class HomeActivity extends Activity {
         if ("iconstyle".equals(key) || "size".equals(key)) reload();
     }
 
-    /** 界面风格：经典（照 Kindle）/ 方块（底部四个标签、卡片式首页）。 */
+    /** 界面风格：经典（照 Kobo）/ 方块（底部四个标签、卡片式首页）。 */
     private void styleChoice(LinearLayout list) {
-        LinearLayout r = row(list, "界面风格", "经典：照 Kindle 的主页和书库。方块：底部 首页 / 文件 / 应用 / 我的 四个标签，首页是可以自己挑的卡片（继续阅读、天气、日历……）。");
+        LinearLayout r = row(list, "界面风格", "经典：照 Kobo 的主页和书库。方块：底部 首页 / 文件 / 应用 / 我的 四个标签，首页是可以自己挑的卡片（继续阅读、天气、日历……）。");
         final boolean on = Blocks.on(this);
         if (bs) {
             ((LinearLayout) r.getTag()).addView(new Blocks.Stepper(this, new String[] { "经典", "方块" }, on ? 1 : 0, new Blocks.Stepper.Listener() {
