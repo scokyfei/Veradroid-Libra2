@@ -615,8 +615,8 @@ static void set_wfm(FBInkConfig *c, int mode, WFM_MODE_INDEX_T auto_wfm)
     default:      c->wfm_mode = auto_wfm; break;
     }
     if (c->wfm_mode == WFM_REAGL && no_reagl) c->wfm_mode = WFM_GL16;
-    if (c->wfm_mode == WFM_REAGL) c->is_flashing = true;
 #ifndef FBINK_FOR_KOBO
+    if (c->wfm_mode == WFM_REAGL) c->is_flashing = true;
     if (c->wfm_mode == WFM_REAGL && g_color && !g_cfa) c->wfm_mode = WFM_GLRC16;   /* still FULL, as the driver wants it */
 #endif
     if (c->wfm_mode == WFM_AUTO) c->dithering_mode = HWD_PASSTHROUGH;
@@ -903,6 +903,11 @@ static int push_y8(const uint8_t *buf, int x, int y, int w, int h, int mode)
     set_wfm(&c, mode, aw);
     /* A2 / scroll DU: no hardware dithering (FBInk then sends A2 with EPDC_FLAG_FORCE_MONOCHROME, the EPDC thresholds it) */
     if (c.wfm_mode == WFM_A2 || (g_scroll && c.wfm_mode == WFM_DU)) c.dithering_mode = HWD_PASSTHROUGH;
+#ifdef FBINK_FOR_KOBO
+    /* Kobo Mk.7/Mk.9 (i.MX6 SLL EPDC v2) has a documented PxP hardware-dithering alignment bug on partial updates
+       (see FBInk refresh_kobo_mk7): force HWD_PASSTHROUGH on partial rectangles to prevent shifted/dropped edges. */
+    if (x != 0 || y != 0 || w != W || h != H) c.dithering_mode = HWD_PASSTHROUGH;
+#endif
     int anim = (g_cleaning || g_scroll) ? 0 : maybe_animate(&c, w, h, flash);      /* the clean-up pass / a scroll is never animated */
     long t0 = now_ms();
     if (g_cfa || g_rawmtk) c.no_refresh = true;
@@ -952,8 +957,23 @@ static int push_y8(const uint8_t *buf, int x, int y, int w, int h, int mode)
 /* copy a rectangle of the wanted picture, send it, remember it as what is on the panel */
 static void push_region(int x0, int y0, int x1, int y1, int mode)
 {
+#ifdef FBINK_FOR_KOBO
+    /* Kobo i.MX6 SLL EPDC v2: pad by 8 px and align all 4 edges to 16 px (1264 and 1680 are multiples of 16),
+       and promote large updates (>= 60% screen area) to full screen so border/edge pixels are never clipped. */
+    if ((long)(x1 - x0) * (y1 - y0) >= (long)W * H * 60 / 100) {
+        x0 = 0; y0 = 0; x1 = W; y1 = H;
+    } else {
+        x0 = (x0 > 8 ? x0 - 8 : 0) & ~15;
+        x1 = (x1 + 8 + 15) & ~15;
+        y0 = (y0 > 8 ? y0 - 8 : 0) & ~15;
+        y1 = (y1 + 8 + 15) & ~15;
+        if (x1 > W) x1 = W;
+        if (y1 > H) y1 = H;
+    }
+#else
     x0 &= ~7; x1 = (x1 + 7) & ~7;
     if (x1 > W) x1 = W;
+#endif
     int w = x1 - x0, h = y1 - y0;
     if (w <= 0 || h <= 0) return;
     /* FBInk refuses a region less than one byte tall ("bogus empty region"), and a 1-row diff is not worth a special case */
@@ -1021,6 +1041,7 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
 static int show_page(const uint8_t *shm, int page, int mode, int force_full, int may_hold, int may_pace)
 {
     int fy0 = 0, fy1 = H;
+#ifndef FBINK_FOR_KOBO
     if (!g_rot && req_y0 >= 0 && prev_valid && !force_full && !need_full) {
         fy0 = req_y0; fy1 = req_y1;
         if (pend_y0 >= 0) { if (pend_y0 < fy0) fy0 = pend_y0; if (pend_y1 > fy1) fy1 = pend_y1; }
@@ -1028,6 +1049,7 @@ static int show_page(const uint8_t *shm, int page, int mode, int force_full, int
         if (fy1 > H) fy1 = H;
         if (fy1 < fy0) fy1 = fy0;
     }
+#endif
     int r = show_page_rows(shm, page, mode, force_full, may_hold, may_pace, fy0, fy1);
     g_scroll = 0;
     need_full = 0;

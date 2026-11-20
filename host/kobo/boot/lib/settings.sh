@@ -10,7 +10,7 @@ settings_defaults() {
     SYSTEM_APP=home
     ANDROID_DNS="223.5.5.5 223.6.6.6"
     KFB_CONTRAST=1.3
-    KFB_DITHER=3
+    KFB_DITHER=0
     KFB_FLASH=8
     KFB_INVERT=0
     KFB_LIGHTF=0
