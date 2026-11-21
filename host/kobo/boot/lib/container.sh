@@ -305,6 +305,13 @@ run_in_ns() {
 
     sysfont_mount
 
+    # Kobo 4.1.15 kernel lacks CONFIG_FUSE_FS (/dev/fuse); bind-mount zero-FUSE kobo-sdcard
+    # over /system/bin/sdcard so vold completes EmulatedVolume::doMount() cleanly without
+    # spinning forever on FUSE or stalling apps' getExternalFilesDir() for 60s timeouts.
+    if [ ! -c /dev/fuse ] && [ -x "$VD/bin/kobo-sdcard" ] && [ -f "$R/system/bin/sdcard" ]; then
+        mount --bind "$VD/bin/kobo-sdcard" "$R/system/bin/sdcard" 2>/dev/null || true
+    fi
+
     umount -l "$R/storage/emulated" 2>/dev/null || true
     mkdir -p "$R/storage/emulated/0"
     mount --bind "$R/data/media/0" "$R/storage/emulated/0"

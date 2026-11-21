@@ -100,10 +100,16 @@ settings_load() {
     for k in KFB_CONTRAST KFB_DITHER KFB_FLASH KFB_INVERT KFB_LIGHTF KFB_DARKEN KFB_MODE KFB_SETTLE KFB_HOLD KFB_SMOOTH KFB_PACE KFB_CLEAN KFB_REAGL_MIN KFB_SCROLLDU KFB_IMG KFB_ANIM_MODE KFB_ANIM_DIR KFB_ANIM_STEPS KFB_ANIM_MIN; do
         eval "GLOB_$k=\$$k"
     done
-    [ -f "$SYS/settings.app" ] && . "$SYS/settings.app"
     smooth_apply
-    # Preserve explicit per-app KFB_MODE override if present
-    _am=$(sed -n 's/^KFB_MODE=//p' "$SYS/settings.app" 2>/dev/null); [ -n "$_am" ] && KFB_MODE=$_am
+    if [ -f "$SYS/settings.app" ]; then
+        _glob_sm=$KFB_SMOOTH
+        . "$SYS/settings.app"
+        # Only re-apply smooth preset if the per-app profile explicitly overrode KFB_SMOOTH
+        if grep -q '^KFB_SMOOTH=' "$SYS/settings.app" 2>/dev/null && [ "$KFB_SMOOTH" != "$_glob_sm" ]; then
+            smooth_apply
+            . "$SYS/settings.app"
+        fi
+    fi
     # On Kobo 4.1.15 (hostns / 512 MB), always exit cleanly so /mnt/onboard can unmount for USB.
     RETURN_MODE=off
 }

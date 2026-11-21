@@ -30,7 +30,7 @@ heap_fix() {
     _prop dalvik.vm.heapsize "$hs"
     _prop dalvik.vm.heapminfree "${HEAP_MINFREE:-2m}"
     _prop dalvik.vm.heapmaxfree "${HEAP_MAXFREE:-8m}"
-    _prop dalvik.vm.heaptargetutilization 0.75
+    _prop dalvik.vm.heaptargetutilization "${HEAP_TARGET_UTIL:-0.75}"
     _prop ro.config.low_ram true
     _prop ro.config.max_starting_bg "${MAX_STARTING_BG:-2}"
     _prop ro.sys.fw.bg_apps_limit "${PROC_LIMIT:-2}"
@@ -92,17 +92,22 @@ cpu_gov_restore() {
     rm -f "$W/cpu_gov.state"
 }
 
+# READAHEAD_KB: eMMC; LOOP_READAHEAD_KB: loop over veradroid-sys.img (set exactly, may lower).
+# Libra 2 WeRead cold start (drop_caches, 3-4 runs each): eMMC 256/loop 256 = 20.7 s avg, 290 MB read;
+# eMMC 128/loop 64 = 18.6 s avg, 250 MB read (loop readahead stacks on eMMC readahead and wastes I/O on random .odex faults).
 readahead_on() {
-    [ "${READAHEAD_KB:-128}" -gt 0 ] 2>/dev/null || return 0
     : > "$W/readahead.saved"
     for b in /sys/block/mmcblk[0-9] /sys/block/loop[0-9]*; do
         f=$b/queue/read_ahead_kb
         [ -w "$f" ] || continue
-        case "$b" in */loop*) [ -s "$b/loop/backing_file" ] || continue ;; esac
-        old=$(cat "$f" 2>/dev/null); [ -n "$old" ] || continue
-        [ "$old" -lt "${READAHEAD_KB:-128}" ] 2>/dev/null || continue
+        case "$b" in
+            */loop*) [ -s "$b/loop/backing_file" ] || continue; want=${LOOP_READAHEAD_KB:-} ;;
+            *) want=${READAHEAD_KB:-} ;;
+        esac
+        case "$want" in ''|*[!0-9]*|0) continue ;; esac
+        old=$(cat "$f" 2>/dev/null); [ -n "$old" ] && [ "$old" != "$want" ] || continue
         echo "$b $old" >> "$W/readahead.saved"
-        echo "${READAHEAD_KB:-128}" > "$f" 2>/dev/null || true
+        echo "$want" > "$f" 2>/dev/null || true
     done
 }
 
@@ -135,6 +140,21 @@ tune_apply() {
                t "display: ro.sf.lcd_density=${LCD_DENSITY:-300}"
            fi ;;
     esac
+    # Tune interactive governor for single-core race-to-idle (stock go_hispeed_load=99, io_is_busy=0
+    # throttles CPU to 198 MHz during WeRead .odex / LevelDB I/O and page rendering).
+    ig=/sys/devices/system/cpu/cpufreq/interactive
+    if [ -d "$ig" ]; then
+        [ -f "$W/cpufreq.interactive.state" ] || {
+            for k in go_hispeed_load target_loads io_is_busy min_sample_time; do
+                [ -r "$ig/$k" ] && echo "$k $(cat "$ig/$k")"
+            done > "$W/cpufreq.interactive.state"
+        }
+        for kv in "go_hispeed_load:65" "target_loads:65" "io_is_busy:1" "min_sample_time:60000"; do
+            k=${kv%%:*}; v=${kv#*:}
+            [ -w "$ig/$k" ] && echo "$v" > "$ig/$k" 2>/dev/null || true
+        done
+        t "cpufreq: interactive tuned (go_hispeed=65 target=65 io_is_busy=1)"
+    fi
     return 0
 }
 
@@ -145,6 +165,13 @@ tune_restore() {
         cat "$W/vm.$k.state" > "/proc/sys/vm/$k" 2>/dev/null || true
         rm -f "$W/vm.$k.state"
     done
+    ig=/sys/devices/system/cpu/cpufreq/interactive
+    if [ -f "$W/cpufreq.interactive.state" ] && [ -d "$ig" ]; then
+        while read -r k v; do
+            [ -w "$ig/$k" ] && echo "$v" > "$ig/$k" 2>/dev/null || true
+        done < "$W/cpufreq.interactive.state"
+        rm -f "$W/cpufreq.interactive.state"
+    fi
 }
 
 proc_limit_apply() {

@@ -117,5 +117,27 @@ grep -q 'SYSTEM_FONT=' "$TOP/host/kobo/boot/lib/settings.sh" \
     && ok "Kobo host settings & commands fully wired (saver/lock/storage/webadmin/wifiscan/wifi-toggle/appprof/font/time)" \
     || fail "settings.sh/kobo.sh/cmd.sh missing required wiring"
 
+# 8. WeRead runtime optimizations (zero-FUSE sdcard, ART heap, cpufreq, readahead, per-app EPD)
+[ -f "$TOP/host/kobo/src/kobo-sdcard.c" ] \
+    && grep -q 'MS_BIND' "$TOP/host/kobo/src/kobo-sdcard.c" \
+    && grep -q 'kobo-sdcard' "$TOP/host/kobo/boot/lib/container.sh" \
+    && grep -q '/dev/fuse' "$TOP/host/kobo/boot/lib/container.sh" \
+    && ok "kobo-sdcard zero-FUSE vold helper present and bind-mounted over /system/bin/sdcard" \
+    || fail "kobo-sdcard missing or not wired in container.sh"
+grep -q '^HEAP_TARGET_UTIL=' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q '^HEAP_MINFREE=8m' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q 'heaptargetutilization' "$TOP/host/kobo/boot/lib/memory.sh" \
+    && ok "ART heap tuning (minfree/maxfree/targetutil) wired" || fail "ART heap tuning missing"
+grep -q 'cpufreq.interactive.state' "$TOP/host/kobo/boot/lib/memory.sh" \
+    && grep -q 'io_is_busy' "$TOP/host/kobo/boot/lib/memory.sh" \
+    && ok "interactive governor tuning saved/restored" || fail "interactive governor tuning missing"
+grep -q '^LOOP_READAHEAD_KB=' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q 'LOOP_READAHEAD_KB' "$TOP/host/kobo/boot/lib/memory.sh" \
+    && ok "per-device readahead (eMMC / loop) wired" || fail "LOOP_READAHEAD_KB missing"
+grep -qE '^com\.tencent\.weread\.eink .*KFB_SETTLE=30' "$TOP/host/kobo/boot/appprofiles.conf" \
+    && awk '/^settings_load\(\)/,/^}/' "$TOP/host/kobo/boot/lib/settings.sh" | awk '/smooth_apply/{if(!s)s=NR} /settings\.app/{if(!a)a=NR} END{exit !(s && a && s<a)}' \
+    && ok "WeRead EPD profile + smooth_apply runs before per-app overrides" \
+    || fail "WeRead EPD profile or settings_load ordering wrong"
+
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"
