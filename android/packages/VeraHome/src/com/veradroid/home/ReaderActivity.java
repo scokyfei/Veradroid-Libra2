@@ -438,9 +438,11 @@ public class ReaderActivity extends Activity {
     }
 
     /** 分页之前先显示的那一页。 */
+    private final List<int[]> provHist = new ArrayList<int[]>();
     private void showFirst(Chapter c, int idx, int start, int end, int savedPage, int savedTotal, String left) {
         if (isDestroyed() || !pages.isEmpty()) return;
         opened();
+        provHist.clear();
         provChapter = c; provIndex = idx; provStart = start; provEnd = end;
         content.setVisibility(View.VISIBLE);
         pdfView.setVisibility(View.GONE);
@@ -473,7 +475,7 @@ public class ReaderActivity extends Activity {
         else page = savedTextPage();
         boolean sameText = provIndex >= 0 && pages.get(page).chapter == provIndex && pages.get(page).start == provStart
             && pageText(pages.get(page)).equals(String.valueOf(content.getText()));
-        provChapter = null; provIndex = -1;
+        provChapter = null; provIndex = -1; provHist.clear();
         if (!sig.equals(geometry().sig)) { rebuildKeepPosition(); firstShown = true; return; }   // 分页时改了字号等
         if (sameText) { paintProgress(); savePage(); }
         else showText();
@@ -486,6 +488,48 @@ public class ReaderActivity extends Activity {
         turned();
         if (isPdf) {
             if (page > 0) { page--; readPages++; showPdf(page); }
+        } else if (pages.isEmpty() && provChapter != null) {
+            // 整本还没分完页：先从临时翻页历史退回，没有历史时在本章（或上一章）向前排一页
+            if (!provHist.isEmpty()) {
+                int[] h = provHist.remove(provHist.size() - 1);
+                Chapter c = (h[0] == provIndex || preChapters == null || h[0] < 0 || h[0] >= preChapters.size())
+                    ? provChapter : preChapters.get(h[0]);
+                provChapter = c; provIndex = h[0]; provStart = h[1]; provEnd = h[2];
+                readPages++;
+                setPageText(styled(c.text, provStart, provEnd), c.text, provStart, provEnd);
+                footLeft.setText(""); pageOverlay.setText(""); pageInfo.setText("");
+            } else if (provStart > 0) {
+                Geometry g = geometry();
+                int pos = skipBreaks(provChapter.text, 0), ps = -1, pe = -1;
+                while (pos < provStart && pos < provChapter.text.length()) {
+                    int e = pageEnd(provChapter.text, pos, g);
+                    if (e <= pos) break;
+                    ps = pos; pe = e;
+                    pos = skipBreaks(provChapter.text, e);
+                }
+                if (ps >= 0) {
+                    provStart = ps; provEnd = pe;
+                    readPages++;
+                    setPageText(styled(provChapter.text, provStart, provEnd), provChapter.text, provStart, provEnd);
+                    footLeft.setText(""); pageOverlay.setText(""); pageInfo.setText("");
+                }
+            } else if (preChapters != null && provIndex > 0) {
+                Chapter pc = preChapters.get(provIndex - 1);
+                Geometry g = geometry();
+                int pos = skipBreaks(pc.text, 0), ps = -1, pe = -1;
+                while (pos < pc.text.length()) {
+                    int e = pageEnd(pc.text, pos, g);
+                    if (e <= pos) break;
+                    ps = pos; pe = e;
+                    pos = skipBreaks(pc.text, e);
+                }
+                if (ps >= 0) {
+                    provChapter = pc; provIndex = provIndex - 1; provStart = ps; provEnd = pe;
+                    readPages++;
+                    setPageText(styled(pc.text, provStart, provEnd), pc.text, provStart, provEnd);
+                    footLeft.setText(""); pageOverlay.setText(""); pageInfo.setText("");
+                }
+            }
         } else if (page > 0) { page--; readPages++; showText(); }
     }
 
@@ -496,12 +540,14 @@ public class ReaderActivity extends Activity {
         } else if (pages.isEmpty() && provChapter != null && preChapters != null && skipBreaks(provChapter.text, provEnd) >= provChapter.text.length()
                 && provIndex >= 0 && provIndex + 1 < preChapters.size()) {
             // 还没分完页、这一章翻完了：整本已经读进来，接着排下一章的第一页
+            provHist.add(new int[] { provIndex, provStart, provEnd });
             showProv(preChapters.get(provIndex + 1), provIndex + 1, 0);
         } else if (pages.isEmpty() && provChapter != null && provEnd < provChapter.text.length()) {
             // 整本还没分完页：从这一页的末尾接着排下一页（页码等分完再显示）
             Geometry g = geometry();
             int start = skipBreaks(provChapter.text, provEnd);
             if (start >= provChapter.text.length()) return;
+            provHist.add(new int[] { provIndex, provStart, provEnd });
             provStart = start; provEnd = pageEnd(provChapter.text, start, g);
             readPages++;
             setPageText(styled(provChapter.text, provStart, provEnd), provChapter.text, provStart, provEnd);

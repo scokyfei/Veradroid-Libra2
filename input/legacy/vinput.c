@@ -1399,10 +1399,16 @@ static void handle_page_key(int code)
                                : (is_next ? KEY_VOLUMEDOWN : KEY_VOLUMEUP);
     logf_("hw key %d -> key %d (rot=%d swap=%d)", code, out_key, ROT, KEY_SWAP);
     idle_thaw();
+    boost_begin();
+    if (boost_on) boost_until = now_ms() + BOOST_MS;
     epd_dir(is_next ? 2 : 3);
     epd_cmd("TOUCH\n");
     key_tap(out_key);
-    action("poke", NULL);
+    {
+        static long last_key_poke = 0;
+        long t = now_ms();
+        if (t - last_key_poke > 20000) { last_key_poke = t; action("poke", NULL); }
+    }
 }
 
 static void keydev_read(void)
