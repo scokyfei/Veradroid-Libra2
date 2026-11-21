@@ -3,6 +3,18 @@
 # Driven by hardware KEY_POWER (via veradroid-input -> action.sh power -> $W/power.fifo),
 # VeraHome "sleep" command, and optional idle timeout ($SLEEP_TIMEOUT).
 
+saver_resolve_img() {
+    case "$1" in
+        "$SYS/data/media/0/Screensaver/"*)
+            c="$SYS/data/media/0/Screensaver/.vd-cache/sd-${1##*/}.png"
+            [ -f "$c" ] && { echo "$c"; return 0; } ;;
+        "$VD/screensaver/"*)
+            c="$SYS/data/media/0/Screensaver/.vd-cache/vd-${1##*/}.png"
+            [ -f "$c" ] && { echo "$c"; return 0; } ;;
+    esac
+    echo "$1"
+}
+
 screensaver_show() {
     list=$W/saver.list
     : > "$list"
@@ -11,26 +23,39 @@ screensaver_show() {
     if [ "$smode" = one ] && [ -n "$sone" ]; then
         echo "$sone" >> "$list"
     elif [ "$smode" = kindle ]; then
-        for f in /mnt/onboard/.kobo/screensaver/*.[pP][nN][gG] /mnt/onboard/.kobo/screensaver/*.[jJ][pP][gG] /mnt/onboard/.kobo/screensaver/*.[jJ][pP][eE][gG]; do
-            [ -f "$f" ] && echo "$f" >> "$list"
+        for d in /mnt/onboard/.kobo/screensaver /mnt/onboard/.adds/koreader/screensaver; do
+            [ -d "$d" ] || continue
+            for f in "$d"/*.[pP][nN][gG] "$d"/*.[jJ][pP][gG] "$d"/*.[jJ][pP][eE][gG] "$d"/*.[bB][mM][pP] "$d"/*.[gG][iI][fF]; do
+                [ -f "$f" ] && [ ! -L "$f" ] && echo "$f" >> "$list"
+            done
+            [ -s "$list" ] && break
         done
     else
-        for f in "$VD"/screensaver/*.[pP][nN][gG] "$VD"/screensaver/*.[jJ][pP][gG] "$VD"/screensaver/*.[jJ][pP][eE][gG] \
-                 "$SYS"/data/media/0/Screensaver/*.[pP][nN][gG] "$SYS"/data/media/0/Screensaver/*.[jJ][pP][gG] "$SYS"/data/media/0/Screensaver/*.[jJ][pP][eE][gG] \
-                 /mnt/onboard/.kobo/screensaver/*.[pP][nN][gG] /mnt/onboard/.kobo/screensaver/*.[jJ][pP][gG]; do
-            [ -f "$f" ] || continue
-            echo "$f" >> "$list"
+        for d in "$VD/screensaver" "$SYS/data/media/0/Screensaver" /mnt/onboard/.kobo/screensaver; do
+            [ -d "$d" ] || continue
+            for f in "$d"/*.[pP][nN][gG] "$d"/*.[jJ][pP][gG] "$d"/*.[jJ][pP][eE][gG] "$d"/*.[bB][mM][pP] "$d"/*.[gG][iI][fF] "$d"/*.[wW][eE][bB][pP]; do
+                [ -f "$f" ] && [ ! -L "$f" ] || continue
+                case "$f" in */default.png|*/default.PNG) continue ;; esac
+                echo "$f" >> "$list"
+            done
         done
     fi
     n=$(wc -l < "$list" 2>/dev/null | tr -d ' ')
-    if [ "${n:-0}" -gt 0 ] && [ -x "$FBINK" ]; then
+    fb_img="$VD/bin/fbink-img"
+    [ -x "$fb_img" ] || fb_img="$FBINK"
+    if [ "${n:-0}" -gt 0 ] && [ -x "$fb_img" ]; then
         i=$(cat "$W/saver.index" 2>/dev/null || echo 0)
         case "$i" in ''|*[!0-9]*) i=0 ;; esac
         i=$(( (i % n) + 1 ))
         echo "$i" > "$W/saver.index"
         img=$(sed -n "${i}p" "$list")
-        if [ -f "$img" ]; then
-            "$FBINK" -q -c -f -i "$img" -g w=-2,h=-2,halign=CENTER,valign=CENTER >/dev/null 2>&1 && { t "screensaver: $img"; return 0; }
+        draw_img=$(saver_resolve_img "$img")
+        if [ -f "$draw_img" ]; then
+            if "$fb_img" -q -c -f -i "$draw_img" -g w=-2,h=-2,halign=CENTER,valign=CENTER,dither >/dev/null 2>&1; then
+                t "screensaver: $img"
+                return 0
+            fi
+            t "screensaver: fbink failed for $draw_img"
         fi
     fi
     splash "已休眠 · 按电源键唤醒" 40 || true

@@ -30,17 +30,25 @@ saver_cmd() {
     list)
         rm -rf $X/saver; mkdir -p $X/saver.tmp || return 0
         n=0
-        for f in "$VD"/screensaver/*.[pP][nN][gG] "$VD"/screensaver/*.[jJ][pP][gG] "$VD"/screensaver/*.[jJ][pP][eE][gG]; do
+        for f in "$VD"/screensaver/*.[pP][nN][gG] "$VD"/screensaver/*.[jJ][pP][gG] "$VD"/screensaver/*.[jJ][pP][eE][gG] \
+                 "$VD"/screensaver/*.[bB][mM][pP] "$VD"/screensaver/*.[gG][iI][fF] "$VD"/screensaver/*.[wW][eE][bB][pP]; do
             [ -f "$f" ] && [ ! -L "$f" ] || continue
             case "$f" in */default.png|*/default.PNG) continue ;; esac
-            [ "$(wc -c < "$f")" -le 8388608 ] || continue
+            [ "$(wc -c < "$f")" -le 33554432 ] || continue
             cp "$f" $X/saver.tmp/ 2>/dev/null && n=$((n + 1))
             [ $n -ge 60 ] && break
         done
-        for f in /mnt/onboard/.kobo/screensaver/*.[pP][nN][gG] /mnt/onboard/.kobo/screensaver/*.[jJ][pP][gG] /mnt/onboard/.kobo/screensaver/*.[jJ][pP][eE][gG]; do
-            [ -f "$f" ] && { cp "$f" "$X/saver.tmp/.kindle-preview.png"; break; }
+        for d in /mnt/onboard/.kobo/screensaver /mnt/onboard/.adds/koreader/screensaver; do
+            [ -d "$d" ] || continue
+            for f in "$d"/*.[pP][nN][gG] "$d"/*.[jJ][pP][gG] "$d"/*.[jJ][pP][eE][gG] "$d"/*.[bB][mM][pP] "$d"/*.[gG][iI][fF]; do
+                [ -f "$f" ] && [ ! -L "$f" ] && { cp "$f" "$X/saver.tmp/.kindle-preview.png"; break 2; }
+            done
         done
-        chmod 755 "$X/saver.tmp"; chmod 644 "$X/saver.tmp"/* "$X/saver.tmp/.kindle-preview.png" 2>/dev/null
+        if [ -x "$FBINK" ]; then
+            eval "$("$FBINK" -e 2>/dev/null)" 2>/dev/null || true
+            [ -n "${viewWidth:-}" ] && [ -n "${viewHeight:-}" ] && echo "$viewWidth $viewHeight" > "$X/saver.tmp/.panel"
+        fi
+        chmod 755 "$X/saver.tmp"; chmod 644 "$X/saver.tmp"/* "$X/saver.tmp/.kindle-preview.png" "$X/saver.tmp/.panel" 2>/dev/null
         mv "$X/saver.tmp" "$X/saver"; : > "$X/ctl/saver.listed"
         t "screensaver: exported $n image(s) from screensaver dir for picker" ;;
     done) rm -rf $X/saver $X/saver.tmp $X/ctl/saver.listed ;;
