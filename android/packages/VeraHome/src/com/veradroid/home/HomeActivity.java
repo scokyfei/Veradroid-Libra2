@@ -2260,7 +2260,7 @@ public class HomeActivity extends Activity {
                 hostChoice(list, host, "回到 Kobo 的方式", "挂起：系统暂停在后台，再打开几秒就回到现在的界面，但 Kobo 可用内存会少一些。关闭：系统完全退出，内存全部还给 Kobo。", "RETURN_MODE", RETURN_L, RETURN_V, "freeze");
             }
             action(list, "系统与性能", kobo
-                    ? "Wi-Fi 省电、小内存模式、应用预编译（进度和“全部优化”）。"
+                    ? "小内存模式、应用预编译（进度和“全部优化”）。"
                     : "Wi-Fi 省电、小内存模式、Kobo 界面怎么处置、应用预编译（进度和“全部优化”）。", "打开", new View.OnClickListener() {
                 @Override public void onClick(View v) { HostSettingsActivity.open(HomeActivity.this, "system"); }
             });
@@ -2469,14 +2469,16 @@ public class HomeActivity extends Activity {
         action(list, "传书页面", "单独一页显示地址和 PIN，字更大，方便照着在手机上输入。", "打开", new View.OnClickListener() {
             @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, TransferActivity.class).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)); overridePendingTransition(0, 0); }
         });
-        // 无线调试（adb）：默认关，只认传书网页里添加过的电脑公钥，30 分钟后自动关（AdbWifi / 宿主 webadmin.sh）
-        LinearLayout ra = row(list, "无线调试 (adb)", AdbWifi.DESC);
-        Icons.Toggle.Listener al = new Icons.Toggle.Listener() {
-            @Override public void onToggle(boolean on) {
-                AdbWifi.set(HomeActivity.this, on, 30, new Runnable() { @Override public void run() { showSettings(); } });
-            }
-        };
-        ((LinearLayout) ra.getTag()).addView(bs ? new Blocks.Switch(this, AdbWifi.on(), al) : new Icons.Toggle(this, AdbWifi.on(), al));
+        if (!HostLink.isKobo()) {
+            // 无线调试（adb）：需要内核 IPv6 支持，Kobo 4.1.15 内核未启用 IPv6 故隐藏
+            LinearLayout ra = row(list, "无线调试 (adb)", AdbWifi.DESC);
+            Icons.Toggle.Listener al = new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) {
+                    AdbWifi.set(HomeActivity.this, on, 30, new Runnable() { @Override public void run() { showSettings(); } });
+                }
+            };
+            ((LinearLayout) ra.getTag()).addView(bs ? new Blocks.Switch(this, AdbWifi.on(), al) : new Icons.Toggle(this, AdbWifi.on(), al));
+        }
     }
 
     private LinearLayout row(LinearLayout list, String title, String desc) {

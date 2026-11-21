@@ -121,27 +121,30 @@ settings_apply() {
     sfile=$W/settings.apply.$$.$(cut -d' ' -f1 /proc/uptime | tr -d .)
     mv -f "$X/ctl/settings.new" "$sfile" 2>/dev/null || return 0
     touch "$SYS/settings.conf"
-    for k in KFB_CONTRAST KFB_DITHER KFB_FLASH KFB_INVERT KFB_LIGHTF KFB_DARKEN KFB_MODE KFB_SETTLE KFB_HOLD KFB_ANIM_MODE KFB_ANIM_DIR KFB_ANIM_STEPS KFB_ANIM_MIN KFB_IMG KFB_SMOOTH KFB_REAGL_MIN KFB_SCROLLDU KFB_GESTURES KFB_ROTATE KFB_AUTO_ROTATE PAGE_KEYS_SWAP RETURN_MODE LOWMEM DNS_MODE G_TL G_TR G_BL G_BR G_EDGE_BACK G_EDGE_PANEL G_EDGE_THIRDS G_EB_L G_EB_M G_EB_R G_EB_HOLD G_EB_HOLD_MS G_TWO_TAP G_TWO_LONG G_TWO_BACK G_TWO_SLIDE G_EDGE_SENS G_BACK_EXCLUDE G_TWO_TAP_ACT G_TWO_LONG_ACT STORAGE_AUTO USB_ASK WIFI_PS APP_COMPILE TIME_12_24 GESTURE_HINT BOOST_MS BOOST_KHZ KFB_SCROLLDELAY KFB_SCROLLSTYLE KFB_SCROLLWFM FAST_DRAG SLEEP_TIMEOUT; do
-        v=$(sed -n "s/^$k=\([0-9A-Za-z._,]*\)\$/\1/p" "$sfile" | tail -1)
-        [ -n "$v" ] || continue
-        grep -v "^$k=" "$SYS/settings.conf" > "$sfile.conf" 2>/dev/null || true
-        [ "$v" = default ] || echo "$k=$v" >> "$sfile.conf"
-        mv -f "$sfile.conf" "$SYS/settings.conf"
-    done
-    # System font path (contains '/', validated by sysfont_host; takes effect on next Android restart)
-    if grep -q '^SYSTEM_FONT=' "$sfile"; then
-        v=$(sed -n 's/^SYSTEM_FONT=//p' "$sfile" | tail -1)
-        case "$v" in
-            ''|default|none) v= ;;
-            *[\'\"\$\`\\]*) v=bad ;;
-            *) sysfont_host "$v" >/dev/null 2>&1 || v=bad ;;
+    dns_changed=0
+    tf_changed=0
+    while IFS='=' read -r k v; do
+        case "$k" in
+            KFB_CONTRAST|KFB_DITHER|KFB_FLASH|KFB_INVERT|KFB_LIGHTF|KFB_DARKEN|KFB_MODE|KFB_SETTLE|KFB_HOLD|KFB_ANIM_MODE|KFB_ANIM_DIR|KFB_ANIM_STEPS|KFB_ANIM_MIN|KFB_IMG|KFB_SMOOTH|KFB_REAGL_MIN|KFB_SCROLLDU|KFB_GESTURES|KFB_ROTATE|KFB_AUTO_ROTATE|PAGE_KEYS_SWAP|RETURN_MODE|LOWMEM|DNS_MODE|G_TL|G_TR|G_BL|G_BR|G_EDGE_BACK|G_EDGE_PANEL|G_EDGE_THIRDS|G_EB_L|G_EB_M|G_EB_R|G_EB_HOLD|G_EB_HOLD_MS|G_TWO_TAP|G_TWO_LONG|G_TWO_BACK|G_TWO_SLIDE|G_EDGE_SENS|G_BACK_EXCLUDE|G_TWO_TAP_ACT|G_TWO_LONG_ACT|STORAGE_AUTO|USB_ASK|WIFI_PS|APP_COMPILE|TIME_12_24|GESTURE_HINT|BOOST_MS|BOOST_KHZ|KFB_SCROLLDELAY|KFB_SCROLLSTYLE|KFB_SCROLLWFM|FAST_DRAG|SLEEP_TIMEOUT)
+                case "$v" in ''|*[!0-9A-Za-z._,]*) continue ;; esac
+                grep -v "^$k=" "$SYS/settings.conf" > "$sfile.conf" 2>/dev/null || true
+                [ "$v" = default ] || echo "$k=$v" >> "$sfile.conf"
+                mv -f "$sfile.conf" "$SYS/settings.conf"
+                [ "$k" = DNS_MODE ] && dns_changed=1
+                [ "$k" = TIME_12_24 ] && tf_changed=1 ;;
+            SYSTEM_FONT)
+                case "$v" in
+                    ''|default|none) v= ;;
+                    *[\'\"\$\`\\]*) v=bad ;;
+                    *) sysfont_host "$v" >/dev/null 2>&1 || v=bad ;;
+                esac
+                if [ "$v" != bad ]; then
+                    grep -v '^SYSTEM_FONT=' "$SYS/settings.conf" > "$sfile.conf" 2>/dev/null || true
+                    [ -n "$v" ] && printf "SYSTEM_FONT='%s'\n" "$v" >> "$sfile.conf"
+                    mv -f "$sfile.conf" "$SYS/settings.conf"
+                fi ;;
         esac
-        if [ "$v" != bad ]; then
-            grep -v '^SYSTEM_FONT=' "$SYS/settings.conf" > "$sfile.conf" 2>/dev/null || true
-            [ -n "$v" ] && printf "SYSTEM_FONT='%s'\n" "$v" >> "$sfile.conf"
-            mv -f "$sfile.conf" "$SYS/settings.conf"
-        fi
-    fi
+    done < "$sfile"
     rm -f "$sfile" "$sfile.conf"
     settings_load
     settings_publish
@@ -152,8 +155,8 @@ settings_apply() {
     epd_send_scroll
     if [ "$KFB_GESTURES" = 0 ]; then touch "$W/nogestures"; else rm -f "$W/nogestures"; fi
     gestures_write
-    dns_apply
-    type time_format_apply >/dev/null 2>&1 && ( time_format_apply ) </dev/null >>"$LOG" 2>&1 &
+    [ "$dns_changed" = 1 ] && ( dns_apply ) </dev/null >>"$LOG" 2>&1 &
+    [ "$tf_changed" = 1 ] && type time_format_apply >/dev/null 2>&1 && ( time_format_apply ) </dev/null >>"$LOG" 2>&1 &
     rotate_apply
     status_write
 }

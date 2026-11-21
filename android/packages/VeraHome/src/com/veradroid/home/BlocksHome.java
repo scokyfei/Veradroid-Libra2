@@ -1229,7 +1229,7 @@ final class BlocksHome {
             { "首页卡片", "继续阅读 · 天气 · 日历 · 小部件…" },
             { "显示与刷新", "亮度 · 刷新档位 · 全刷 · 界面风格" },
             { "电源与时间", "自动休眠 · 回 Kobo · 时间格式" },
-            { "存储与连接", "Wi-Fi · 蓝牙 · Web 文件管理 · 存储空间" },
+            { "存储与连接", BluetoothActivity.supported() ? "Wi-Fi · 蓝牙 · Web 文件管理 · 存储空间" : "Wi-Fi · Web 文件管理 · 存储空间" },
             { "设备与关于", "版本 · 更新 · 日志 · 全部设置" } };
         final int[] keys = { S_CARDS, S_DISPLAY, S_POWER, S_STORAGE, S_ABOUT };
         for (int i = 0; i < rows.length; i++) {

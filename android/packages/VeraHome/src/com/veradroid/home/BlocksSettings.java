@@ -340,14 +340,16 @@ final class BlocksSettings {
         add(w, addr);
         add(w, Blocks.navRow(a, "传书页面", "大字显示地址和 PIN", new View.OnClickListener() {
             @Override public void onClick(View v) { a.startActivity(new Intent(a, TransferActivity.class).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)); a.overridePendingTransition(0, 0); } }));
-        // 无线调试（adb）：默认关，只认传书网页里添加过的电脑公钥，30 分钟后自动关（AdbWifi / 宿主 webadmin.sh）
-        add(w, Blocks.row(a, "无线调试 (adb)", "adb over Wi-Fi", toggle(AdbWifi.on(), new Icons.Toggle.Listener() {
-            @Override public void onToggle(boolean on) {
-                AdbWifi.set(a, on, 30, new Runnable() { @Override public void run() { if (h.current() == BlocksHome.S_STORAGE) { h.show(BlocksHome.S_STORAGE); a.changed(); } } });
-            } })));
-        TextView adbNote = Ui.text(a, AdbWifi.DESC, 13, false);
-        adbNote.setPadding(dp(12), dp(4), dp(12), dp(10));
-        add(w, adbNote);
+        if (!HostLink.isKobo()) {
+            // 无线调试（adb）：需要内核 IPv6 支持，Kobo 4.1.15 内核未启用 IPv6 故隐藏
+            add(w, Blocks.row(a, "无线调试 (adb)", "adb over Wi-Fi", toggle(AdbWifi.on(), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) {
+                    AdbWifi.set(a, on, 30, new Runnable() { @Override public void run() { if (h.current() == BlocksHome.S_STORAGE) { h.show(BlocksHome.S_STORAGE); a.changed(); } } });
+                } })));
+            TextView adbNote = Ui.text(a, AdbWifi.DESC, 13, false);
+            adbNote.setPadding(dp(12), dp(4), dp(12), dp(10));
+            add(w, adbNote);
+        }
         return shell("Storage / network", "存储与连接", c);
     }
 

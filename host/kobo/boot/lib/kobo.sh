@@ -123,52 +123,123 @@ kobo_wifi_set() { # $1 = 0|1
     fi
 }
 
+kobo_wpa_ensure() {
+    [ -S /var/run/wpa_supplicant/wlan0 ] && return 0
+    [ -f /etc/wpa_supplicant/wpa_supplicant.conf ] || return 1
+    mkdir -p /var/run/wpa_supplicant 2>/dev/null || true
+    killall -q -TERM wpa_supplicant 2>/dev/null || true
+    usleep 300000
+    wpa_supplicant -D nl80211 -s -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf -C /var/run/wpa_supplicant -B >/dev/null 2>&1 || return 1
+    i=0
+    while [ $i -lt 15 ]; do
+        [ -S /var/run/wpa_supplicant/wlan0 ] && return 0
+        usleep 200000; i=$((i + 1))
+    done
+    [ -S /var/run/wpa_supplicant/wlan0 ]
+}
+
 kobo_wifi_current() {
-    command -v wpa_cli >/dev/null 2>&1 || return 0
-    wpa_cli -i wlan0 status 2>/dev/null | sed -n 's/^ssid=//p' | head -1
+    cur=
+    if [ -S /var/run/wpa_supplicant/wlan0 ] && command -v wpa_cli >/dev/null 2>&1; then
+        cur=$(wpa_cli -i wlan0 status 2>/dev/null | sed -n 's/^ssid=//p' | head -1)
+    fi
+    if [ -z "$cur" ] && command -v iwconfig >/dev/null 2>&1; then
+        cur=$(iwconfig wlan0 2>/dev/null | sed -n 's/.*ESSID:"\([^"]*\)".*/\1/p' | head -1)
+    fi
+    [ -n "$cur" ] && printf '%s\n' "$cur"
 }
 
 kobo_wifi_saved() {
-    command -v wpa_cli >/dev/null 2>&1 || return 0
-    wpa_cli -i wlan0 list_networks 2>/dev/null | awk -F'\t' 'NR > 1 && $2 != "" { print $2 }' | head -50
+    out=
+    if [ -S /var/run/wpa_supplicant/wlan0 ] && command -v wpa_cli >/dev/null 2>&1; then
+        out=$(wpa_cli -i wlan0 list_networks 2>/dev/null | awk -F'\t' 'NR > 1 && $2 != "" { print $2 }' | head -50)
+    fi
+    if [ -z "$out" ] && [ -r /etc/wpa_supplicant/wpa_supplicant.conf ]; then
+        out=$(sed -n 's/^[[:space:]]*ssid="\([^"]*\)".*/\1/p' /etc/wpa_supplicant/wpa_supplicant.conf 2>/dev/null | head -50)
+    fi
+    [ -n "$out" ] && printf '%s\n' "$out"
 }
 
 kobo_wifi_select() { # $1 = ssid
     command -v wpa_cli >/dev/null 2>&1 || return 1
+    kobo_wpa_ensure || return 1
     nid=$(wpa_cli -i wlan0 list_networks 2>/dev/null | awk -F'\t' -v s="$1" 'NR > 1 && $2 == s { print $1; exit }')
     [ -n "$nid" ] || return 1
     wpa_cli -i wlan0 enable_network "$nid" >/dev/null 2>&1
     wpa_cli -i wlan0 select_network "$nid" >/dev/null 2>&1
 }
 
-# Scan nearby Wi-Fi APs via wpa_cli and print TAB-separated lines for WifiActivity:
+# Scan nearby Wi-Fi APs via wpa_cli (or iwlist fallback when wpa ctrl socket was removed by Nickel)
+# and print TAB-separated lines for WifiActivity:
 #   saved(y|n) \t secured(y|n) \t bars(1..5) \t mgmt \t ssid
 kobo_wifi_scan() {
-    command -v wpa_cli >/dev/null 2>&1 || return 1
-    wpa_cli -i wlan0 scan >/dev/null 2>&1 || true
-    sleep 2
     saved=$(kobo_wifi_saved)
-    wpa_cli -i wlan0 scan_results 2>/dev/null | awk -F'\t' -v saved="$saved" '
+    if [ -S /var/run/wpa_supplicant/wlan0 ] && command -v wpa_cli >/dev/null 2>&1; then
+        wpa_cli -i wlan0 scan >/dev/null 2>&1 || true
+        sleep 2
+        res=$(wpa_cli -i wlan0 scan_results 2>/dev/null | awk -F'\t' -v saved="$saved" '
+            BEGIN {
+                n = split(saved, sv, "\n")
+                for (i = 1; i <= n; i++) if (sv[i] != "") is_saved[sv[i]] = 1
+            }
+            NR > 1 && NF >= 5 && $5 != "" {
+                ssid = $5; sig = $3 + 0; flags = $4
+                if (!(ssid in best) || sig > best[ssid]) {
+                    best[ssid] = sig
+                    flg[ssid] = flags
+                }
+            }
+            END {
+                for (s in best) {
+                    sig = best[s]
+                    bars = (sig >= -55) ? 5 : (sig >= -65) ? 4 : (sig >= -75) ? 3 : (sig >= -85) ? 2 : 1
+                    f = flg[s]
+                    sec = (f ~ /WPA|WEP|RSN/) ? "y" : "n"
+                    mgmt = (f ~ /WPA2/) ? "WPA2" : (f ~ /WPA/) ? "WPA" : (f ~ /WEP/) ? "WEP" : "NONE"
+                    sv_f = (s in is_saved) ? "y" : "n"
+                    printf "%s\t%s\t%d\t%s\t%s\n", sv_f, sec, bars, mgmt, s
+                }
+            }' | sort -t"$(printf '\t')" -k3,3nr)
+        if [ -n "$res" ]; then
+            printf '%s\n' "$res"
+            return 0
+        fi
+    fi
+    command -v iwlist >/dev/null 2>&1 || return 1
+    iwlist wlan0 scan 2>/dev/null | awk -v saved="$saved" '
         BEGIN {
             n = split(saved, sv, "\n")
             for (i = 1; i <= n; i++) if (sv[i] != "") is_saved[sv[i]] = 1
         }
-        NR > 1 && NF >= 5 && $5 != "" {
-            ssid = $5; sig = $3 + 0; flags = $4
-            if (!(ssid in best) || sig > best[ssid]) {
-                best[ssid] = sig
-                flg[ssid] = flags
+        function flush() {
+            if (ssid != "") {
+                if (!(ssid in best) || qual > best[ssid]) {
+                    best[ssid] = qual
+                    bsec[ssid] = sec
+                    bmgmt[ssid] = mgmt
+                }
             }
+            ssid = ""; qual = 0; sec = "n"; mgmt = "NONE"
+        }
+        /Cell [0-9]+ - Address:/ { flush(); next }
+        /ESSID:"/ {
+            s = $0; sub(/.*ESSID:"/, "", s); sub(/".*/, "", s)
+            ssid = s; next
+        }
+        /Encryption key:on/ { sec = "y"; if (mgmt == "NONE") mgmt = "WEP"; next }
+        /WPA2|IEEE 802\.11i/ { sec = "y"; mgmt = "WPA2"; next }
+        /WPA Version/ { sec = "y"; if (mgmt != "WPA2") mgmt = "WPA"; next }
+        /Quality=/ {
+            q = $0; sub(/.*Quality=/, "", q); sub(/\/.*/, "", q)
+            qual = q + 0; next
         }
         END {
+            flush()
             for (s in best) {
-                sig = best[s]
-                bars = (sig >= -55) ? 5 : (sig >= -65) ? 4 : (sig >= -75) ? 3 : (sig >= -85) ? 2 : 1
-                f = flg[s]
-                sec = (f ~ /WPA|WEP|RSN/) ? "y" : "n"
-                mgmt = (f ~ /WPA2/) ? "WPA2" : (f ~ /WPA/) ? "WPA" : (f ~ /WEP/) ? "WEP" : "NONE"
+                q = best[s]
+                bars = (q >= 80) ? 5 : (q >= 60) ? 4 : (q >= 40) ? 3 : (q >= 20) ? 2 : 1
                 sv_f = (s in is_saved) ? "y" : "n"
-                printf "%s\t%s\t%d\t%s\t%s\n", sv_f, sec, bars, mgmt, s
+                printf "%s\t%s\t%d\t%s\t%s\n", sv_f, bsec[s], bars, bmgmt[s], s
             }
         }' | sort -t"$(printf '\t')" -k3,3nr
 }
@@ -176,6 +247,7 @@ kobo_wifi_scan() {
 # Add & connect to a new Wi-Fi network (open if $2 empty, WPA-PSK if $2 non-empty).
 kobo_wifi_connect_new() { # $1 = ssid  $2 = psk (optional)
     command -v wpa_cli >/dev/null 2>&1 || return 1
+    kobo_wpa_ensure || return 1
     nid=$(wpa_cli -i wlan0 list_networks 2>/dev/null | awk -F'\t' -v s="$1" 'NR > 1 && $2 == s { print $1; exit }')
     if [ -z "$nid" ]; then
         nid=$(wpa_cli -i wlan0 add_network 2>/dev/null | tail -1 | tr -cd '0-9')

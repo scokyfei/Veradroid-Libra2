@@ -47,6 +47,8 @@ wa_do() {
     storageauto)   case "$arg" in 0|1) type st_cmd >/dev/null 2>&1 && st_cmd auto "$arg" >/dev/null 2>&1; echo "ok=1"; type st_info >/dev/null 2>&1 && st_info ;; *) echo "error=bad value" ;; esac | wa_put "$n" "$u" ;;
     wifipsk)       wa_wifipsk "$arg" "$data" | wa_put "$n" "$u" ;;
     libput)        wa_libput "$arg" "$u" "$data" | wa_put "$n" "$u" ;;
+    adbstart)      echo "adb.error=noipv6" | wa_put "$n" "$u" ;;
+    adbstop|adbstate) echo "ok=1" | wa_put "$n" "$u" ;;
     *)             wa_log "wa: unsupported request '$verb'"; echo "error=unsupported" | wa_put "$n" "$u" ;;
     esac
 }
@@ -144,7 +146,8 @@ wa_shot() {
     if [ "$bpp" = 8 ] && [ -n "$stride" ] && [ "$xres" -le "$stride" ] 2>/dev/null; then
         { echo "fb $xres $yres $stride"; dd if=/dev/fb0 bs="$stride" skip="${pany:-0}" count="$yres" 2>/dev/null; } > "$o.tmp"
     else
-        $(vd_in) /system/bin/screencap -p "/dev/kfb/wa/$1.tmp" >/dev/null 2>&1
+        epd_send SHOT "$o.tmp"
+        i=0; while [ ! -s "$o.tmp" ] && [ $i -lt 20 ]; do usleep 100000; i=$((i + 1)); done
     fi
     if [ -s "$o.tmp" ]; then chown "$2" "$o.tmp" && chmod 400 "$o.tmp" && mv -f "$o.tmp" "$o.out"
     else rm -f "$o.tmp"; echo "error=screenshot failed" | wa_put "$1" "$2"; fi
