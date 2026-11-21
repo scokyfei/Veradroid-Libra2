@@ -61,9 +61,27 @@ screensaver_show() {
     splash "已休眠 · 按电源键唤醒" 40 || true
 }
 
+sleep_wait_1s() {
+    # Interruptible 1s wait: wakes immediately if user presses power/wake while waiting for EPDC VEE stable.
+    if [ "${SLEEP_FIFO_READY:-0}" = 1 ]; then
+        if read -t 1 -r _ev <&4 2>/dev/null; then
+            case "$_ev" in
+                wake|power|toggle) return 2 ;;
+            esac
+        fi
+    else
+        sleep 1
+    fi
+    return 0
+}
+
 kobo_deep_suspend() {
-    # Enter true Linux mem suspend on Kobo Libra 2 (drops standby draw from ~8.5%/h to <0.1%/h).
+    # Enter true Linux mem suspend on Kobo Libra 2 (drops standby draw from ~1.8%/h / 34mA to ~0.1%/h).
     # Skipped while charging so USB charging & SSH debugging stay uninterrupted.
+    # Return codes:
+    #   0 = resumed from real mem suspend
+    #   2 = cancelled by user power/wake press during pre-suspend wait
+    #   1 = skipped or failed (caller stays in screensaver fallback)
     [ -w /sys/power/state ] && grep -qw mem /sys/power/state 2>/dev/null || return 1
     kobo_is_charging && return 1
     [ -f "$W/saver_nofreeze" ] && return 1
@@ -79,24 +97,61 @@ kobo_deep_suspend() {
 
     sync
     [ -w /sys/power/state-extended ] && echo 1 > /sys/power/state-extended 2>/dev/null || true
-    # Wait for EPDC screensaver refresh to finish so /sys/power/state does not return -EBUSY.
-    sleep 2
+
+    # Kobo Libra 2 (1264x1680) mxc_epdc_v2_fb enforces dwSafeTicksEP3V3 = 900 ticks (9.0s @ HZ=100)
+    # after epdc_powerdown() for VEE rail stabilization; earlier /sys/power/state writes fail with -2.
+    # Wait interruptibly until >= 10s have elapsed since screensaver draw (and EPDC power_state is off),
+    # then retry up to 8 times (1s apart) in case the GC16 waveform finished slightly later.
+    t0=$(cat "$W/saver.t0" 2>/dev/null || echo 0)
+    case "$t0" in ''|*[!0-9]*) t0=0 ;; esac
+    w=0
+    while [ $w -lt 12 ]; do
+        if kobo_is_charging; then
+            [ -w /sys/power/state-extended ] && echo 0 > /sys/power/state-extended 2>/dev/null || true
+            t "sleep: deep suspend aborted (charger connected)"
+            return 1
+        fi
+        now=$(date +%s)
+        pstate=$(cat /sys/class/graphics/fb0/power_state 2>/dev/null || echo off)
+        if [ "$pstate" = off ] && { [ "$t0" -eq 0 ] || [ $((now - t0)) -ge 10 ] || [ "$now" -lt "$t0" ]; }; then
+            break
+        fi
+        sleep_wait_1s
+        if [ $? -eq 2 ]; then
+            [ -w /sys/power/state-extended ] && echo 0 > /sys/power/state-extended 2>/dev/null || true
+            t "sleep: deep suspend cancelled by user wakeup"
+            return 2
+        fi
+        w=$((w + 1))
+    done
 
     rc=1
     i=0
-    while [ $i -lt 3 ]; do
-        if echo mem > /sys/power/state 2>/dev/null; then
+    rm -f "$W/suspend.err"
+    while [ $i -lt 8 ]; do
+        kobo_is_charging && break
+        i=$((i + 1))
+        if echo mem > /sys/power/state 2>"$W/suspend.err"; then
             rc=0
             break
         fi
-        i=$((i + 1))
-        sleep 1
+        sleep_wait_1s
+        if [ $? -eq 2 ]; then
+            [ -w /sys/power/state-extended ] && echo 0 > /sys/power/state-extended 2>/dev/null || true
+            t "sleep: deep suspend cancelled by user wakeup (after $i tries)"
+            return 2
+        fi
     done
 
     # Resume subsystems immediately on hardware wakeup (KEY_POWER / sleepcover / USB plug-in).
     [ -w /sys/power/state-extended ] && echo 0 > /sys/power/state-extended 2>/dev/null || true
     usleep 100000
-    t "sleep: returned from mem suspend (rc=$rc)"
+    if [ "$rc" -eq 0 ]; then
+        t "sleep: returned from mem suspend (rc=0 tries=$i)"
+    else
+        err=$(tr '\n' ' ' < "$W/suspend.err" 2>/dev/null)
+        t "sleep: returned from mem suspend (rc=$rc tries=$i err=${err:-unknown})"
+    fi
     return $rc
 }
 
@@ -119,13 +174,13 @@ kobo_enter_sleep() {
     date +%s > "$W/saver.t0"
     t "sleep: entered screensaver (saved frontlight=$cur_fl)"
 
-    if kobo_deep_suspend; then
-        # Drain any KEY_POWER event queued during hardware wakeup before exiting sleep.
-        while read -t 0 -r _ <&4 2>/dev/null; do :; done
+    kobo_deep_suspend
+    ds_rc=$?
+    if [ "$ds_rc" -eq 0 ]; then
         kobo_exit_sleep
-        # Brief grace period to swallow late-arriving wakeup KEY_POWER from veradroid-input.
-        usleep 300000
-        while read -t 0 -r _ <&4 2>/dev/null; do :; done
+        MEM_WAKE_TS=$(date +%s)
+    elif [ "$ds_rc" -eq 2 ]; then
+        kobo_exit_sleep
     fi
 }
 
@@ -163,13 +218,23 @@ sleep_watch() {
     chmod 666 "$pf"
     touch "$W/lastinput" 2>/dev/null || true
     exec 4<>"$pf"
+    SLEEP_FIFO_READY=1
+    MEM_WAKE_TS=0
     while :; do
         # Non-blocking check with 15s timeout (FIFO events still wake immediately with 0ms latency)
         if read -t 15 -r ev <&4 2>/dev/null; then
             case "$ev" in
                 toggle|power)
-                    if [ -f "$W/sleeping" ] || [ -f "$W/saver_frozen" ]; then kobo_exit_sleep
-                    else kobo_enter_sleep; fi ;;
+                    if [ -f "$W/sleeping" ] || [ -f "$W/saver_frozen" ]; then
+                        kobo_exit_sleep
+                    else
+                        now=$(date +%s)
+                        if [ "${MEM_WAKE_TS:-0}" -gt 0 ] && [ $((now - MEM_WAKE_TS)) -lt 2 ]; then
+                            t "sleep: ignoring trailing $ev right after mem wakeup"
+                            continue
+                        fi
+                        kobo_enter_sleep
+                    fi ;;
                 sleep) kobo_enter_sleep ;;
                 wake)  kobo_exit_sleep ;;
             esac
