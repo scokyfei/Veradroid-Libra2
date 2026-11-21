@@ -16,9 +16,10 @@ extern int open(const char *, int, ...);
 extern int close(int);
 extern int ioctl(int, unsigned long, ...);
 extern int *__errno(void);
+extern void *dlopen(const char *, int);
 extern void *dlsym(void *, const char *);
 
-#define RTLD_NEXT       ((void *)-1L)
+#define RTLD_LAZY       1
 #define ARM_NR_MADVISE  220L
 #define ERR_ENOSYS      38
 #define O_RDWR_CLOEXEC  (2 | 02000000)
@@ -97,11 +98,18 @@ int SSL_write(void *ssl, const void *buf, int num)
         '/', 'q', 'u', 'e', 'r'
     };
     static const unsigned char hpack_pat[12] = {
-        0x61, 0x25, 0x42, 0x56, 0x66, 0x83, 0x34, 0xda, 0x58, 0xef, 0x69, 0x6b
+        0x61, 0x25, 0x42, 0x56, 0x96, 0x83, 0x4d, 0x3a, 0x58, 0xed, 0x69, 0x6c
     };
 
     if (!real_ssl_write) {
-        real_ssl_write = (ssl_write_fn)dlsym(RTLD_NEXT, "SSL_write");
+        void *h = dlopen("/system/lib/libssl.so", RTLD_LAZY);
+        if (!h)
+            h = dlopen("libssl.so", RTLD_LAZY);
+        if (h) {
+            void *fn = dlsym(h, "SSL_write");
+            if (fn && fn != (void *)SSL_write)
+                real_ssl_write = (ssl_write_fn)fn;
+        }
         if (!real_ssl_write)
             return -1;
     }
