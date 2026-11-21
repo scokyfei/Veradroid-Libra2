@@ -142,20 +142,22 @@ tune_apply() {
                t "display: ro.sf.lcd_density=${LCD_DENSITY:-300}"
            fi ;;
     esac
-    # Tune interactive governor for single-core race-to-idle (stock go_hispeed_load=99, io_is_busy=0
-    # throttles CPU to 198 MHz during WeRead .odex / LevelDB I/O and page rendering).
+    # Tune interactive governor for balanced responsiveness & battery life on single-core i.MX6:
+    # Burst to 996 MHz under heavy load (85%), step smoothly through 396/792 MHz, and drop back to
+    # 198 MHz quickly (20 ms) when reading static pages instead of pinning at 996 MHz on I/O waits.
     ig=/sys/devices/system/cpu/cpufreq/interactive
     if [ -d "$ig" ]; then
         [ -f "$W/cpufreq.interactive.state" ] || {
-            for k in go_hispeed_load target_loads io_is_busy min_sample_time; do
+            for k in go_hispeed_load target_loads io_is_busy min_sample_time above_hispeed_delay; do
                 [ -r "$ig/$k" ] && echo "$k $(cat "$ig/$k")"
             done > "$W/cpufreq.interactive.state"
         }
-        for kv in "go_hispeed_load:65" "target_loads:65" "io_is_busy:1" "min_sample_time:60000"; do
-            k=${kv%%:*}; v=${kv#*:}
-            [ -w "$ig/$k" ] && echo "$v" > "$ig/$k" 2>/dev/null || true
-        done
-        t "cpufreq: interactive tuned (go_hispeed=65 target=65 io_is_busy=1)"
+        [ -w "$ig/go_hispeed_load" ] && echo 85 > "$ig/go_hispeed_load" 2>/dev/null || true
+        [ -w "$ig/target_loads" ] && echo "75 396000:80 792000:85" > "$ig/target_loads" 2>/dev/null || true
+        [ -w "$ig/io_is_busy" ] && echo 0 > "$ig/io_is_busy" 2>/dev/null || true
+        [ -w "$ig/min_sample_time" ] && echo 20000 > "$ig/min_sample_time" 2>/dev/null || true
+        [ -w "$ig/above_hispeed_delay" ] && echo 20000 > "$ig/above_hispeed_delay" 2>/dev/null || true
+        t "cpufreq: interactive tuned (go_hispeed=85 target=75/80/85 io_is_busy=0 min_sample=20ms)"
     fi
     return 0
 }

@@ -61,6 +61,45 @@ screensaver_show() {
     splash "已休眠 · 按电源键唤醒" 40 || true
 }
 
+kobo_deep_suspend() {
+    # Enter true Linux mem suspend on Kobo Libra 2 (drops standby draw from ~8.5%/h to <0.1%/h).
+    # Skipped while charging so USB charging & SSH debugging stay uninterrupted.
+    [ -w /sys/power/state ] && grep -qw mem /sys/power/state 2>/dev/null || return 1
+    kobo_is_charging && return 1
+    [ -f "$W/saver_nofreeze" ] && return 1
+
+    # Power off SDIO Wi-Fi (8723ds + sdio_wifi_pwr) so the radio cannot block suspend or leak current.
+    if [ "$(kobo_wifi_enabled)" = 1 ]; then
+        echo 1 > "$W/sleep.wifi"
+        kobo_wifi_set 0
+        t "sleep: wifi powered off for deep suspend"
+    else
+        rm -f "$W/sleep.wifi"
+    fi
+
+    sync
+    [ -w /sys/power/state-extended ] && echo 1 > /sys/power/state-extended 2>/dev/null || true
+    # Wait for EPDC screensaver refresh to finish so /sys/power/state does not return -EBUSY.
+    sleep 2
+
+    rc=1
+    i=0
+    while [ $i -lt 3 ]; do
+        if echo mem > /sys/power/state 2>/dev/null; then
+            rc=0
+            break
+        fi
+        i=$((i + 1))
+        sleep 1
+    done
+
+    # Resume subsystems immediately on hardware wakeup (KEY_POWER / sleepcover / USB plug-in).
+    [ -w /sys/power/state-extended ] && echo 0 > /sys/power/state-extended 2>/dev/null || true
+    usleep 100000
+    t "sleep: returned from mem suspend (rc=$rc)"
+    return $rc
+}
+
 kobo_enter_sleep() {
     [ -f "$W/saver_frozen" ] || [ -f "$W/sleeping" ] && return 0
     touch "$W/sleeping" "$X/ctl/sleep"
@@ -79,10 +118,20 @@ kobo_enter_sleep() {
     type wifi_ps_restore >/dev/null 2>&1 && wifi_ps_restore
     date +%s > "$W/saver.t0"
     t "sleep: entered screensaver (saved frontlight=$cur_fl)"
+
+    if kobo_deep_suspend; then
+        # Drain any KEY_POWER event queued during hardware wakeup before exiting sleep.
+        while read -t 0 -r _ <&4 2>/dev/null; do :; done
+        kobo_exit_sleep
+        # Brief grace period to swallow late-arriving wakeup KEY_POWER from veradroid-input.
+        usleep 300000
+        while read -t 0 -r _ <&4 2>/dev/null; do :; done
+    fi
 }
 
 kobo_exit_sleep() {
     [ -f "$W/sleeping" ] || [ -f "$W/saver_frozen" ] || return 0
+    [ -w /sys/power/state-extended ] && echo 0 > /sys/power/state-extended 2>/dev/null || true
     if [ -f "$W/saver_nofreeze" ]; then
         rm -f "$W/saver_nofreeze"
     else
@@ -95,8 +144,16 @@ kobo_exit_sleep() {
     fi
     touch "$W/lastinput" 2>/dev/null || true
     rm -f "$X/ctl/sleep"
-    type wifi_ps_off >/dev/null 2>&1 && wifi_ps_off
     epd_send REDRAW
+    if [ -f "$W/sleep.wifi" ]; then
+        rm -f "$W/sleep.wifi"
+        (
+            kobo_wifi_set 1
+            type hostnet_write >/dev/null 2>&1 && hostnet_write
+            type wifi_ps_set >/dev/null 2>&1 && wifi_ps_set on
+            t "sleep: wifi restored after wakeup"
+        ) </dev/null >>"$LOG" 2>&1 &
+    fi
     t "sleep: woke up and redrew screen"
 }
 
@@ -107,8 +164,8 @@ sleep_watch() {
     touch "$W/lastinput" 2>/dev/null || true
     exec 4<>"$pf"
     while :; do
-        # Non-blocking check with 5s timeout (busybox read -t)
-        if read -t 5 -r ev <&4 2>/dev/null; then
+        # Non-blocking check with 15s timeout (FIFO events still wake immediately with 0ms latency)
+        if read -t 15 -r ev <&4 2>/dev/null; then
             case "$ev" in
                 toggle|power)
                     if [ -f "$W/sleeping" ] || [ -f "$W/saver_frozen" ]; then kobo_exit_sleep

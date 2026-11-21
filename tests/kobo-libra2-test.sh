@@ -148,6 +148,12 @@ grep -q 'SSL_write' "$TOP/tools/kobo/libkobo_madvise.c" \
     && grep -q 'KVAppUpdate' "$TOP/host/kobo/boot/lib/container.sh" \
     && ok "WeRead update popup & APK auto-download suppressed without modifying WeRead APK" \
     || fail "missing WeRead update popup suppression in libkobo_madvise.c/container.sh"
+grep -q 'kobo_deep_suspend' "$TOP/host/kobo/boot/lib/sleep.sh" \
+    && grep -q 'state-extended' "$TOP/host/kobo/boot/lib/sleep.sh" \
+    && grep -q 'rx_bytes' "$TOP/host/kobo/boot/lib/network.sh" \
+    && grep -q '^CACHE_DEDUP_S=30' "$TOP/host/kobo/models/libra2.conf" \
+    && ok "Power optimization wired (deep mem suspend + adaptive Wi-Fi LPS + governor/dedup tuning)" \
+    || fail "missing power optimization hooks in sleep.sh/network.sh/libra2.conf"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"

@@ -58,9 +58,23 @@ wifi_ps_restore() {
 
 wifi_ps_tick() {
     case "${WIFI_PS:-auto}" in
-        on)  wifi_ps_restore ;;
-        *)   [ -f "$W/sleeping" ] || [ -f "$W/saver_frozen" ] || wifi_ps_off ;;
+        on)  wifi_ps_restore; return 0 ;;
+        off) [ -f "$W/sleeping" ] || [ -f "$W/saver_frozen" ] || wifi_ps_off; return 0 ;;
     esac
+    [ -f "$W/sleeping" ] || [ -f "$W/saver_frozen" ] && return 0
+    # Adaptive Wi-Fi power saving on RTL8723DS:
+    # Keep LPS=2 (saves ~70-80 mA while reading); drop to LPS=0 only during active downloads (>64 KB/tick).
+    d=$(wifi_dev)
+    rx=$(cat "/sys/class/net/$d/statistics/rx_bytes" 2>/dev/null || echo 0)
+    prev=$(cat "$W/wifi.rx" 2>/dev/null || echo "$rx")
+    echo "$rx" > "$W/wifi.rx"
+    delta=$((rx - prev))
+    if [ "$delta" -gt 65536 ]; then
+        wifi_ps_off
+    else
+        [ -f "$W/wifi.ps" ] && rm -f "$W/wifi.ps" && wifi_ps_set on && t "wifi: idle -> power saving on"
+    fi
+    return 0
 }
 
 hostnet_write() {
@@ -103,7 +117,11 @@ hostnet_fix_rules() {
 net_start() {
     hostnet_fix_rules
     hostnet_write
-    wifi_ps_off
+    # Default to power-saving LPS=2; adaptive wifi_ps_tick() boosts to LPS=0 during downloads.
+    case "${WIFI_PS:-auto}" in
+        off) wifi_ps_off ;;
+        *)   wifi_ps_set on ;;
+    esac
     if [ ! -f "$W/net.rmem.state" ] && [ -w /proc/sys/net/core/rmem_max ]; then
         echo "$(cat /proc/sys/net/core/rmem_max 2>/dev/null) $(cat /proc/sys/net/core/wmem_max 2>/dev/null)" > "$W/net.rmem.state"
         echo 1048576 > /proc/sys/net/core/rmem_max 2>/dev/null || true
