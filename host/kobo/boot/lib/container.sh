@@ -220,6 +220,10 @@ container_start() {
     fi
     sysfont_prepare
     fstrim_defuse
+    # Purge any cached WeRead self-update metadata (KVAppUpdate/KVAppUpdateFile) and downloaded update APKs
+    rm -rf "$SYS"/data/data/com.tencent.weread.eink/databases/*/kv/KVAppUpdate* \
+           "$SYS"/data/data/com.tencent.weread.eink/databases/kv/KVAppUpdate* \
+           "$SYS"/data/data/com.tencent.weread.eink/cache/downloader/*.apk 2>/dev/null || true
     docs_snapshot
     if [ -f "$SYS/data/system/uiderrors.txt" ]; then
         wc -l < "$SYS/data/system/uiderrors.txt" 2>/dev/null | tr -d ' ' > "$W/uiderr.lines"

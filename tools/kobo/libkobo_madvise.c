@@ -16,7 +16,9 @@ extern int open(const char *, int, ...);
 extern int close(int);
 extern int ioctl(int, unsigned long, ...);
 extern int *__errno(void);
+extern void *dlsym(void *, const char *);
 
+#define RTLD_NEXT       ((void *)-1L)
 #define ARM_NR_MADVISE  220L
 #define ERR_ENOSYS      38
 #define O_RDWR_CLOEXEC  (2 | 02000000)
@@ -58,4 +60,68 @@ int madvise(void *addr, size_t length, int advice)
     /* Non-destructive advisory hints (e.g. MADV_WILLNEED=3, MADV_MERGEABLE=12) */
     *__errno() = saved_errno;
     return 0;
+}
+
+/*
+ * Intercept SSL_write to neutralize WeRead's mandatory self-update check
+ * (GET https://weread.qq.com/test-flight/query?...) without modifying WeRead's
+ * APK or disrupting HTTP/1.1 / HTTP/2 TLS connection pooling.
+ *
+ * In both plain ASCII ("/test-flight/quer" -> "/test-flight/quel") and RFC 7541
+ * HPACK Huffman (96-bit "/test-flight/quer" ending in 0x6b ['r', 6 bits] ->
+ * 0x68 ['l', 6 bits]), replacing 'r' with 'l' preserves exact byte & bit length
+ * while causing weread.qq.com to reply 404 Not Found.
+ */
+typedef int (*ssl_write_fn)(void *, const void *, int);
+static ssl_write_fn real_ssl_write;
+
+static int match_bytes(const unsigned char *hay, int hlen,
+                       const unsigned char *needle, int nlen)
+{
+    int i, j;
+    for (i = 0; i <= hlen - nlen; i++) {
+        for (j = 0; j < nlen; j++) {
+            if (hay[i + j] != needle[j])
+                break;
+        }
+        if (j == nlen)
+            return i;
+    }
+    return -1;
+}
+
+int SSL_write(void *ssl, const void *buf, int num)
+{
+    static const unsigned char ascii_pat[17] = {
+        '/', 't', 'e', 's', 't', '-', 'f', 'l', 'i', 'g', 'h', 't',
+        '/', 'q', 'u', 'e', 'r'
+    };
+    static const unsigned char hpack_pat[12] = {
+        0x61, 0x25, 0x42, 0x56, 0x66, 0x83, 0x34, 0xda, 0x58, 0xef, 0x69, 0x6b
+    };
+
+    if (!real_ssl_write) {
+        real_ssl_write = (ssl_write_fn)dlsym(RTLD_NEXT, "SSL_write");
+        if (!real_ssl_write)
+            return -1;
+    }
+
+    if (buf && num >= 12 && num <= 4096) {
+        const unsigned char *p = (const unsigned char *)buf;
+        int pos = match_bytes(p, num, hpack_pat, 12);
+        int apos = (pos < 0 && num >= 17) ? match_bytes(p, num, ascii_pat, 17) : -1;
+        if (pos >= 0 || apos >= 0) {
+            unsigned char tmp[4096];
+            int i;
+            for (i = 0; i < num; i++)
+                tmp[i] = p[i];
+            if (pos >= 0)
+                tmp[pos + 11] = 0x68;
+            if (apos >= 0)
+                tmp[apos + 16] = 'l';
+            return real_ssl_write(ssl, tmp, num);
+        }
+    }
+
+    return real_ssl_write(ssl, buf, num);
 }

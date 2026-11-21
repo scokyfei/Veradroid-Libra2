@@ -144,6 +144,10 @@ grep -q 'ethernet-service-wifi.jar' "$TOP/host/kobo/boot/lib/container.sh" \
     && [ -f "$TOP/tools/kobo/patch-ethernet-wifi.py" ] \
     && ok "Wi-Fi transport reporting (ethernet-service-wifi.jar) + RTL8723DS LPS disable + TCP rmem_max wired" \
     || fail "missing ethernet-service-wifi.jar or RTL8723DS LPS / rmem_max tuning"
+grep -q 'SSL_write' "$TOP/tools/kobo/libkobo_madvise.c" \
+    && grep -q 'KVAppUpdate' "$TOP/host/kobo/boot/lib/container.sh" \
+    && ok "WeRead update popup & APK auto-download suppressed without modifying WeRead APK" \
+    || fail "missing WeRead update popup suppression in libkobo_madvise.c/container.sh"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"

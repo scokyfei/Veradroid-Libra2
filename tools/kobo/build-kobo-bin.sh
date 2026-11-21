@@ -42,10 +42,13 @@ done
 
 if [ -n "${BIONIC_LIBC:-}" ] && [ -f "$BIONIC_LIBC" ]; then
     echo "[3b/5] libkobo_madvise.so (Bionic LD_PRELOAD shim)"
+    BIONIC_LIBDL=${BIONIC_LIBDL:-$(dirname "$BIONIC_LIBC")/libdl.so}
+    EXTRA_DL=
+    [ -f "$BIONIC_LIBDL" ] && EXTRA_DL=$BIONIC_LIBDL
     "$ZIG" cc -target arm-linux-gnueabi -mcpu=cortex_a9 -mfloat-abi=softfp -O2 \
         -shared -fPIC -nostdlib -fno-stack-protector -fno-unwind-tables \
         -fno-asynchronous-unwind-tables -Wl,-soname,libkobo_madvise.so \
-        "$TOP/tools/kobo/libkobo_madvise.c" "$BIONIC_LIBC" \
+        "$TOP/tools/kobo/libkobo_madvise.c" "$BIONIC_LIBC" $EXTRA_DL \
         -o "$OUT/libkobo_madvise.so"
 fi
 

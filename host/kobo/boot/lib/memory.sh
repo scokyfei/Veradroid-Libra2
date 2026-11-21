@@ -21,7 +21,8 @@ heap_fix() {
     [ -f "$f" ] || return 0
     _prop() {
         k=$1; v=$2
-        if grep -q "^$k=" "$f"; then sed -i "s|^$k=.*|$k=$v|" "$f"
+        ve=$(printf '%s' "$v" | sed 's/[&|\\]/\\&/g')
+        if grep -q "^$k=" "$f"; then sed -i "s|^$k=.*|$k=$ve|" "$f"
         else echo "$k=$v" >> "$f"; fi
     }
     set -- $(heap_values); hg=$1; hs=$2
@@ -36,6 +37,7 @@ heap_fix() {
     _prop ro.sys.fw.bg_apps_limit "${PROC_LIMIT:-2}"
     _prop persist.sys.strictmode.disable true
     _prop ro.product.model "VeraDroid on Kobo Libra 2"
+    _prop ro.product.board "libra2"
     t "memory: heap ${HEAP_START:-8m}/$hg/$hs (${HEAP_MINFREE:-2m}-${HEAP_MAXFREE:-8m}) + ro.config.low_ram=true"
 }
 
