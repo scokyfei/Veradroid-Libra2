@@ -360,6 +360,61 @@ static void jni_trim_heap(JNIEnvPtr e)
     }
 }
 
+static const char *load_weread_opt_jar(JNIEnvPtr e, jobj app, const char *proc_name)
+{
+    jobj (*find_cls)(JNIEnvPtr, const char *) = (jobj (*)(JNIEnvPtr, const char *))((*e)[6]);
+    jobj (*new_obj)(JNIEnvPtr, jobj, jobj, ...) = (jobj (*)(JNIEnvPtr, jobj, jobj, ...))((*e)[28]);
+    jobj (*get_mid)(JNIEnvPtr, jobj, const char *, const char *) = (jobj (*)(JNIEnvPtr, jobj, const char *, const char *))((*e)[33]);
+    jobj (*call_obj)(JNIEnvPtr, jobj, jobj, ...) = (jobj (*)(JNIEnvPtr, jobj, jobj, ...))((*e)[34]);
+    jobj (*get_smid)(JNIEnvPtr, jobj, const char *, const char *) = (jobj (*)(JNIEnvPtr, jobj, const char *, const char *))((*e)[113]);
+    void (*call_svoid)(JNIEnvPtr, jobj, jobj, ...) = (void (*)(JNIEnvPtr, jobj, jobj, ...))((*e)[141]);
+    jobj (*new_str)(JNIEnvPtr, const char *) = (jobj (*)(JNIEnvPtr, const char *))((*e)[167]);
+
+    int fd = open("/system/framework/kobo-weread-opt.jar", 0);
+    if (fd < 0) return "jar_missing";
+    close(fd);
+
+    jobj ctx = find_cls(e, "android/content/Context");
+    jobj m_cl = ctx ? get_mid(e, ctx, "getClassLoader", "()Ljava/lang/ClassLoader;") : NULL;
+    jobj m_cc = ctx ? get_mid(e, ctx, "getCodeCacheDir", "()Ljava/io/File;") : NULL;
+    if (!m_cl || !m_cc) { jni_clear_exc(e); return "no_ctx_methods"; }
+    jobj parent_cl = call_obj(e, app, m_cl);
+    jobj cc_dir = call_obj(e, app, m_cc);
+    jni_clear_exc(e);
+    if (!parent_cl || !cc_dir) return "null_cl_or_cc";
+
+    jobj file_cls = find_cls(e, "java/io/File");
+    jobj m_path = file_cls ? get_mid(e, file_cls, "getAbsolutePath", "()Ljava/lang/String;") : NULL;
+    if (!m_path) { jni_clear_exc(e); return "no_file_path"; }
+    jobj opt_dir = call_obj(e, cc_dir, m_path);
+    jni_clear_exc(e);
+    if (!opt_dir) return "null_opt_dir";
+
+    jobj dcl_cls = find_cls(e, "dalvik/system/DexClassLoader");
+    jobj dcl_init = dcl_cls ? get_mid(e, dcl_cls, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V") : NULL;
+    jobj dcl_load = dcl_cls ? get_mid(e, dcl_cls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;") : NULL;
+    if (!dcl_init || !dcl_load) { jni_clear_exc(e); return "no_dcl"; }
+
+    jobj s_jar = new_str(e, "/system/framework/kobo-weread-opt.jar");
+    jobj dcl = new_obj(e, dcl_cls, dcl_init, s_jar, opt_dir, NULL, parent_cl);
+    jni_clear_exc(e);
+    if (!dcl) return "dcl_failed";
+
+    jobj s_cls = new_str(e, "KoboWeReadOpt");
+    jobj opt_cls = call_obj(e, dcl, dcl_load, s_cls);
+    jni_clear_exc(e);
+    if (!opt_cls) return "cls_missing";
+
+    jobj m_init = get_smid(e, opt_cls, "init", "(Landroid/app/Application;Ljava/lang/String;)V");
+    jni_clear_exc(e);
+    if (!m_init) return "no_init_method";
+
+    jobj s_proc = new_str(e, proc_name);
+    call_svoid(e, opt_cls, m_init, app, s_proc);
+    jni_clear_exc(e);
+    return "loaded";
+}
+
 static void *weread_seg_opt_thread(void *unused)
 {
     (void)unused;
@@ -379,7 +434,23 @@ static void *weread_seg_opt_thread(void *unused)
     int nvms = 0;
     if (get_vms && get_vms(&vm, 1, &nvms) == 0 && nvms >= 1 && vm) {
         int (*attach)(JavaVMPtr, void **, void *) = (int (*)(JavaVMPtr, void **, void *))((*vm)[7]);
-        attach(vm, (void **)&env, NULL);
+        if (attach(vm, (void **)&env, NULL) == 0 && env) {
+            jobj (*find_cls)(JNIEnvPtr, const char *) = (jobj (*)(JNIEnvPtr, const char *))((*env)[6]);
+            jobj (*get_smid)(JNIEnvPtr, jobj, const char *, const char *) = (jobj (*)(JNIEnvPtr, jobj, const char *, const char *))((*env)[113]);
+            jobj (*call_sobj)(JNIEnvPtr, jobj, jobj, ...) = (jobj (*)(JNIEnvPtr, jobj, jobj, ...))((*env)[114]);
+            jobj at = find_cls(env, "android/app/ActivityThread");
+            jobj m_cur = at ? get_smid(env, at, "currentApplication", "()Landroid/app/Application;") : NULL;
+            jobj app = NULL;
+            for (int i = 0; m_cur && i < 400 && !app; i++) {
+                app = call_sobj(env, at, m_cur);
+                jni_clear_exc(env);
+                if (!app) usleep(15000);
+            }
+            if (app) {
+                const char *r = load_weread_opt_jar(env, app, "com.tencent.weread.eink:seg");
+                if (say) say(4, "KoboWeRead", "SEG_OPT_JAR result=%s", r);
+            }
+        }
     }
     if (say) say(4, "KoboWeRead", "SEG_OPT ready env=%p", (void *)env);
 
@@ -451,6 +522,8 @@ static void *weread_opt_thread(void *unused)
             if (app) {
                 const char *res = defer_webview_pool(env, app);
                 if (say) say(4, "KoboWeRead", "WEBVIEW_POOL result=%s", res);
+                const char *ores = load_weread_opt_jar(env, app, "com.tencent.weread.eink");
+                if (say) say(4, "KoboWeRead", "MAIN_OPT_JAR result=%s", ores);
             } else if (say) {
                 say(4, "KoboWeRead", "WEBVIEW_POOL skipped=no_app");
             }

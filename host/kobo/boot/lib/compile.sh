@@ -67,7 +67,7 @@ compile_mode() {
     esac
 }
 compile_done_filter() {
-    case "$1" in speed|everything) return 0 ;; esac
+    case "$1" in speed|speed-profile|everything) return 0 ;; esac
     [ -n "$1" ] && [ "$1" = "$(compile_mode)" ] && return 0
     return 1
 }

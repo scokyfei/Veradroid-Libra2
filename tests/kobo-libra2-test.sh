@@ -161,6 +161,15 @@ grep -q 'SetFontCacheLimit' "$TOP/tools/kobo/libkobo_madvise.c" \
     && grep -q 'deadline' "$TOP/host/kobo/boot/lib/memory.sh" \
     && ok "Koboweread-inspired WeRead optimizations wired (16MB Skia glyph cache + WebView defer + pool priority + trimHeap + deadline IO)" \
     || fail "missing WeRead Skia/WebView/pool/trimHeap/deadline optimizations"
+grep -q 'kobo-weread-opt.jar' "$TOP/host/kobo/boot/lib/container.sh" \
+    && grep -q 'load_weread_opt_jar' "$TOP/tools/kobo/libkobo_madvise.c" \
+    && grep -q 'FontSizeCache' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \
+    && grep -q 'ReaderPageRelease' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \
+    && grep -q 'SegDictRelease' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \
+    && grep -q 'speed-profile' "$TOP/host/kobo/boot/lib/compile.sh" \
+    && grep -q 'weread_boot_prefetch' "$TOP/host/kobo/boot/lib/afterboot.sh" \
+    && ok "WeRead FontSizeCache + ReaderPageRelease + SegDictRelease + speed-profile + boot-prefetch wired" \
+    || fail "missing WeRead opt JAR / speed-profile / boot-prefetch hooks"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"

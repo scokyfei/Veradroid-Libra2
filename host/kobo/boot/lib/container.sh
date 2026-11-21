@@ -218,6 +218,15 @@ container_start() {
                 && t "container: installed Wi-Fi-transport ethernet-service.jar"
         fi
     fi
+    # Install WeRead-only runtime optimizer DEX (FontSizeCache + ReaderPageRelease + SegDictRelease)
+    if [ -f "$VD/bin/kobo-weread-opt.jar" ] && [ -d "$R/system/framework" ]; then
+        if ! cmp -s "$VD/bin/kobo-weread-opt.jar" "$R/system/framework/kobo-weread-opt.jar"; then
+            cp "$VD/bin/kobo-weread-opt.jar" "$R/system/framework/kobo-weread-opt.jar.new" \
+                && chmod 644 "$R/system/framework/kobo-weread-opt.jar.new" \
+                && mv -f "$R/system/framework/kobo-weread-opt.jar.new" "$R/system/framework/kobo-weread-opt.jar" \
+                && t "container: installed kobo-weread-opt.jar"
+        fi
+    fi
     sysfont_prepare
     fstrim_defuse
     # Purge any cached WeRead self-update metadata (KVAppUpdate/KVAppUpdateFile) and downloaded update APKs

@@ -362,11 +362,40 @@ RDME
     fi
     [ -n "$AB_ONCE" ] && [ -n "$ABV" ] && echo "$ABV" > $ABM
     ( sleep 90; home_aot ) </dev/null >>$LOG 2>&1 &
+    ( sleep 5; weread_boot_prefetch ) </dev/null >>$LOG 2>&1 &
     # 可选 DNS：settings.conf 里的 DNS_MODE 在开机后重新应用到 netd（DHCP 会把它改回自动）
     dns_apply
     # 12 / 24 小时制跟 Kindle（tz.sh；值没变就不写）
     type time_format_apply >/dev/null 2>&1 && time_format_apply
     type tz_sync_live >/dev/null 2>&1 && tz_sync_live       # 开机前按偏移猜的时区，后台已经查到准确名字时换掉
+}
+
+# Warm Linux page cache for WeRead's compact odex and core native libs after boot
+# (only when MemAvailable >= 180 MB; low priority so UI stays responsive).
+weread_boot_prefetch() {
+    [ -f "$W/frozen" ] || [ -f "$W/saver_frozen" ] && return 0
+    avail=$(awk '/^MemAvailable:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null)
+    [ "${avail:-0}" -ge 180 ] || return 0
+    renice -n 19 -p $$ >/dev/null 2>&1 || true
+    wdir=
+    for d in "$SYS"/data/app/com.tencent.weread.eink-*; do
+        [ -d "$d" ] && { wdir=$d; break; }
+    done
+    [ -n "$wdir" ] || return 0
+    bytes=0
+    for f in "$wdir"/oat/arm/base.odex \
+             "$wdir"/lib/arm/libleveldb-android.so \
+             "$wdir"/lib/arm/libmoai-sqlite.so \
+             "$wdir"/lib/arm/libc++_shared.so; do
+        [ -f "$f" ] || continue
+        sz=$(wc -c < "$f" 2>/dev/null || echo 0)
+        # Skip huge full-speed odex (>40 MB) so we never evict active cache; speed-profile (~15-30 MB) fits cleanly
+        [ "$sz" -gt 41943040 ] && continue
+        dd if="$f" of=/dev/null bs=262144 >/dev/null 2>&1 || true
+        bytes=$((bytes + sz))
+    done
+    [ "$bytes" -gt 0 ] && t "prefetch: warmed WeRead page cache ($((bytes / 1048576)) MB)"
+    return 0
 }
 
 # 小内存机型（< 700 MB：PW5 / KT5 / KT6 / 老机型）：ActivityManager 按“内存 + 屏幕尺寸”给 lmkd 选杀进程的门槛，
