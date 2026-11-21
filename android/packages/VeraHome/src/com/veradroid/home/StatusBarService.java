@@ -42,9 +42,19 @@ public class StatusBarService extends Service {
         }
     };
 
-    /** 系统的分钟广播 / 改时间 / 改时区：马上刷新（Kobo 睡醒后 uptime 计时的 tick 还要再等最多一分钟）。 */
+    /** 系统的分钟广播 / 改时间 / 改时区 / 电量与充电变化：马上刷新。 */
     private final BroadcastReceiver timeReceiver = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { handler.removeCallbacks(tick); tick.run(); }
+        @Override public void onReceive(Context c, Intent i) {
+            String act = i != null ? i.getAction() : null;
+            if (Intent.ACTION_BATTERY_CHANGED.equals(act)
+                    || Intent.ACTION_POWER_CONNECTED.equals(act)
+                    || Intent.ACTION_POWER_DISCONNECTED.equals(act)) {
+                refreshNow();
+            } else {
+                handler.removeCallbacks(tick);
+                tick.run();
+            }
+        }
     };
     private boolean timeReceiverOn;
 
@@ -66,6 +76,8 @@ public class StatusBarService extends Service {
         if (!timeReceiverOn) {
             IntentFilter tf = new IntentFilter(Intent.ACTION_TIME_TICK);
             tf.addAction(Intent.ACTION_TIME_CHANGED); tf.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+            tf.addAction(Intent.ACTION_BATTERY_CHANGED);
+            tf.addAction(Intent.ACTION_POWER_CONNECTED); tf.addAction(Intent.ACTION_POWER_DISCONNECTED);
             try { registerReceiver(timeReceiver, tf); timeReceiverOn = true; } catch (Throwable ignored) { }
         }
         return START_STICKY;
@@ -94,14 +106,22 @@ public class StatusBarService extends Service {
         if (batt != null) batt.setVisibility(cfg.optBoolean("battery", true) ? View.VISIBLE : View.GONE);
         if (batt != null) {
             int p = -1;
-            try {
-                BatteryManager bm = (BatteryManager) getSystemService(BATTERY_SERVICE);
-                p = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
-            } catch (Throwable ignored) { }
-            String battText = p >= 0 ? p + "%" : "";
-            if (!battText.equals(String.valueOf(batt.getText()))) batt.setText(battText);
             boolean charging = false;
-            try { BatteryManager bm2 = (BatteryManager) getSystemService(BATTERY_SERVICE); charging = bm2 != null && bm2.isCharging(); } catch (Throwable ignored) { }
+            int[] live = Ui.liveBattery(this);
+            if (live != null) {
+                p = live[0];
+                charging = live[1] == 1;
+            } else {
+                try {
+                    BatteryManager bm = (BatteryManager) getSystemService(BATTERY_SERVICE);
+                    if (bm != null) {
+                        p = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+                        charging = bm.isCharging();
+                    }
+                } catch (Throwable ignored) { }
+            }
+            String battText = p >= 0 ? (charging ? "充电中 " + p + "%" : p + "%") : "";
+            if (!battText.equals(String.valueOf(batt.getText()))) batt.setText(battText);
             Stats.sampleBattery(this, p, charging);
         }
     }

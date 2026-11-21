@@ -132,7 +132,18 @@ public class HomeActivity extends Activity {
      * 醒来后要再等最多一分钟；TIME_TICK 按开机时间（含休眠）到期，醒来就到（宿主 alarmfix 之后 AlarmManager 才按时发它）。
      */
     private final BroadcastReceiver timeReceiver = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { if (resumed) { handler.removeCallbacks(tick); tick.run(); } }
+        @Override public void onReceive(Context c, Intent i) {
+            if (!resumed) return;
+            String act = i != null ? i.getAction() : null;
+            if (Intent.ACTION_BATTERY_CHANGED.equals(act)
+                    || Intent.ACTION_POWER_CONNECTED.equals(act)
+                    || Intent.ACTION_POWER_DISCONNECTED.equals(act)) {
+                refreshStatus();
+            } else {
+                handler.removeCallbacks(tick);
+                tick.run();
+            }
+        }
     };
     private boolean timeReceiverOn;
 
@@ -355,6 +366,8 @@ public class HomeActivity extends Activity {
         if (!timeReceiverOn) {
             IntentFilter tf = new IntentFilter(Intent.ACTION_TIME_TICK);
             tf.addAction(Intent.ACTION_TIME_CHANGED); tf.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+            tf.addAction(Intent.ACTION_BATTERY_CHANGED);
+            tf.addAction(Intent.ACTION_POWER_CONNECTED); tf.addAction(Intent.ACTION_POWER_DISCONNECTED);
             try { registerReceiver(timeReceiver, tf); timeReceiverOn = true; } catch (Throwable ignored) { }
         }
         showUploadResult();
@@ -1303,11 +1316,14 @@ public class HomeActivity extends Activity {
         if (name.length() == 0) name = "VeraDroid";
         String clock = name + "    " + Ui.clock(this);
         Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
+        int[] live = Ui.liveBattery(this);
+        String batStr = live != null ? String.valueOf(live[0]) : st.get("battery");
+        boolean chg = live != null ? (live[1] == 1) : "1".equals(st.get("charging"));
         StringBuilder sb = new StringBuilder();
         if ("0".equals(st.get("wifi"))) sb.append("Wi-Fi 关   ");
-        if (st.get("battery") != null) {
-            if ("1".equals(st.get("charging"))) sb.append("充电中 ");
-            sb.append(st.get("battery")).append("%");
+        if (batStr != null) {
+            if (chg) sb.append("充电中 ");
+            sb.append(batStr).append("%");
         }
         String state = sb.toString();
         if (blocks != null) blocks.refreshStatus(Ui.clock(this), state);

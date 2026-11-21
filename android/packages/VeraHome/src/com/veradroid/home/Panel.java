@@ -749,10 +749,16 @@ final class Panel {
     private void readStatus() {
         // 两个文件都没被改写过（看修改时间和长度）：连读都不用读。打开面板的路上只做这一步检查。
         java.io.File f1 = new java.io.File(HostLink.CTL + "status"), f2 = new java.io.File(HostLink.KFB + "settings");
-        long stamp = f1.lastModified() * 31 + f1.length() * 7 + f2.lastModified() * 17 + f2.length() + System.currentTimeMillis() / 86400000L;
+        int[] live = Ui.liveBattery(ctx);
+        long batStamp = live != null ? (live[0] * 13L + live[1] * 3L) : -1L;
+        long stamp = f1.lastModified() * 31 + f1.length() * 7 + f2.lastModified() * 17 + f2.length() + System.currentTimeMillis() / 86400000L + batStamp * 97L;
         if (stamp == seenStamp && seenStatus != null) return;
         seenStamp = stamp;
         Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
+        if (live != null) {
+            st.put("battery", String.valueOf(live[0]));
+            st.put("charging", live[1] == 1 ? "1" : "0");
+        }
         Map<String, String> cfg = HostLink.kv(HostLink.KFB + "settings");
         String key = new java.util.TreeMap<String, String>(st).toString() + new java.util.TreeMap<String, String>(cfg).toString();
         if (key.equals(seenStatus)) return;

@@ -190,6 +190,8 @@ helpers_supervise() {
 watchdog() {
     # PERF: poll every 60s while frozen to cut host wakeups. FIFO cmd.sh still handles UI.
     # MEM: re-apply kernel LMK each tick (lab126 can reset minfree).
+    last_st_bat=
+    last_st_chg=
     while :; do
         if [ -f $W/saver_frozen ] || [ -f $W/frozen ]; then sleep_for=60; else sleep_for=20; fi
         sleep $sleep_for
@@ -217,6 +219,12 @@ watchdog() {
             type wifi_ps_tick >/dev/null 2>&1 && wifi_ps_tick
             [ -f $W/booted ] && type bgnice_tick >/dev/null 2>&1 && bgnice_tick     # 后台应用降优先级（bgnice.sh）
             [ -f $W/booted ] && type compile_watch >/dev/null 2>&1 && compile_watch
+            cur_st_bat=$(kobo_battery 2>/dev/null)
+            kobo_is_charging && cur_st_chg=1 || cur_st_chg=0
+            if [ "$cur_st_bat" != "$last_st_bat" ] || [ "$cur_st_chg" != "$last_st_chg" ]; then
+                last_st_bat=$cur_st_bat; last_st_chg=$cur_st_chg
+                type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
+            fi
         fi
         type bat_log >/dev/null 2>&1 && bat_log
         # 系统盘快满了就自动扩（storage.sh）。冻结时不做。

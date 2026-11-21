@@ -1331,8 +1331,9 @@ final class BlocksHome {
     /** 电量每次进“我的”都可能变：只改那一格的字。 */
     private void refreshMe() {
         if (meBattery == null) return;
-        Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
-        String s = (st.get("battery") == null ? "—" : st.get("battery")) + "%";
+        int[] live = Ui.liveBattery(a);
+        String b = live != null ? String.valueOf(live[0]) : HostLink.kv(HostLink.CTL + "status").get("battery");
+        String s = (b == null ? "—" : b) + "%";
         if (!s.contentEquals(meBattery.getText())) meBattery.setText(s);
     }
 

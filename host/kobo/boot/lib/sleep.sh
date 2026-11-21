@@ -200,12 +200,14 @@ kobo_exit_sleep() {
     touch "$W/lastinput" 2>/dev/null || true
     rm -f "$X/ctl/sleep"
     epd_send REDRAW
+    type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
     if [ -f "$W/sleep.wifi" ]; then
         rm -f "$W/sleep.wifi"
         (
             kobo_wifi_set 1
             type hostnet_write >/dev/null 2>&1 && hostnet_write
             type wifi_ps_set >/dev/null 2>&1 && wifi_ps_set on
+            type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
             t "sleep: wifi restored after wakeup"
         ) </dev/null >>"$LOG" 2>&1 &
     fi

@@ -24,6 +24,25 @@ final class Ui {
         return new java.text.SimpleDateFormat(clockPattern(c), java.util.Locale.CHINA).format(new java.util.Date());
     }
 
+    /** Live battery state [percent, charging(0|1)] from sticky ACTION_BATTERY_CHANGED (kernel healthd). */
+    static int[] liveBattery(Context c) {
+        try {
+            android.content.Intent bi = c.registerReceiver(null,
+                    new android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED));
+            if (bi == null) return null;
+            int level = bi.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
+            int scale = bi.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100);
+            int status = bi.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1);
+            int plugged = bi.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0);
+            int pct = (level >= 0 && scale > 0) ? (level * 100 / scale) : -1;
+            int chg = (status == android.os.BatteryManager.BATTERY_STATUS_CHARGING
+                    || status == android.os.BatteryManager.BATTERY_STATUS_FULL
+                    || plugged > 0) ? 1 : 0;
+            if (pct >= 0) return new int[] { pct, chg };
+        } catch (Throwable ignored) { }
+        return null;
+    }
+
     private Ui() { }
 
     /**
