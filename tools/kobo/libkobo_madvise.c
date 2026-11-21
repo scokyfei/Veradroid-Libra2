@@ -302,6 +302,38 @@ static const char *defer_webview_pool(JNIEnvPtr e, jobj app)
     return "deferred";
 }
 
+static int read_self_rss_kb(void)
+{
+    char buf[1024];
+    int n = read_small_file("/proc/self/status", buf, sizeof(buf));
+    if (n <= 0) return -1;
+    const char *p = buf;
+    while (*p) {
+        if (str_starts(p, "VmRSS:")) {
+            p += 6;
+            while (*p == ' ' || *p == '\t') p++;
+            return parse_uint(p);
+        }
+        while (*p && *p != '\n') p++;
+        if (*p == '\n') p++;
+    }
+    return -1;
+}
+
+static void lower_all_threads_nice19(void)
+{
+    void *d = opendir("/proc/self/task");
+    if (!d) return;
+    struct kobo_dirent *ent;
+    while ((ent = (struct kobo_dirent *)readdir(d)) != NULL) {
+        if (ent->d_name[0] < '1' || ent->d_name[0] > '9')
+            continue;
+        unsigned int tid = (unsigned int)parse_uint(ent->d_name);
+        if (tid > 0) setpriority(PRIO_PROCESS, tid, 19);
+    }
+    closedir(d);
+}
+
 static void jni_trim_heap(JNIEnvPtr e)
 {
     jobj (*find_cls)(JNIEnvPtr, const char *) = (jobj (*)(JNIEnvPtr, const char *))((*e)[6]);
@@ -313,14 +345,62 @@ static void jni_trim_heap(JNIEnvPtr e)
     jobj vmr = find_cls(e, "dalvik/system/VMRuntime");
     if (!vmr) { jni_clear_exc(e); return; }
     jobj m_get = get_smid(e, vmr, "getRuntime", "()Ldalvik/system/VMRuntime;");
+    jobj m_gc = get_mid(e, vmr, "concurrentGC", "()V");
     jobj m_trim = get_mid(e, vmr, "trimHeap", "()V");
     if (!m_get || !m_trim) { jni_clear_exc(e); return; }
     jobj rt = call_sobj(e, vmr, m_get);
     jni_clear_exc(e);
     if (rt) {
+        if (m_gc) {
+            call_void(e, rt, m_gc);
+            jni_clear_exc(e);
+        }
         call_void(e, rt, m_trim);
         jni_clear_exc(e);
     }
+}
+
+static void *weread_seg_opt_thread(void *unused)
+{
+    (void)unused;
+    void *log = dlopen("liblog.so", RTLD_LAZY);
+    int (*say)(int, const char *, const char *, ...) =
+        log ? (int (*)(int, const char *, const char *, ...))dlsym(log, "__android_log_print") : NULL;
+
+    int (*get_vms)(JavaVMPtr *, int, int *) =
+        (int (*)(JavaVMPtr *, int, int *))dlsym((void *)-2L, "JNI_GetCreatedJavaVMs");
+    if (!get_vms) {
+        void *art = dlopen("/system/lib/libart.so", RTLD_LAZY);
+        if (!art) art = dlopen("libart.so", RTLD_LAZY);
+        if (art) get_vms = (int (*)(JavaVMPtr *, int, int *))dlsym(art, "JNI_GetCreatedJavaVMs");
+    }
+    JavaVMPtr vm = NULL;
+    JNIEnvPtr env = NULL;
+    int nvms = 0;
+    if (get_vms && get_vms(&vm, 1, &nvms) == 0 && nvms >= 1 && vm) {
+        int (*attach)(JavaVMPtr, void **, void *) = (int (*)(JavaVMPtr, void **, void *))((*vm)[7]);
+        attach(vm, (void **)&env, NULL);
+    }
+    if (say) say(4, "KoboWeRead", "SEG_OPT ready env=%p", (void *)env);
+
+    int ticks = 0;
+    int last_trim = -90;
+    for (;;) {
+        lower_all_threads_nice19();
+        int step = (ticks < 20) ? 2 : 10;
+        usleep((unsigned int)step * 1000000u);
+        ticks += step;
+        if (env && (ticks - last_trim) >= 90 && (ticks % 30) < step) {
+            int avail = read_mem_available_kb();
+            if (avail < 160000) {
+                int before = read_self_rss_kb();
+                jni_trim_heap(env);
+                last_trim = ticks;
+                if (say) say(4, "KoboWeRead", "SEG_TRIM avail_kb=%d rss_kb=%d->%d", avail, before, read_self_rss_kb());
+            }
+        }
+    }
+    return NULL;
 }
 
 static void *weread_opt_thread(void *unused)
@@ -379,20 +459,21 @@ static void *weread_opt_thread(void *unused)
         say(4, "KoboWeRead", "WEBVIEW_POOL skipped=no_vm get_vms=%p nvms=%d", (void *)get_vms, nvms);
     }
 
-    /* 3. Background thread-pool priority loop + low-memory VMRuntime.trimHeap() */
+    /* 3. Background thread-pool priority loop + low-memory concurrentGC()+trimHeap() */
     int ticks = 0;
-    int last_trim = -180;
+    int last_trim = -90;
     for (;;) {
         tune_weread_threads();
         int step = (ticks < 30) ? 2 : 15;
         usleep((unsigned int)step * 1000000u);
         ticks += step;
-        if (env && (ticks - last_trim) >= 180 && (ticks % 60) < step) {
+        if (env && (ticks - last_trim) >= 90 && (ticks % 30) < step) {
             int avail = read_mem_available_kb();
-            if (avail < 150000) {
+            if (avail < 160000) {
+                int before = read_self_rss_kb();
                 jni_trim_heap(env);
                 last_trim = ticks;
-                if (say) say(4, "KoboWeRead", "MEM_TRIM avail_kb=%d", avail);
+                if (say) say(4, "KoboWeRead", "MEM_TRIM avail_kb=%d rss_kb=%d->%d", avail, before, read_self_rss_kb());
             }
         }
     }
@@ -418,6 +499,10 @@ static void maybe_init_weread_opt(void)
     if (str_eq(cmd, "com.tencent.weread.eink")) {
         long tid = 0;
         if (pthread_create(&tid, NULL, weread_opt_thread, NULL) == 0)
+            pthread_detach(tid);
+    } else if (str_eq(cmd, "com.tencent.weread.eink:seg")) {
+        long tid = 0;
+        if (pthread_create(&tid, NULL, weread_seg_opt_thread, NULL) == 0)
             pthread_detach(tid);
     }
 }
