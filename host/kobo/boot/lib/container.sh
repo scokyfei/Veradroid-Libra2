@@ -229,10 +229,18 @@ container_start() {
     fi
     sysfont_prepare
     fstrim_defuse
-    # Purge any cached WeRead self-update metadata (KVAppUpdate/KVAppUpdateFile) and downloaded update APKs
+    # Purge any cached WeRead self-update metadata (KVAppUpdate/KVAppUpdateFile), downloaded update APKs,
+    # and queued telemetry/crash upload spools (BusReport / Bugly uploads / oversized bugly_db_).
     rm -rf "$SYS"/data/data/com.tencent.weread.eink/databases/*/kv/KVAppUpdate* \
            "$SYS"/data/data/com.tencent.weread.eink/databases/kv/KVAppUpdate* \
-           "$SYS"/data/data/com.tencent.weread.eink/cache/downloader/*.apk 2>/dev/null || true
+           "$SYS"/data/data/com.tencent.weread.eink/cache/downloader/*.apk \
+           "$SYS"/data/data/com.tencent.weread.eink/files/BusReport/* \
+           "$SYS"/data/data/com.tencent.weread.eink/files/bugly_upload_file/* \
+           "$SYS"/data/data/com.tencent.weread.eink/files/bugly_upload_zip/* 2>/dev/null || true
+    bdb="$SYS/data/data/com.tencent.weread.eink/databases/bugly_db_"
+    if [ -f "$bdb" ] && [ "$(wc -c < "$bdb" 2>/dev/null || echo 0)" -gt 524288 ]; then
+        rm -f "$bdb" "${bdb}-journal" "${bdb}-wal" "${bdb}-shm" 2>/dev/null || true
+    fi
     docs_snapshot
     if [ -f "$SYS/data/system/uiderrors.txt" ]; then
         wc -l < "$SYS/data/system/uiderrors.txt" 2>/dev/null | tr -d ' ' > "$W/uiderr.lines"

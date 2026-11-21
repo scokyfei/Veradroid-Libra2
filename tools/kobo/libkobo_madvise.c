@@ -45,6 +45,7 @@ struct kobo_madv_req {
 };
 
 static void maybe_init_weread_opt(void);
+static int is_weread_proc(void);
 
 int madvise(void *addr, size_t length, int advice)
 {
@@ -132,7 +133,13 @@ int SSL_write(void *ssl, const void *buf, int num)
         const unsigned char *p = (const unsigned char *)buf;
         int pos = match_bytes(p, num, hpack_pat, 12);
         int apos = (pos < 0 && num >= 17) ? match_bytes(p, num, ascii_pat, 17) : -1;
-        if (pos >= 0 || apos >= 0) {
+        /* Fallback for OSS telemetry if HTTPDNS ever connects to oss.weread.qq.com by IP */
+        static const unsigned char oss_pat[17] = {
+            '/', 'w', 'r', 'b', 'u', 's', '/', 'r', 'e', 'p', 'o', 'r', 't', '/', 'o', 's', 's'
+        };
+        int opos = (pos < 0 && apos < 0 && num >= 17 && is_weread_proc())
+                 ? match_bytes(p, num, oss_pat, 17) : -1;
+        if (pos >= 0 || apos >= 0 || opos >= 0) {
             unsigned char tmp[4096];
             int i;
             for (i = 0; i < num; i++)
@@ -141,11 +148,143 @@ int SSL_write(void *ssl, const void *buf, int num)
                 tmp[pos + 11] = 0x68;
             if (apos >= 0)
                 tmp[apos + 16] = 'l';
+            if (opos >= 0)
+                tmp[opos + 16] = 'x';
             return real_ssl_write(ssl, tmp, num);
         }
     }
 
     return real_ssl_write(ssl, buf, num);
+}
+
+/*
+ * Zero-DNS / Zero-TLS telemetry blocker strictly scoped to WeRead processes
+ * (com.tencent.weread.eink and :seg). Blocks verified pure analytics, crash
+ * upload, and APM telemetry hosts before any DNS query, TCP SYN, TLS handshake,
+ * or Wi-Fi LPS wakeup occurs. Core WeRead APIs (i.weread.qq.com, s.weread.qq.com,
+ * res.weread.qq.com, download.weread.qq.com, cdn.*, weread.qq.com, weixin login)
+ * are never touched.
+ */
+#define BIONIC_EAI_NONAME 8
+
+typedef int (*gai_fn)(const char *, const char *, const void *, void **);
+typedef int (*gai_net_fn)(const char *, const char *, const void *, unsigned int, unsigned int, void **);
+typedef int (*gai_ctx_fn)(const char *, const char *, const void *, const void *, void **);
+typedef int (*log_print_fn)(int, const char *, const char *, ...);
+
+static gai_fn     real_getaddrinfo;
+static gai_net_fn real_android_getaddrinfofornet;
+static gai_ctx_fn real_android_getaddrinfofornetcontext;
+static log_print_fn dns_log_fn;
+static volatile unsigned int dns_block_cnt;
+
+static int str_ieq(const char *a, const char *b)
+{
+    while (*a && *b) {
+        unsigned char ca = (unsigned char)*a++;
+        unsigned char cb = (unsigned char)*b++;
+        if (ca >= 'A' && ca <= 'Z') ca += ('a' - 'A');
+        if (cb >= 'A' && cb <= 'Z') cb += ('a' - 'A');
+        if (ca != cb) return 0;
+    }
+    return *a == 0 && *b == 0;
+}
+
+static int is_blocked_telemetry_host(const char *host)
+{
+    static const char *const kHosts[] = {
+        "android.bugly.qq.com",
+        "bugly.qq.com",
+        "astat.bugly.qcloud.com",
+        "android.rqd.qq.com",
+        "rmonitor.qq.com",
+        "otheve.beacon.qq.com",
+        "othstr.beacon.qq.com",
+        "oth.eve.mdt.qq.com",
+        "oth.str.mdt.qq.com",
+        "h.trace.qq.com",
+        "pingmid.qq.com",
+        "oss.weread.qq.com",
+        "oss.mail.qq.com",
+    };
+    if (!host || !*host)
+        return 0;
+    for (size_t i = 0; i < sizeof(kHosts) / sizeof(kHosts[0]); i++) {
+        if (str_ieq(host, kHosts[i]))
+            return 1;
+    }
+    return 0;
+}
+
+static void log_dns_block(const char *host)
+{
+    unsigned int n = __sync_add_and_fetch(&dns_block_cnt, 1);
+    if (n <= 12 || (n % 50) == 0) {
+        if (!dns_log_fn) {
+            void *lh = dlopen("/system/lib/liblog.so", RTLD_LAZY);
+            if (!lh) lh = dlopen("liblog.so", RTLD_LAZY);
+            if (lh) dns_log_fn = (log_print_fn)dlsym(lh, "__android_log_print");
+        }
+        if (dns_log_fn)
+            dns_log_fn(4, "KoboWeRead", "DNS_BLOCK host=%s count=%u", host, n);
+    }
+}
+
+static void *resolve_libc_sym(const char *name, void *self)
+{
+    void *h = dlopen("/system/lib/libc.so", RTLD_LAZY);
+    if (!h) h = dlopen("libc.so", RTLD_LAZY);
+    if (!h) return NULL;
+    void *fn = dlsym(h, name);
+    return (fn && fn != self) ? fn : NULL;
+}
+
+int getaddrinfo(const char *node, const char *service, const void *hints, void **res)
+{
+    if (node && is_weread_proc() && is_blocked_telemetry_host(node)) {
+        log_dns_block(node);
+        if (res) *res = NULL;
+        return BIONIC_EAI_NONAME;
+    }
+    if (!real_getaddrinfo)
+        real_getaddrinfo = (gai_fn)resolve_libc_sym("getaddrinfo", (void *)getaddrinfo);
+    if (!real_getaddrinfo)
+        return BIONIC_EAI_NONAME;
+    return real_getaddrinfo(node, service, hints, res);
+}
+
+int android_getaddrinfofornet(const char *hostname, const char *servname,
+                              const void *hints, unsigned int netid,
+                              unsigned int mark, void **res)
+{
+    if (hostname && is_weread_proc() && is_blocked_telemetry_host(hostname)) {
+        log_dns_block(hostname);
+        if (res) *res = NULL;
+        return BIONIC_EAI_NONAME;
+    }
+    if (!real_android_getaddrinfofornet)
+        real_android_getaddrinfofornet = (gai_net_fn)resolve_libc_sym(
+            "android_getaddrinfofornet", (void *)android_getaddrinfofornet);
+    if (!real_android_getaddrinfofornet)
+        return BIONIC_EAI_NONAME;
+    return real_android_getaddrinfofornet(hostname, servname, hints, netid, mark, res);
+}
+
+int android_getaddrinfofornetcontext(const char *hostname, const char *servname,
+                                     const void *hints, const void *netcontext,
+                                     void **res)
+{
+    if (hostname && is_weread_proc() && is_blocked_telemetry_host(hostname)) {
+        log_dns_block(hostname);
+        if (res) *res = NULL;
+        return BIONIC_EAI_NONAME;
+    }
+    if (!real_android_getaddrinfofornetcontext)
+        real_android_getaddrinfofornetcontext = (gai_ctx_fn)resolve_libc_sym(
+            "android_getaddrinfofornetcontext", (void *)android_getaddrinfofornetcontext);
+    if (!real_android_getaddrinfofornetcontext)
+        return BIONIC_EAI_NONAME;
+    return real_android_getaddrinfofornetcontext(hostname, servname, hints, netcontext, res);
 }
 
 /*
@@ -245,6 +384,9 @@ static void tune_weread_threads(void)
             str_starts(comm, "WRNetworkPool") ||
             str_starts(comm, "WRLowPriorityPo") ||
             str_starts(comm, "BUGLY_ASYNC") ||
+            str_starts(comm, "Bugly") ||
+            str_starts(comm, "RMonitor_") ||
+            str_starts(comm, "OssLog") ||
             str_starts(comm, "RxIoScheduler") ||
             str_starts(comm, "RxComputationSc") ||
             str_starts(comm, "glide-")) {
@@ -554,6 +696,27 @@ static void *weread_opt_thread(void *unused)
 }
 
 static volatile int init_pid = 0;
+static volatile int weread_pid = 0;
+static volatile int weread_flag = 0;
+
+static int is_weread_proc(void)
+{
+    int pid = getpid();
+    if (__builtin_expect(weread_pid == pid, 1))
+        return weread_flag;
+    if (getuid() < 10000)
+        return 0;
+    char cmd[64];
+    if (read_small_file("/proc/self/cmdline", cmd, sizeof(cmd)) <= 0)
+        return 0;
+    if (str_starts(cmd, "zygote") || str_starts(cmd, "<pre-initialized>"))
+        return 0;
+    int match = str_starts(cmd, "com.tencent.weread.eink");
+    weread_flag = match;
+    __sync_synchronize();
+    weread_pid = pid;
+    return match;
+}
 
 static void maybe_init_weread_opt(void)
 {

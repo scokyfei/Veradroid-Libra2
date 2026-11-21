@@ -51,6 +51,7 @@ public final class KoboWeReadOpt {
             Log.i(TAG, "OPT_INIT proc=main");
             FontSizeCache.start(app);
             ReaderPageRelease.start(app);
+            RMonitorStopper.start(app);
         } else if ("com.tencent.weread.eink:seg".equals(procName)) {
             Log.i(TAG, "OPT_INIT proc=seg");
             SegDictRelease.start(app);
@@ -607,6 +608,40 @@ public final class KoboWeReadOpt {
                 }
             }
             Log.i(TAG, "SEG_DICT stopped");
+        }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* 4. RMonitorStopper                                                     */
+    /* ---------------------------------------------------------------------- */
+    private static final class RMonitorStopper implements Runnable {
+        private final Application app;
+        private final Handler handler;
+        private int pass;
+
+        private RMonitorStopper(Application app) {
+            this.app = app;
+            this.handler = new Handler(Looper.getMainLooper());
+        }
+
+        static void start(Application app) {
+            RMonitorStopper s = new RMonitorStopper(app);
+            s.handler.postDelayed(s, 10000);
+        }
+
+        public void run() {
+            pass++;
+            try {
+                ClassLoader cl = app.getClassLoader();
+                Class<?> rm = Class.forName("com.tencent.rmonitor.RMonitor", false, cl);
+                rm.getMethod("abolish").invoke(null);
+                Log.i(TAG, "RMON_STOP pass=" + pass + " abolish=ok");
+            } catch (Throwable err) {
+                Log.w(TAG, "RMON_STOP pass=" + pass + " err=" + err);
+            }
+            if (pass < 2) {
+                handler.postDelayed(this, 25000);
+            }
         }
     }
 }
