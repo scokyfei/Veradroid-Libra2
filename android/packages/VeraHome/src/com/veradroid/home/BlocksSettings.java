@@ -55,11 +55,11 @@ final class BlocksSettings {
         Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
         String cfg = new java.util.TreeMap<String, String>(HostLink.kv(HostLink.KFB + "settings")).toString();
         switch (key) {
-        case BlocksHome.S_DISPLAY: return cfg + prefs.getString("quick", "") + prefs.getString("panelname", "") + AppFont.user(a) + st.get("light") + st.get("warmth") + st.get("lightmax") + st.get("haslight") + st.get("haswarmth") + Blocks.on(a);
+        case BlocksHome.S_DISPLAY: return cfg + prefs.getString("name", "VeraDroid") + prefs.getString("quick", "") + prefs.getString("panelname", "") + AppFont.user(a) + st.get("light") + st.get("warmth") + st.get("lightmax") + st.get("haslight") + st.get("haswarmth") + Blocks.on(a);
         case BlocksHome.S_POWER: return cfg + st.get("sleep") + prefs.getBoolean("clock12", false) + "|" + java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR);
         case BlocksHome.S_STORAGE: return st.get("wifi") + "|" + Transfer.get(a).running() + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
         case BlocksHome.S_CARDS: return prefs.getString(BlocksCards.KEY, BlocksCards.DEFAULT) + prefs.getString("blk_quick", "") + prefs.getString("wx_city", "") + prefs.getString("blk_readers", "") + a.appsVersion();
-        default: return "";
+        default: return prefs.getString("name", "VeraDroid") + "|" + (System.currentTimeMillis() / 60000);
         }
     }
 
@@ -210,6 +210,10 @@ final class BlocksSettings {
             @Override public void onStep(int i) { prefs.edit().putInt(Blocks.ANIM_KEY, i).apply(); } })));
         add(ui, Blocks.navRow(a, "下拉面板的快捷开关", "最多 5 个：" + quickNames(), new View.OnClickListener() {
             @Override public void onClick(View v) { a.quickDialog(); } }));
+        String devName = prefs.getString("name", "VeraDroid");
+        if (devName.length() == 0) devName = "VeraDroid";
+        add(ui, Blocks.navRow(a, "阅读器名称", devName + "（显示在左上角）", new View.OnClickListener() {
+            @Override public void onClick(View v) { a.titleDialog(); } }));
         add(ui, Blocks.navRow(a, "面板名称", prefs.getString("panelname", "").length() == 0 ? "（不显示）" : prefs.getString("panelname", ""), new View.OnClickListener() {
             @Override public void onClick(View v) { a.textDialog("面板名称", "最多 16 个字；留空就不显示。", "panelname", "", 16); } }));
         add(ui, Blocks.row(a, "界面字重", "UI font weight", new Blocks.Stepper(a, Fonts.WEIGHT_L, Fonts.weight(a), new Blocks.Stepper.Listener() {
@@ -414,10 +418,16 @@ final class BlocksSettings {
         android.app.ActivityManager am = (android.app.ActivityManager) a.getSystemService(android.content.Context.ACTIVITY_SERVICE);
         android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
+        String devName = prefs.getString("name", "VeraDroid");
+        if (devName.length() == 0) devName = "VeraDroid";
+        add(g, Blocks.navRow(a, "阅读器名称", devName + "（点击自定义，显示在左上角）", new View.OnClickListener() {
+            @Override public void onClick(View v) { a.titleDialog(); } }));
         add(g, Blocks.row(a, "机型", "Model", Ui.text(a, h.model(), 15, false)));
         add(g, Blocks.row(a, "系统", "Android", Ui.text(a, "Android " + Build.VERSION.RELEASE, 15, false)));
         add(g, Blocks.row(a, "桌面版本", "Launcher", Ui.text(a, h.version() + " · " + h.buildDate(), 15, false)));
         add(g, Blocks.row(a, "内存", "Memory", Ui.text(a, (mi.availMem >> 20) + " / " + (mi.totalMem >> 20) + " MB 可用", 15, false)));
+        add(g, Blocks.row(a, "原作者", "Original author", Ui.text(a, "ajie · wenjin.jp", 15, false)));
+        add(g, Blocks.row(a, "kobo系统移植优化", "Kobo port", Ui.text(a, "Scokyfei", 15, false)));
         // 系统更新的进度（宿主写 ctl/update.status；没有在更新时不占地方）
         c.addView(new TaskCards.Update(a, false), Blocks.gap(a, 14));
         LinearLayout m = group(c, "维护");

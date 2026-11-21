@@ -71,7 +71,9 @@ final class BlocksHome {
         Icons.IconView logo = new Icons.IconView(a, Icons.Kind.BOOK);
         st.addView(logo, Blocks.lp(dp(16), dp(16)));
         stLeft = Ui.text(a, "", 12, true);
-        stLeft.setPadding(dp(6), 0, 0, 0);
+        stLeft.setSingleLine(true);
+        stLeft.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        stLeft.setPadding(dp(6), 0, dp(8), 0);
         st.addView(stLeft, Blocks.weight(1));
         stRight = Ui.text(a, "", 12, false);
         st.addView(stRight);
@@ -231,6 +233,7 @@ final class BlocksHome {
 
     void refreshStatus(String clock, String state) {
         String name = prefs.getString("name", "VeraDroid");
+        if (name.length() == 0) name = "VeraDroid";
         if (!name.contentEquals(stLeft.getText())) stLeft.setText(name);
         String r = clock + "    " + state;
         if (!r.contentEquals(stRight.getText())) stRight.setText(r);
@@ -1169,6 +1172,10 @@ final class BlocksHome {
         dc.addView(BlocksCards.line(a, model() + " · Android " + Build.VERSION.RELEASE, 14, false));
         dc.addView(BlocksCards.line(a, "VeraHome " + version() + " · 构建 " + buildDate(), 13, false));
         dev.addView(dc, Blocks.weight(1));
+        dev.addView(new Icons.IconView(a, Icons.Kind.CHEV_R), Blocks.lp(dp(18), dp(18)));
+        dev.setClickable(true);
+        dev.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { a.titleDialog(); } });
+        Blocks.fast(dev);
         devBox.addView(dev);
         devBox.addView(Blocks.hair(a));
         LinearLayout r1 = new LinearLayout(a);

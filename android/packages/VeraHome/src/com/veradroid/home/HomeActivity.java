@@ -1300,7 +1300,8 @@ public class HomeActivity extends Activity {
      */
     private void refreshStatus() {
         String name = prefs.getString("name", "VeraDroid");
-        String clock = Ui.clock(this) + (name.length() > 0 ? "    " + name : "");
+        if (name.length() == 0) name = "VeraDroid";
+        String clock = name + "    " + Ui.clock(this);
         Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
         StringBuilder sb = new StringBuilder();
         if ("0".equals(st.get("wifi"))) sb.append("Wi-Fi 关   ");
@@ -1600,7 +1601,14 @@ public class HomeActivity extends Activity {
                     String t = input.getText().toString().trim();
                     if (t.length() > max) t = t.substring(0, max);
                     prefs.edit().putString(key, t).apply();
-                    showSettings();
+                    if (blocks != null && Blocks.on(HomeActivity.this)) {
+                        int cur = blocks.current();
+                        blocks.invalidate(cur);
+                        showBlocks(cur);
+                    } else {
+                        showSettings();
+                    }
+                    changed();
                 }
             }).show();
     }
@@ -1737,25 +1745,41 @@ public class HomeActivity extends Activity {
             }).show();
     }
 
-    private void titleDialog() {
+    void titleDialog() {
         final EditText input = new EditText(this);
-        input.setText(prefs.getString("name", "VeraDroid"));
+        String cur = prefs.getString("name", "VeraDroid");
+        if (cur.length() == 0) cur = "VeraDroid";
+        input.setText(cur);
+        input.setSelection(cur.length());
+        input.setHint("默认 VeraDroid");
         input.setSingleLine(true);
         input.setTextSize(20);
         input.setTypeface(Fonts.typeface(this));
         input.setBackground(Ui.frame(this, false));
         input.setPadding(dp(12), dp(10), dp(12), dp(10));
         new VeraDialog.Builder(this)
-            .title("桌面标题")
-            .message("最多 24 个字；留空就不显示标题。")
+            .title("阅读器名称")
+            .message("显示在桌面左上角，替换默认的 VeraDroid。最多 24 个字；留空恢复默认 VeraDroid。")
             .view(input)
             .negative("取消", null)
             .positive("保存", new Runnable() {
                 @Override public void run() {
                     String t = input.getText().toString().trim();
                     if (t.length() > 24) t = t.substring(0, 24);
-                    prefs.edit().putString("name", t).apply();
-                    showSettings();
+                    if (t.length() == 0) t = "VeraDroid";
+                    prefs.edit().putString("name", t).commit();
+                    refreshStatus();
+                    if (blocks != null && Blocks.on(HomeActivity.this)) {
+                        blocks.invalidate(BlocksHome.ME);
+                        blocks.invalidate(BlocksHome.S_ABOUT);
+                        blocks.invalidate(BlocksHome.S_DISPLAY);
+                        int page = blocks.current();
+                        blocks.invalidate(page);
+                        showBlocks(page);
+                    } else {
+                        showSettings();
+                    }
+                    changed();
                 }
             }).show();
     }
@@ -2164,7 +2188,9 @@ public class HomeActivity extends Activity {
             }
             localChoice(list, "图标样式", "原样：应用自己的图标；黑白描框：转成灰度，外面加一圈黑色圆角框，桌面更整齐。单个应用的图标可以长按它换。", "iconstyle", ICONSTYLE_L, 0, 0);
             section(list, "外观");
-            action(list, "桌面标题", "主页和书库最上面、时间旁边的那行字。当前：" + (prefs.getString("name", "VeraDroid").length() == 0 ? "（不显示）" : prefs.getString("name", "VeraDroid")) + "。可以改成一句话，留空就不显示。", "修改", new View.OnClickListener() {
+            String devName = prefs.getString("name", "VeraDroid");
+            if (devName.length() == 0) devName = "VeraDroid";
+            action(list, "阅读器名称", "显示在桌面左上角，替换默认的 VeraDroid。当前：" + devName + "。", "修改", new View.OnClickListener() {
                 @Override public void onClick(View v) { titleDialog(); }
             });
             styleChoice(list);
@@ -2299,13 +2325,16 @@ public class HomeActivity extends Activity {
             am.getMemoryInfo(mi);
             String ver = "0.0";
             try { ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
-            info(list, "VeraDroid " + ver, "作者：ajie · wenjin.jp"
+            info(list, "VeraDroid " + ver, "原作者：ajie · wenjin.jp"
+                + "\nkobo系统移植优化 : Scokyfei"
                 + "\nAndroid " + Build.VERSION.RELEASE + " · " + Build.MODEL
                 + "\n内存 " + (mi.totalMem / (1024 * 1024)) + " MB，可用 " + (mi.availMem / (1024 * 1024)) + " MB"
                 + "\n\n开源字体：霞鹜文楷（SIL OFL 1.1）");
-            action(list, "问题反馈", "写几句遇到的问题，连同完整系统日志一起上传给开发者。点“提交”之前不会发送任何内容。", "反馈", new View.OnClickListener() {
-                @Override public void onClick(View v) { feedbackDialog(); }
-            });
+            if (!HostLink.isKobo()) {
+                action(list, "问题反馈", "写几句遇到的问题，连同完整系统日志一起上传给开发者。点“提交”之前不会发送任何内容。", "反馈", new View.OnClickListener() {
+                    @Override public void onClick(View v) { feedbackDialog(); }
+                });
+            }
         }
     }
 
