@@ -158,7 +158,7 @@ settings_apply() {
     status_write
 }
 
-epd_send_scroll() {
+epd_send_smooth() {
     epd_send PACE "${KFB_PACE:-0}"
     epd_send CLEAN "${KFB_CLEAN:-0}"
     epd_send REAGL "${KFB_REAGL_MIN:-35}"
@@ -167,7 +167,13 @@ epd_send_scroll() {
     epd_send SCROLLDELAY "${KFB_SCROLLDELAY:-500}"
     epd_send SCROLLSTYLE "${KFB_SCROLLSTYLE:-1}"
     epd_send SCROLLWFM "${KFB_SCROLLWFM:-a2}"
+    epd_send GCN "${KFB_GCN:-0}"
+    epd_send MONO "${KFB_MONO:-0}"
+    epd_send MAXDEFER "${KFB_MAXDEFER:-1200}"
+    epd_send FLIPINPUT "${KFB_FLIPINPUT:-1000}"
 }
+
+epd_send_scroll() { epd_send_smooth; }
 
 gestures_write() {
     gc=

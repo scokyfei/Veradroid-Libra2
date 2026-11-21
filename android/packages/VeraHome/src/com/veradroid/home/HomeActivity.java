@@ -2259,12 +2259,14 @@ public class HomeActivity extends Activity {
             action(list, "保存完整系统日志", "保存 Kobo dmesg、Android 全部 logcat buffer、所有 dumpsys、getprop、settings、网络、进程和挂载信息到 Diagnostics。日志里可能有打开过的网址和书名。", "保存", new View.OnClickListener() {
                 @Override public void onClick(View v) { HostLink.cmd("diag"); ((TextView) v).setText("已保存"); }
             });
-            action(list, "上传完整系统日志", "保存并上传诊断包，按设备 ID 存服务器。" + DiagConsent.CONTENTS, "上传", new View.OnClickListener() {
-                @Override public void onClick(View v) { watchUpload("日志已上传"); HostLink.cmd("diag-upload"); VeraToast.show(HomeActivity.this, "已开始上传日志…"); }
-            });
-            action(list, "桌面崩溃时上传诊断包", "当前：" + DiagConsent.label(this) + "。没选过时不上传，下次打开桌面时问你。", "更改", new View.OnClickListener() {
-                @Override public void onClick(View v) { DiagConsent.ask(HomeActivity.this, false); }
-            });
+            if (!kobo) {
+                action(list, "上传完整系统日志", "保存并上传诊断包，按设备 ID 存服务器。" + DiagConsent.CONTENTS, "上传", new View.OnClickListener() {
+                    @Override public void onClick(View v) { watchUpload("日志已上传"); HostLink.cmd("diag-upload"); VeraToast.show(HomeActivity.this, "已开始上传日志…"); }
+                });
+                action(list, "桌面崩溃时上传诊断包", "当前：" + DiagConsent.label(this) + "。没选过时不上传，下次打开桌面时问你。", "更改", new View.OnClickListener() {
+                    @Override public void onClick(View v) { DiagConsent.ask(HomeActivity.this, false); }
+                });
+            }
             section(list, "恢复与卸载");
             action(list, "恢复默认设置", "显示、手势、系统和桌面设置回到默认值。已安装的应用和数据不受影响。", "恢复", new View.OnClickListener() {
                 @Override public void onClick(View v) {

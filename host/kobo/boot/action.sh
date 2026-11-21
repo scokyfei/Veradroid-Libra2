@@ -84,7 +84,9 @@ run_action() {
         sleep) power_send sleep ;;
         wake)  power_send wake ;;
         power) power_send toggle ;;
-        wifi)  send status ;;
+        wifi)
+            if [ "$(kobo_wifi_enabled)" = 1 ]; then hint wifi "WI-FI|Wi-Fi 关"; send "wifi 0"
+            else hint wifi "WI-FI|Wi-Fi 开"; send "wifi 1"; fi ;;
         app.*)
             pkg=${1#app.}
             case "$pkg" in ''|*[!A-Za-z0-9._]*) ;; *) hint app "OPEN APP|打开应用"; echo "$pkg" > "$X/ctl/app.tmp" && mv -f "$X/ctl/app.tmp" "$X/ctl/app"; watch_ctl app ;; esac ;;

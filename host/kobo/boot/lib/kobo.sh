@@ -90,7 +90,37 @@ kobo_wifi_ip() {
 }
 
 kobo_wifi_enabled() {
-    [ -d /sys/class/net/wlan0 ] && [ "$(cat /sys/class/net/wlan0/operstate 2>/dev/null)" != down ] && echo 1 || echo 0
+    [ -d /sys/class/net/wlan0 ] || { echo 0; return 0; }
+    st=$(cat /sys/class/net/wlan0/operstate 2>/dev/null)
+    case "$st" in
+        down) echo 0 ;;
+        *)    [ -n "$(kobo_wifi_ip)" ] || [ "$st" = up ] && echo 1 || echo 0 ;;
+    esac
+}
+
+kobo_wifi_set() { # $1 = 0|1
+    if [ "$1" = 0 ]; then
+        if [ -r /mnt/onboard/.adds/koreader/disable-wifi.sh ]; then
+            ( cd /mnt/onboard/.adds/koreader && sh ./disable-wifi.sh ) >/dev/null 2>&1 || true
+        else
+            command -v wpa_cli >/dev/null 2>&1 && wpa_cli -i wlan0 disconnect >/dev/null 2>&1 || true
+            ifconfig wlan0 down 2>/dev/null || true
+            killall udhcpc 2>/dev/null || true
+        fi
+    elif [ "$1" = 1 ]; then
+        if [ -r /mnt/onboard/.adds/koreader/enable-wifi.sh ]; then
+            ( cd /mnt/onboard/.adds/koreader && sh ./enable-wifi.sh ) >/dev/null 2>&1 || true
+        else
+            ifconfig wlan0 up 2>/dev/null || true
+            command -v wpa_cli >/dev/null 2>&1 && wpa_cli -i wlan0 reconnect >/dev/null 2>&1 || true
+        fi
+        # Wait briefly for IP assignment so status_write and hostnet_write see the live IP
+        i=0
+        while [ $i -lt 15 ]; do
+            [ -n "$(kobo_wifi_ip)" ] && break
+            sleep 1; i=$((i + 1))
+        done
+    fi
 }
 
 kobo_wifi_current() {

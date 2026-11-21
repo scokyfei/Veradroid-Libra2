@@ -132,7 +132,7 @@ cmd_listen() {
             apkg=${a%%|*}; aspec=${a#*|}
             rm -f "$SYS/settings.app"
             if [ "$apkg" != home ] && [ -n "$aspec" ] && [ "$aspec" != "$a" ]; then
-                printf '%s\n' "$aspec" | tr ';' '\n' | grep -E '^KFB_(CONTRAST|DITHER|FLASH|INVERT|LIGHTF|DARKEN|MODE|SETTLE|HOLD|SMOOTH|PACE|CLEAN|REAGL_MIN|ANIM_MODE|ANIM_DIR|ANIM_STEPS|ANIM_MIN)=[0-9.]{1,6}$' > "$SYS/settings.app.tmp"
+                printf '%s\n' "$aspec" | tr ';' '\n' | grep -E '^KFB_(CONTRAST|DITHER|FLASH|INVERT|LIGHTF|DARKEN|MODE|SETTLE|HOLD|SMOOTH|PACE|CLEAN|REAGL_MIN|SCROLLDU|IMG|SCROLLDELAY|SCROLLSTYLE|GCN|NEWWIN|MONO|MAXDEFER|FLIPINPUT|ANIM_MODE|ANIM_DIR|ANIM_STEPS|ANIM_MIN)=[0-9.]{1,6}$' > "$SYS/settings.app.tmp"
                 [ -s "$SYS/settings.app.tmp" ] && mv -f "$SYS/settings.app.tmp" "$SYS/settings.app" || rm -f "$SYS/settings.app.tmp"
             fi
             settings_load 2>/dev/null || true
@@ -216,7 +216,11 @@ cmd_listen() {
         compile) type compile_cmd >/dev/null 2>&1 && compile_cmd "$a" ;;
         optimize) ( opt_run ) & ;;
         poke)    touch "$W/lastinput" 2>/dev/null || true ;;
-        wifi)    status_write ;;
+        wifi)
+            case "$a" in
+                0|1) ( kobo_wifi_set "$a"; [ "$a" = 1 ] && { hostnet_write 2>/dev/null || true; dns_apply 2>/dev/null || true; }; status_write ) </dev/null >>"$LOG" 2>&1 & ;;
+                *)   status_write ;;
+            esac ;;
         wifilist) ( wifi_list ) & ;;
         wifiscan) ( wifi_scan ) & ;;
         wificonnect) ( wifi_connect "$a" ) & ;;

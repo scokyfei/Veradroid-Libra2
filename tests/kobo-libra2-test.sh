@@ -111,8 +111,11 @@ for verb in wifiscan storage netdiag wa saver; do
 done
 grep -q 'SYSTEM_FONT=' "$TOP/host/kobo/boot/lib/settings.sh" \
     && grep -q 'time_format_apply' "$TOP/host/kobo/boot/lib/settings.sh" \
-    && ok "Kobo host settings & commands fully wired (saver/lock/storage/webadmin/wifiscan/font/time)" \
-    || fail "settings.sh missing SYSTEM_FONT or time_format_apply"
+    && grep -q 'epd_send_smooth()' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q 'kobo_wifi_set()' "$TOP/host/kobo/boot/lib/kobo.sh" \
+    && grep -q 'kobo_wifi_set' "$TOP/host/kobo/boot/lib/cmd.sh" \
+    && ok "Kobo host settings & commands fully wired (saver/lock/storage/webadmin/wifiscan/wifi-toggle/appprof/font/time)" \
+    || fail "settings.sh/kobo.sh/cmd.sh missing required wiring"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"

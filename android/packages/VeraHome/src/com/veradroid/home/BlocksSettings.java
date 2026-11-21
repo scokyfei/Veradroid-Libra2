@@ -236,8 +236,10 @@ final class BlocksSettings {
             add(g, Blocks.row(a, "自动休眠", "Auto lock", new Blocks.Stepper(a, SLEEP_L, bi, new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { HostLink.cmd("sleeptime " + SLEEP_S[i]); } })));
         }
-        add(g, Blocks.row(a, "回到 Kobo", "Return mode", new Blocks.Stepper(a, RETURN_L, idx(RETURN_V, cfg.get("RETURN_MODE"), 0), new Blocks.Stepper.Listener() {
-            @Override public void onStep(int i) { host("RETURN_MODE=" + RETURN_V[i]); } })));
+        if (!HostLink.isKobo()) {
+            add(g, Blocks.row(a, "回到 Kobo", "Return mode", new Blocks.Stepper(a, RETURN_L, idx(RETURN_V, cfg.get("RETURN_MODE"), 0), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("RETURN_MODE=" + RETURN_V[i]); } })));
+        }
         LinearLayout btns = new LinearLayout(a);
         btns.setPadding(dp(10), dp(10), dp(10), dp(10));
         btns.addView(Blocks.button(a, "回 Kobo", false, new View.OnClickListener() { @Override public void onClick(View v) { HostLink.cmd("exit"); } }), Blocks.weight(1));
@@ -426,7 +428,7 @@ final class BlocksSettings {
             { "设备与管理", "日志 · 重启 · 恢复默认" }, { "手势", "边缘滑动 · 双指 · 四角长按 · 导航键" },
             { "应用与桌面", "壁纸 · 图标 · 面板 · 状态栏 · 输入法" }, { "传书", "无线传输的开关、地址、自动关闭" }, { "全部设置", "所有设置的分类列表" } };
         for (int i = 0; i < rows.length; i++) {
-            if (kobo && i == 1) continue;
+            if (kobo && (i == 1 || i == 3)) continue;
             final int k = i;
             add(m, Blocks.navRow(a, rows[i][0], rows[i][1], new View.OnClickListener() { @Override public void onClick(View v) {
                 switch (k) {
