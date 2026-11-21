@@ -126,6 +126,11 @@
 #include <unistd.h>
 
 #include "fbink.h"
+#ifdef FBINK_FOR_KOBO
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STBIW_WINDOWS_UTF8
+#include "stb/stb_image_write.h"
+#endif
 #ifdef __ARM_NEON
 #include <arm_neon.h>
 #endif
@@ -1858,6 +1863,29 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
             else if (!strcmp(line, "REDRAW")) redraw = 1;
             else if (!strcmp(line, "FULL")) full = 1;
             else if (!strcmp(line, "VERIFY")) verify_page(fbmem);
+#ifdef FBINK_FOR_KOBO
+            else if (!strncmp(line, "SHOT ", 5)) {
+                const char *sp = line + 5;
+                while (*sp == ' ') sp++;
+                if (*sp == '/') {
+                    int p = (last_page == 1) ? 1 : 0;
+                    const uint8_t *src = fbmem + (size_t)p * LW * LH * 4;
+                    size_t npx = (size_t)LW * LH;
+                    uint8_t *rgb = malloc(npx * 3);
+                    int ok = 0;
+                    if (rgb) {
+                        for (size_t i = 0; i < npx; i++) {
+                            rgb[i * 3 + 0] = src[i * 4 + 0];
+                            rgb[i * 3 + 1] = src[i * 4 + 1];
+                            rgb[i * 3 + 2] = src[i * 4 + 2];
+                        }
+                        ok = stbi_write_png(sp, LW, LH, 3, rgb, LW * 3);
+                        free(rgb);
+                    }
+                    fprintf(stderr, "epd: shot %s %dx%d -> %s\n", sp, LW, LH, ok ? "ok" : "err");
+                }
+            }
+#endif
             else if (!strncmp(line, "QPASS", 5)) { int v; if (sscanf(line + 5, "%d", &v) == 1 && v >= 0 && v <= 5000) { qpass_ms = v; if (!v) qp_valid = 0; } }
             else if (!strncmp(line, "ROT ", 4)) {
                 int r = atoi(line + 4);

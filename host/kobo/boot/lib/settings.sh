@@ -153,7 +153,7 @@ settings_apply() {
     if [ "$KFB_GESTURES" = 0 ]; then touch "$W/nogestures"; else rm -f "$W/nogestures"; fi
     gestures_write
     dns_apply
-    type time_format_apply >/dev/null 2>&1 && time_format_apply
+    type time_format_apply >/dev/null 2>&1 && ( time_format_apply ) </dev/null >>"$LOG" 2>&1 &
     rotate_apply
     status_write
 }

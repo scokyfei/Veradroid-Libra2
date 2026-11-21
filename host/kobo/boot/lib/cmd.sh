@@ -123,7 +123,8 @@ cmd_listen() {
         clear)   epd_send FULL ;;
         screenshot)
             mkdir -p "$SYS/data/media/0/Screenshots"
-            $(vd_in) /system/bin/screencap -p "/data/media/0/Screenshots/screen-$(date +%Y%m%d-%H%M%S).png" >/dev/null 2>&1 && t "screenshot saved" ;;
+            sf="$SYS/data/media/0/Screenshots/screen-$(date +%Y%m%d-%H%M%S).png"
+            epd_send SHOT "$sf" && t "screenshot saved: $sf" ;;
         fg)      type appprof_fg >/dev/null 2>&1 && appprof_fg "$a"
                  type bgnice_tick >/dev/null 2>&1 && ( sleep 2; bgnice_tick ) </dev/null >>"$LOG" 2>&1 & ;;
         appset)  type appprof_set >/dev/null 2>&1 && appprof_set "$a" ;;

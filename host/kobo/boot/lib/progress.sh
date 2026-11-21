@@ -390,6 +390,38 @@ vp_netdiag() { # 输出文件 [服务器根地址]
     nf=$1; nb=${2:-https://veradroid.wenjin.jp}
     VD=${VD:-/mnt/onboard/.adds/veradroid-libra2}
     [ -f "$VD/network.conf" ] && . "$VD/network.conf"
+    t0=$(date +%s)
+    vp_kvw "$nf" state=running step=check "line1=正在检查 Wi-Fi、域名解析、网络连接…" "start=$t0"
+    if ! command -v curl >/dev/null 2>&1; then
+        # Kobo BusyBox environment (no curl): check default route, DNS via nslookup, and HTTP via busybox wget
+        rt=$(awk '$2 == "00000000" && $1 != "lo" {print $1; exit}' /proc/net/route 2>/dev/null)
+        ip_=
+        [ -n "$rt" ] && ip_=$(ip -4 addr show "$rt" 2>/dev/null | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)
+        if [ -z "$rt" ]; then
+            vp_kvw "$nf" state=done verdict=offline code=11 "conclusion=没连 Wi-Fi" "lines=□ Wi-Fi 没有连上" "line2=请在 Wi-Fi 网络里连接后再试" "start=$t0"
+            return 0
+        fi
+        lines="■ Wi-Fi 已连接（${rt}${ip_:+ $ip_}）"
+        dns_host=www.baidu.com
+        if nslookup "$dns_host" >/dev/null 2>&1; then
+            lines="$lines
+■ 域名解析正常（$dns_host）"
+        else
+            vp_kvw "$nf" state=done verdict=nodns code=12 "conclusion=域名解析失败" "lines=$lines
+□ 域名解析失败：$dns_host" "line2=Wi-Fi 已连接但 DNS 解析失败，可尝试在设置里切换 DNS" "start=$t0"
+            return 0
+        fi
+        if wget -T 6 -q -O /dev/null http://connect.rom.miui.com/generate_204 2>/dev/null \
+           || wget -T 6 -q -O /dev/null http://connectivitycheck.gstatic.com/generate_204 2>/dev/null \
+           || wget -T 6 -q -O /dev/null http://www.baidu.com/ 2>/dev/null; then
+            vp_kvw "$nf" state=done verdict=ok code=0 "conclusion=网络正常" "lines=$lines
+■ 外网 HTTP 连通正常" "line2=" "start=$t0"
+        else
+            vp_kvw "$nf" state=done verdict=noserver code=13 "conclusion=外网连不上" "lines=$lines
+□ 外网 HTTP 连接超时" "line2=Wi-Fi 已连接且 DNS 正常，但外网访问失败，请检查路由器网络" "start=$t0"
+        fi
+        return 0
+    fi
     CURL_OPTS=
     [ -n "${VD_PROXY:-}" ] && CURL_OPTS="$CURL_OPTS -x $VD_PROXY"
     [ -n "${VD_IP:-}" ] && CURL_OPTS="$CURL_OPTS --resolve veradroid.wenjin.jp:443:$VD_IP --resolve veradroid.wenjin.jp:80:$VD_IP"

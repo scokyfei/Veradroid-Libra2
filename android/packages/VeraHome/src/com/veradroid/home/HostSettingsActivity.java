@@ -201,11 +201,13 @@ public class HostSettingsActivity extends Activity {
     // ---- 系统与性能 ----------------------------------------------------------------------------------------------
 
     private void buildSystem() {
-        section("Wi-Fi");
-        stepper("Wi-Fi 省电", "自动：平时省电，传书开着或大量下载时临时关掉省电；始终省电：下载慢、最省电；运行时关闭：下载快、耗电多。回到 Kobo 和屏保时一律还给 Kobo。",
-            "WIFI_PS", new String[] { "自动", "始终省电", "运行时关闭" }, new String[] { "auto", "on", "off" }, "auto", null);
-        section("内存");
         boolean kobo = HostLink.isKobo();
+        if (!kobo) {
+            section("Wi-Fi");
+            stepper("Wi-Fi 省电", "自动：平时省电，传书开着或大量下载时临时关掉省电；始终省电：下载慢、最省电；运行时关闭：下载快、耗电多。回到 Kobo 和屏保时一律还给 Kobo。",
+                "WIFI_PS", new String[] { "自动", "始终省电", "运行时关闭" }, new String[] { "auto", "on", "off" }, "auto", null);
+        }
+        section("内存");
         stepper("小内存模式", kobo
                 ? "自动：512 MB 内存机型（Kobo Libra 2）自动开启，停掉不需要的后台服务并优化内存阈值。下次启动 Android 生效。"
                 : "自动：内存不到约 700 MB 的机型自动开。开着时 Kobo 的书库程序停掉腾内存、回 Kobo 完全退出（再进要重新开机）。下次启动 Android 生效。",
