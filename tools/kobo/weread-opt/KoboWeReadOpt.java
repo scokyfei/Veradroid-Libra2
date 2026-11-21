@@ -393,6 +393,45 @@ public final class KoboWeReadOpt {
             handler.postDelayed(this, PERIOD_MS);
         }
 
+        private void pruneObservable(DataSetObservable obs, int[] stats) throws Exception {
+            ArrayList<?> list = (ArrayList<?>) observersField.get(obs);
+            if (list == null || list.isEmpty()) return;
+            Object[] observers;
+            synchronized (list) { observers = list.toArray(); }
+            for (Object observer : observers) {
+                if (observer == null) continue;
+                String cn = observer.getClass().getName();
+                if (!cn.startsWith("com.tencent.weread.reader.domain.Page$")) continue;
+                Field outF;
+                try { outF = findField(observer.getClass(), "this$0"); } catch (NoSuchFieldException e) { continue; }
+                Object page = outF.get(observer);
+                if (page == null) continue;
+                if (callbackField == null) {
+                    callbackField = findField(page.getClass(), "drawViewCallback");
+                    try { progressField = findField(page.getClass(), "mChapterProgress"); } catch (NoSuchFieldException ignored) {}
+                }
+                if (callbackField.get(page) != null) { stats[1]++; continue; }
+                obs.unregisterObserver((DataSetObserver) observer);
+                if (progressField != null && progressField.get(page) == obs) progressField.set(page, null);
+                stats[0]++;
+            }
+        }
+
+        private void scanContainer(Object obj, int[] stats) throws Exception {
+            if (obj == null) return;
+            if (obj instanceof DataSetObservable) {
+                pruneObservable((DataSetObservable) obj, stats);
+                return;
+            }
+            if (obj instanceof SparseArray) {
+                SparseArray<?> arr = (SparseArray<?>) obj;
+                for (int i = 0; i < arr.size(); i++) {
+                    Object v = arr.valueAt(i);
+                    if (v instanceof DataSetObservable) pruneObservable((DataSetObservable) v, stats);
+                }
+            }
+        }
+
         private void prune() throws Exception {
             if (observersField == null) {
                 ClassLoader loader = app.getClassLoader();
@@ -427,36 +466,30 @@ public final class KoboWeReadOpt {
                 return;
             }
             if (fragment == null || !fragment.getClass().getName().endsWith(".BookFragment")) return;
-            Object progress = findField(fragment.getClass(), "mBookProgress").get(fragment);
-            if (progress == null) return;
-            Object chapters = findField(progress.getClass(), "mChapterProgress").get(progress);
-            if (!(chapters instanceof SparseArray)) return;
-            SparseArray<?> adapters = (SparseArray<?>) chapters;
-            int pruned = 0, kept = 0;
-            for (int i = 0; i < adapters.size(); i++) {
-                Object adapter = adapters.valueAt(i);
-                if (!(adapter instanceof DataSetObservable)) continue;
-                ArrayList<?> list = (ArrayList<?>) observersField.get(adapter);
-                Object[] observers;
-                synchronized (list) { observers = list.toArray(); }
-                for (Object observer : observers) {
-                    if (observer == null || !PAGE_OBSERVER.equals(observer.getClass().getName())) continue;
-                    if (outerField == null) outerField = findField(observer.getClass(), "this$0");
-                    Object page = outerField.get(observer);
-                    if (page == null) continue;
-                    if (callbackField == null) {
-                        callbackField = findField(page.getClass(), "drawViewCallback");
-                        progressField = findField(page.getClass(), "mChapterProgress");
+            int[] stats = new int[2]; // [0]=pruned, [1]=kept
+            for (Class<?> c = fragment.getClass(); c != null && c.getName().startsWith("com.tencent.weread."); c = c.getSuperclass()) {
+                for (Field f : c.getDeclaredFields()) {
+                    if ((f.getModifiers() & java.lang.reflect.Modifier.STATIC) != 0) continue;
+                    f.setAccessible(true);
+                    Object val = f.get(fragment);
+                    if (val == null) continue;
+                    if (val instanceof DataSetObservable || val instanceof SparseArray) {
+                        scanContainer(val, stats);
+                    } else if (val.getClass().getName().startsWith("com.tencent.weread.reader.")) {
+                        for (Field f2 : val.getClass().getDeclaredFields()) {
+                            if ((f2.getModifiers() & java.lang.reflect.Modifier.STATIC) != 0) continue;
+                            Class<?> t2 = f2.getType();
+                            if (DataSetObservable.class.isAssignableFrom(t2) || SparseArray.class.isAssignableFrom(t2)) {
+                                f2.setAccessible(true);
+                                scanContainer(f2.get(val), stats);
+                            }
+                        }
                     }
-                    if (callbackField.get(page) != null) { kept++; continue; }
-                    ((DataSetObservable) adapter).unregisterObserver((DataSetObserver) observer);
-                    if (progressField.get(page) == adapter) progressField.set(page, null);
-                    pruned++;
                 }
             }
-            if (pruned > 0) {
-                released += pruned;
-                Log.i(TAG, "PAGE_RELEASE released=" + pruned + " on_screen=" + kept + " total=" + released);
+            if (stats[0] > 0) {
+                released += stats[0];
+                Log.i(TAG, "PAGE_RELEASE released=" + stats[0] + " on_screen=" + stats[1] + " total=" + released);
             }
         }
     }
