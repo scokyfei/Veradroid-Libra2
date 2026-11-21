@@ -83,6 +83,8 @@ display_start() {
         --flash "${KFB_FLASH:-8}" --invert "${KFB_INVERT:-0}" \
         --lightf "${KFB_LIGHTF:-0}" --darken "${KFB_DARKEN:-0}" \
         --mode "${KFB_MODE:-0}" --settle "${KFB_SETTLE:-50}" --hold "${KFB_HOLD:-70}" \
+        --reagl-min "${KFB_REAGL_MIN:-35}" --pace "${KFB_PACE:-0}" --clean "${KFB_CLEAN:-0}" \
+        --scroll-du "${KFB_SCROLLDU:-0}" --img-gray "${KFB_IMG:-0}" \
         --anim-mode "${KFB_ANIM_MODE:-1}" --anim-dir "${KFB_ANIM_DIR:-2}" \
         --anim-steps "${KFB_ANIM_STEPS:-8}" --anim-min "${KFB_ANIM_MIN:-45}" \
         --scroll-delay "${KFB_SCROLLDELAY:-500}" \

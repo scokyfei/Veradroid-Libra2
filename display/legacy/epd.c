@@ -261,7 +261,11 @@ static int g_cleaning = 0;
 /* REAGL <pct> / --reagl-min: in the balanced mode a frame whose changed area is at least this share of the screen is drawn
    with REAGL (16 grays, cleans ghosts, 205 ms on a PW6) instead of DU (2 levels, 134 ms, leaves the old picture shining
    through when it replaces text: the "ghost under the pulled-down panel"). 85 = the old rule (only near-full-screen changes). */
-static int reagl_min = 85;
+static int reagl_min = 35;
+static int burst_du_ms = 0;   /* SCROLLDU <ms>: DU while large frames keep coming, 16-gray pass <ms> after (0 = off) */
+static int burst_dirty = 0;
+static int g_burst = 0;
+static int img_gray_pct = 0;  /* IMG <pct>: in 均衡 mode, small mid-gray picture regions use GL16 instead of DU (0 = off) */
 /* HINT <ms> <pct>: for the next <ms>, frames that change at least <pct> % of the screen use REAGL (one shot, from VeraHome when
    its pull-down panel opens / closes: the panel covers ~60 % of the screen, under the default 85 % rule it went out as DU and the
    page underneath shone through). Page turns outside the window keep the normal rule. */
@@ -836,6 +840,8 @@ static int open_fb(void)
     fprintf(stderr, "epd: %s (%s/%s) %ux%u %ubpp mtk=%d\n", st.device_name, st.device_codename, st.device_platform,
             st.screen_width, st.screen_height, st.bpp, g_is_mtk);
     fprintf(stderr, "epd: anim_mode=%d dir=%d steps=%d min=%d%%\n", anim_mode, anim_dir, anim_steps, anim_min_pct);
+    fprintf(stderr, "epd: mode=%d reagl_min=%d%% pace=%d clean=%d scroll_du=%d img=%d%%\n",
+            ui_mode, reagl_min, pace, clean_ms, burst_du_ms, img_gray_pct);
     if (g_rot) fprintf(stderr, "epd: rotate %d: logical %dx%d on panel %dx%d (visible width %d)\n", g_rot, LW, LH, W, H, VW);
     return 0;
 }
@@ -923,6 +929,15 @@ static int wait_marker(uint32_t marker)
     return ioctl(fbfd, VD_WAIT_COMPLETE_MTK, &m) < 0 ? -errno : 0;
 }
 
+/* share (%) of mid-gray pixels, every 4th pixel of every 4th row (used by IMG <pct>) */
+static int gray_share(const uint8_t *buf, int w, int h)
+{
+    long n = 0, g = 0;
+    for (int j = 0; j < h; j += 4)
+        for (int i = j & 3; i < w; i += 4) { uint8_t v = buf[(size_t)j * w + i]; n++; if (v >= 32 && v <= 223) g++; }
+    return n ? (int)(g * 100 / n) : 0;
+}
+
 /* the bounding box (relative to buf) of the 32x32 tiles that are a picture: at least half of the sampled pixels (every 2nd
    pixel of every 2nd row) mid-gray. Anti-aliased text has far less (CJK at 1272x1696: 5-20 % per tile). Returns the
    number of picture tiles; fewer than 4 (a 64x64 icon) do not count, nor tiles scattered thinly over a large box. */
@@ -997,6 +1012,9 @@ static int push_y8(const uint8_t *buf, int x, int y, int w, int h, int mode)
     WFM_MODE_INDEX_T aw = ui_mode == 1 ? WFM_GC16 : ui_mode == 2 ? WFM_DU : ui_mode == 3 ? WFM_AUTO : (large ? WFM_REAGL : WFM_DU);
     /* touch scroll: the scroll waveform now (A2 on i.MX, DU on MediaTek / SCROLLWFM du), one full-quality pass later */
     if (g_scroll && mode == M_AUTO && !g_cleaning) aw = (scroll_a2 && !g_is_mtk) ? WFM_A2 : WFM_DU;
+    else if (g_burst && mode == M_AUTO && ui_mode != 2 && !g_cleaning) aw = WFM_DU;
+    else if (img_gray_pct > 0 && mode == M_AUTO && ui_mode == 0 && aw == WFM_DU && w >= 48 && h >= 48 && !g_cleaning &&
+             gray_share(buf, w, h) >= img_gray_pct) aw = WFM_GL16;
     set_wfm(&c, mode, aw);
     /* A2 / scroll DU: no hardware dithering (FBInk then sends A2 with EPDC_FLAG_FORCE_MONOCHROME, the EPDC thresholds it) */
     if (c.wfm_mode == WFM_A2 || (g_scroll && c.wfm_mode == WFM_DU)) c.dithering_mode = HWD_PASSTHROUGH;
@@ -1255,6 +1273,8 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
     if (once_dir >= 0 && now_ms() > once_until) { once_dir = -1; anim_next = 0; }
     /* "full refresh every N pages": count only big changes (a page turn), not every small update, and a burst of them
        (an animated page turn, a scroll) only once. The animation path counts too, otherwise it would never flash. */
+    g_burst = !g_scroll && burst_du_ms > 0 && mode == M_AUTO && flip_total * 100 >= (long)W * H * page_pct && now_ms() - last_big_ms < flip_gap_ms;
+    if (g_burst && flash_every <= 0) last_big_ms = now_ms();
     int flipped = 0;
     if (mode == M_FULL) { flip_count = 0; gc_count = 0; }
     else if (g_scroll) { if (flip_total * 100 >= (long)W * H * page_pct) last_big_ms = now_ms(); }   /* a scroll is not a page */
@@ -1275,33 +1295,16 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
         int newflip = flip_gap_ms <= 0 || t - last_big_ms >= flip_gap_ms;
         last_big_ms = t;
         flipped = 1;
-        if (newflip && ++flip_count >= flash_every) { flip_count = 0; gc_count = 0; return 3; }   /* the caller flashes the settled picture */
+        if (newflip && ++flip_count >= flash_every) { flip_count = 0; gc_count = 0; g_burst = 0; return 3; }   /* the caller flashes the settled picture */
         if (timing_flag && access(timing_flag, F_OK) == 0)
             fprintf(stderr, "[%ld] epd: flip %s %d/%d\n", t, newflip ? "new" : "same", flip_count, flash_every);
     }
     /* GCN: refreshes that are not page turns, counted per drawn (already merged) frame, also get a full flash now and then */
     if (gc_every > 0 && mode == M_AUTO && !g_scroll && !flipped && total * 100 >= (long)W * H * 3 && ++gc_count >= gc_every) {
-        gc_count = 0; flip_count = 0; n_gcn++;
+        gc_count = 0; flip_count = 0; g_burst = 0; n_gcn++;
         if (timing_flag && access(timing_flag, F_OK) == 0) fprintf(stderr, "[%ld] epd: GCN %d reached: flash when still\n", now_ms(), gc_every);
         return 3;
     }
-#ifdef FBINK_FOR_KOBO
-    if (mode != M_FULL && !g_scroll && (anim_next || (anim_mode && flip_total > (long)W * H * anim_min_pct / 100))) {
-        /* Kobo strip-wipe page turn: reveal across disjoint 16px-aligned strips (see kobo_wipe_y8) */
-        anim_next = 1;
-        int wy0 = cy0[0], wy1 = cy1[nc - 1];
-        if (wy1 - wy0 >= H * 80 / 100) { wy0 = 0; wy1 = H; }
-        push_region(0, wy0, W, wy1, M_AUTO);
-        return 0;
-    }
-#else
-    if (g_is_mtk && mode != M_FULL && !g_scroll && (anim_next || (anim_mode && flip_total > (long)W * H * anim_min_pct / 100))) {
-        /* 整页变化交给硬件滑动动画；到 KFB_FLASH 页数时上面已经改成停下来以后整屏闪刷 */
-        anim_next = 1;
-        push_region(0, 0, W, H, M_AUTO);
-        return 0;
-    }
-#endif
     {
         int rm = reagl_min;
         if (hint_until && now_ms() < hint_until) { if (hint_pct < rm) rm = hint_pct; }
@@ -1310,6 +1313,29 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
         if (rm != reagl_min && timing_flag && access(timing_flag, F_OK) == 0)
             fprintf(stderr, "[%ld] epd: hint reagl-min %d%% (changed %ld%%)\n", now_ms(), rm, total * 100 / ((long)W * H));
     }
+#ifdef FBINK_FOR_KOBO
+    if (mode != M_FULL && !g_scroll && !g_burst && (anim_next || (anim_mode && flip_total > (long)W * H * anim_min_pct / 100))) {
+        /* Kobo strip-wipe page turn: reveal across disjoint 16px-aligned strips (see kobo_wipe_y8).
+           Preserve the REAGL page-turn waveform choice for 均衡 (when >= reagl_min) and 灰度最准 / 自动. */
+        anim_next = 1;
+        int wy0 = cy0[0], wy1 = cy1[nc - 1];
+        if (wy1 - wy0 >= H * 80 / 100) { wy0 = 0; wy1 = H; }
+        int wm = M_AUTO;
+        if (mode == M_AUTO && ui_mode != 2 && (frame_big || ((ui_mode == 1 || ui_mode == 3) && flip_total * 100 >= (long)W * H * page_pct)))
+            wm = M_REAGL;
+        push_region(0, wy0, W, wy1, wm);
+        frame_big = 0; g_burst = 0;
+        return 0;
+    }
+#else
+    if (g_is_mtk && mode != M_FULL && !g_scroll && (anim_next || (anim_mode && flip_total > (long)W * H * anim_min_pct / 100))) {
+        /* 整页变化交给硬件滑动动画；到 KFB_FLASH 页数时上面已经改成停下来以后整屏闪刷 */
+        anim_next = 1;
+        push_region(0, 0, W, H, M_AUTO);
+        frame_big = 0; g_burst = 0;
+        return 0;
+    }
+#endif
     /* A page turn is one refresh of the page, not a stack of text bands. With wide line spacing (多看: ~95 px between
        lines, more than CLGAP) a turn is found as up to MAXCL full-width strips ~70 px tall, and each strip was sent on its
        own: in 自动 (driver AUTO) the driver only turns a region into the non-flashing GLR16 page-turn waveform when it is
@@ -1333,19 +1359,23 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
             if (cy1[i] > cy1[0]) cy1[0] = cy1[i];
         }
         nc = 1;
-        if ((ui_mode == 1 || ui_mode == 3) && !g_scroll) mode = M_REAGL;
+        if ((ui_mode == 1 || ui_mode == 3) && !g_burst && !g_scroll) mode = M_REAGL;
         if (timing_flag && access(timing_flag, F_OK) == 0)
             fprintf(stderr, "[%ld] epd: page turn: %d strips -> one %dx%d refresh%s\n", now_ms(), n0, cx1[0] - cx0[0], cy1[0] - cy0[0],
                     mode == M_REAGL ? " (REAGL)" : "");
-    } else if (mode == M_AUTO && !g_scroll && (ui_mode == 1 || ui_mode == 3) && nc == 1 && flip_total * 100 >= (long)W * H * page_pct) {
+    } else if (mode == M_AUTO && !g_burst && !g_scroll && (ui_mode == 1 || ui_mode == 3) && nc == 1 && flip_total * 100 >= (long)W * H * page_pct) {
         mode = M_REAGL;     /* one region already: still a page turn, same non-flashing waveform */
+    }
+    if (g_burst) {
+        burst_dirty = 1;
+        if (timing_flag && access(timing_flag, F_OK) == 0) fprintf(stderr, "[%ld] epd: burst: DU, 16-gray pass when still\n", now_ms());
     }
     if (g_scroll) {
         scroll_frames++; n_scroll_frames++; scroll_last = now_ms(); scroll_dirty = 1;
         if (timing_flag && access(timing_flag, F_OK) == 0) fprintf(stderr, "[%ld] epd: scroll frame %d%s\n", now_ms(), scroll_frames, scroll_on ? "" : " (fling)");
     }
     for (int i = 0; i < nc; i++) push_region(cx0[i], cy0[i], cx1[i], cy1[i], mode);
-    frame_big = 0; g_scroll = 0;
+    frame_big = 0; g_burst = 0; g_scroll = 0;
     return 0;
 }
 
@@ -1705,8 +1735,9 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
            A deadline only while a frame is held back or a clean-up is due. */
         long deadline = -1, nowt = now_ms();
         if (held_page >= 0) deadline = held_until;
-        else if (clean_ms > 0 && cl_valid) {
-            long d = (cl_last > last_frame_ms ? cl_last : last_frame_ms) + clean_ms;
+        else if ((clean_ms > 0 || burst_dirty) && cl_valid) {
+            int cw = clean_ms > 0 ? clean_ms : burst_du_ms;
+            long d = (cl_last > last_frame_ms ? cl_last : last_frame_ms) + cw;
             deadline = d > nowt ? d : nowt + (busy_any(nowt) ? 1000 : 0);      /* due but the panel is busy: the pipe wakes us */
         }
         if (held_page < 0 && scroll_dirty && cl_valid && !scroll_active(nowt)) {   /* touch scroll cleanup */
@@ -1738,7 +1769,7 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
         if (sr > 0 && pfd >= 0 && FD_ISSET(pfd, &rf)) { char junk[64]; while (read(pfd, junk, sizeof(junk)) > 0) {} panel_event = 1; }
         if (sr == 0 || (panel_event && !FD_ISSET(ffd, &rf))) {
             nowt = now_ms();
-            if (access(sleepf, F_OK) == 0) { held_page = -1; cl_valid = 0; need_full = 1; pend_y0 = -1; qp_valid = 0; scroll_dirty = 0; scroll_frames = 0; scroll_on = 0; continue; }
+            if (access(sleepf, F_OK) == 0) { held_page = -1; cl_valid = 0; burst_dirty = 0; need_full = 1; pend_y0 = -1; qp_valid = 0; scroll_dirty = 0; scroll_frames = 0; scroll_on = 0; continue; }
             if (held_page >= 0) {
                 int expired = nowt >= held_until;
                 if (held_why == 4) {   /* launch hold: the badge after 600 ms, then wait for content / the end of LAUNCH */
@@ -1782,7 +1813,7 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
                 /* touch scroll over and the picture still: one full-quality refresh of what was drawn 1-bit (A2 / DU) */
                 int x0 = cl_x0, y0 = cl_y0, x1 = cl_x1, y1 = cl_y1;
                 int big = (long)(x1 - x0) * (y1 - y0) > (long)W * H * 6 / 10;
-                cl_valid = 0; scroll_dirty = 0; scroll_frames = 0; n_scroll_clean++;
+                cl_valid = 0; burst_dirty = 0; scroll_dirty = 0; scroll_frames = 0; n_scroll_clean++;
                 if (timing_flag && access(timing_flag, F_OK) == 0) fprintf(stderr, "[%ld] epd: scroll cleanup %dx%d+%d+%d\n", nowt, x1 - x0, y1 - y0, x0, y0);
                 g_cleaning = 1;
                 if (big) push_region(0, 0, W, H, M_QPASS); else push_region(x0, y0, x1, y1, M_QPASS);
@@ -1791,12 +1822,12 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
                 if (qp_valid && (big || (qp_x0 >= x0 && qp_y0 >= y0 && qp_x1 <= x1 && qp_y1 <= y1))) { qp_valid = 0; qp_n = 0; qp_lowq = 0; qp_done = nowt; }
             } else if (scroll_frames && !scroll_on && !scroll_dirty && !scroll_active(nowt)) {
                 scroll_frames = 0; scroll_pwr(0);
-            } else if (qp_due() && !scroll_dirty && nowt >= qp_at() && nowt - last_frame_ms >= qpass_ms && !busy_any(nowt) && !(clean_ms > 0 && cl_valid)) {
+            } else if (qp_due() && !scroll_dirty && nowt >= qp_at() && nowt - last_frame_ms >= qpass_ms && !busy_any(nowt) && !((clean_ms > 0 || burst_dirty) && cl_valid)) {
                 qp_run(nowt);
-            } else if (clean_ms > 0 && cl_valid && nowt - cl_last >= clean_ms && nowt - last_frame_ms >= clean_ms && !busy_any(nowt)) {
+            } else if ((clean_ms > 0 || burst_dirty) && cl_valid && nowt - cl_last >= (clean_ms > 0 ? clean_ms : burst_du_ms) && nowt - last_frame_ms >= (clean_ms > 0 ? clean_ms : burst_du_ms) && !busy_any(nowt)) {
                 /* the picture has been still for a while: one 16-gray pass over what was drawn 1-bit */
                 int x0 = cl_x0, y0 = cl_y0, x1 = cl_x1, y1 = cl_y1;
-                cl_valid = 0;
+                cl_valid = 0; burst_dirty = 0;
                 /* a picture inside it that is due for the quality pass: the same refresh, sent FULL (one refresh, not two) */
                 int big = (long)(x1 - x0) * (y1 - y0) > (long)W * H * 6 / 10;
                 int qin = qp_due() && qp_x0 >= x0 && qp_y0 >= y0 && qp_x1 <= x1 && qp_y1 <= y1;
@@ -1921,11 +1952,19 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
             }
             else if (!strncmp(line, "FLIPGAP", 7)) { int v; if (sscanf(line + 7, "%d", &v) == 1 && v >= 0 && v <= 5000) flip_gap_ms = v; }   /* FLIPGAP <ms>: see flip_gap_ms */
             else if (!strncmp(line, "TOL", 3)) { int v; if (sscanf(line + 3, "%d", &v) == 1) g_tolerant = v != 0; }   /* TOL <0|1>: tolerant change detection */
+            else if (!strncmp(line, "SCROLLDU", 8)) {
+                int v;
+                if (sscanf(line + 8, "%d", &v) == 1 && v >= 0 && v <= 5000) {
+                    burst_du_ms = waiter_on ? v : 0;
+                    if (!burst_du_ms) burst_dirty = 0;
+                }
+            }
+            else if (!strncmp(line, "IMG", 3)) { int v; if (sscanf(line + 3, "%d", &v) == 1 && v >= 0 && v <= 100) img_gray_pct = v; }
             else if (!strncmp(line, "REAGL", 5)) { int v; if (sscanf(line + 5, "%d", &v) == 1 && v >= 1 && v <= 100) reagl_min = v; }
             else if (!strncmp(line, "PACE", 4)) { int v; if (sscanf(line + 4, "%d", &v) == 1) pace = v != 0 && waiter_on; }
             else if (!strncmp(line, "CLEAN", 5)) {
                 int v;
-                if (sscanf(line + 5, "%d", &v) == 1 && v >= 0 && v <= 5000) { clean_ms = waiter_on ? v : 0; if (!clean_ms) cl_valid = 0; }
+                if (sscanf(line + 5, "%d", &v) == 1 && v >= 0 && v <= 5000) { clean_ms = waiter_on ? v : 0; if (!clean_ms && !burst_dirty) cl_valid = 0; }
             }
             else if (!strncmp(line, "HOLD", 4)) {   /* HOLD <ms>: how long a small change waits for a following frame (0 = off) */
                 int v;
@@ -1985,7 +2024,7 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
 
         if (access(sleepf, F_OK) == 0) {   /* screensaver / boot splash: drop, but remember which page is the newest */
             if (page >= 0) last_page = page;
-            held_page = -1; cl_valid = 0; need_full = 1; pend_y0 = -1; qp_valid = 0; scroll_dirty = 0; scroll_frames = 0; scroll_on = 0;
+            held_page = -1; cl_valid = 0; burst_dirty = 0; need_full = 1; pend_y0 = -1; qp_valid = 0; scroll_dirty = 0; scroll_frames = 0; scroll_on = 0;
             continue;
         }
         /* last_draw_ms arms the settle merging for the frames that follow closely. It used to be set for every frame, also
@@ -2120,7 +2159,9 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--gcn") && i + 1 < argc) gc_every = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--max-defer") && i + 1 < argc) max_defer_ms = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--flip-input") && i + 1 < argc) flip_input_ms = atoi(argv[++i]);
-        else if (!strcmp(argv[i], "--reagl-min") && i + 1 < argc) { reagl_min = atoi(argv[++i]); if (reagl_min < 1 || reagl_min > 100) reagl_min = 85; }
+        else if (!strcmp(argv[i], "--reagl-min") && i + 1 < argc) { reagl_min = atoi(argv[++i]); if (reagl_min < 1 || reagl_min > 100) reagl_min = 35; }
+        else if (!strcmp(argv[i], "--scroll-du") && i + 1 < argc) { burst_du_ms = atoi(argv[++i]); if (burst_du_ms < 0 || burst_du_ms > 5000) burst_du_ms = 0; }
+        else if (!strcmp(argv[i], "--img-gray") && i + 1 < argc) { img_gray_pct = atoi(argv[++i]); if (img_gray_pct < 0 || img_gray_pct > 100) img_gray_pct = 0; }
         else if (!strcmp(argv[i], "--anim") && i + 1 < argc) anim_mode = atoi(argv[++i]) ? 1 : 0;
         else if (!strcmp(argv[i], "--anim-mode") && i + 1 < argc) anim_mode = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--anim-dir") && i + 1 < argc) anim_dir = atoi(argv[++i]);

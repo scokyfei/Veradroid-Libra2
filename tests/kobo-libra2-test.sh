@@ -45,6 +45,12 @@ else fail "unexpected Kindle paths in Kobo core scripts: $hits2"; fi
 # 4. C source adaptations present
 grep -q 'FBINK_FOR_KOBO' "$TOP/display/legacy/epd.c" && ok "epd.c has FBINK_FOR_KOBO support" || fail "epd.c missing FBINK_FOR_KOBO"
 grep -q 'kobo_wipe_y8' "$TOP/display/legacy/epd.c" && ok "epd.c has Kobo strip-wipe page-turn animation" || fail "epd.c missing kobo_wipe_y8"
+grep -q 'SCROLLDU' "$TOP/display/legacy/epd.c" \
+    && grep -q 'gray_share' "$TOP/display/legacy/epd.c" \
+    && grep -q 'smooth_apply' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q -- '--reagl-min' "$TOP/host/kobo/boot/lib/container.sh" \
+    && ok "display refresh modes (smooth_apply/PACE/CLEAN/REAGL/SCROLLDU/IMG) wired end-to-end" \
+    || fail "missing display refresh mode wiring"
 grep -q -- '--swap-xy' "$TOP/input/legacy/vinput.c" && ok "vinput.c has --swap-xy support" || fail "vinput.c missing --swap-xy"
 grep -q -- '--keydev' "$TOP/input/legacy/vinput.c" && ok "vinput.c has --keydev support" || fail "vinput.c missing --keydev"
 grep -q 'input_event_sec' "$TOP/input/legacy/vinput.c" && ok "vinput.c handles musl 64-bit time_t input_event_sec" || fail "vinput.c missing input_event_sec"
