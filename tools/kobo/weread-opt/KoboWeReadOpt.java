@@ -358,7 +358,7 @@ public final class KoboWeReadOpt {
 
         private final Application app;
         private final Handler handler;
-        private Field delegateField, observersField, outerField, callbackField, progressField;
+        private Field holderField, actionRefField, delegateField, observersField, outerField, callbackField, progressField;
         private int failures;
         private long released;
 
@@ -394,14 +394,31 @@ public final class KoboWeReadOpt {
         }
 
         private void prune() throws Exception {
-            if (delegateField == null) {
+            if (observersField == null) {
                 ClassLoader loader = app.getClassLoader();
-                delegateField = findField(
-                        Class.forName("com.tencent.weread.reader.plugin.PluginLifecycle", false, loader),
-                        "mActionDelegate");
+                Class<?> plc = Class.forName("com.tencent.weread.reader.plugin.PluginLifecycle", false, loader);
+                try {
+                    holderField = findField(plc, "readerHolder");
+                    Class<?> rhc = Class.forName("com.tencent.weread.reader.plugin.PluginLifecycle$ReaderHolder", false, loader);
+                    actionRefField = findField(rhc, "actionDelegate");
+                } catch (NoSuchFieldException fallback) {
+                    delegateField = findField(plc, "mActionDelegate");
+                }
                 observersField = findField(android.database.Observable.class, "mObservers");
             }
-            Object delegate = delegateField.get(null);
+            Object delegate = null;
+            if (holderField != null) {
+                Object holder = holderField.get(null);
+                if (holder == null) return;
+                Object ref = actionRefField.get(holder);
+                if (ref instanceof java.lang.ref.WeakReference) {
+                    delegate = ((java.lang.ref.WeakReference<?>) ref).get();
+                } else {
+                    delegate = ref;
+                }
+            } else if (delegateField != null) {
+                delegate = delegateField.get(null);
+            }
             if (delegate == null) return;
             Object fragment;
             try {

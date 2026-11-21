@@ -383,14 +383,20 @@ weread_boot_prefetch() {
     done
     [ -n "$wdir" ] || return 0
     bytes=0
-    for f in "$wdir"/oat/arm/base.odex \
-             "$wdir"/lib/arm/libleveldb-android.so \
+    odex="$wdir/oat/arm/base.odex"
+    if [ -f "$odex" ]; then
+        # Warm up to 24 MB of base.odex (entire speed-profile odex, or hot prefix of full speed odex)
+        # without evicting active working set on 512 MB RAM.
+        dd if="$odex" of=/dev/null bs=262144 count=96 >/dev/null 2>&1 || true
+        sz=$(wc -c < "$odex" 2>/dev/null || echo 0)
+        [ "$sz" -gt 25165824 ] && sz=25165824
+        bytes=$((bytes + sz))
+    fi
+    for f in "$wdir"/lib/arm/libleveldb-android.so \
              "$wdir"/lib/arm/libmoai-sqlite.so \
              "$wdir"/lib/arm/libc++_shared.so; do
         [ -f "$f" ] || continue
         sz=$(wc -c < "$f" 2>/dev/null || echo 0)
-        # Skip huge full-speed odex (>40 MB) so we never evict active cache; speed-profile (~15-30 MB) fits cleanly
-        [ "$sz" -gt 41943040 ] && continue
         dd if="$f" of=/dev/null bs=262144 >/dev/null 2>&1 || true
         bytes=$((bytes + sz))
     done
