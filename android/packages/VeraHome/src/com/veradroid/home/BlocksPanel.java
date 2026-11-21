@@ -496,9 +496,24 @@ final class BlocksPanel {
             root.setVisibility(View.VISIBLE);
         }
         HostLink.cmd("status");   // 只请宿主把状态文件写新，不改设置
+        if (!battReceiverOn) {
+            android.content.IntentFilter bf = new android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+            bf.addAction(Intent.ACTION_POWER_CONNECTED);
+            bf.addAction(Intent.ACTION_POWER_DISCONNECTED);
+            bf.addAction(Intent.ACTION_TIME_TICK);
+            try { ctx.registerReceiver(battReceiver, bf); battReceiverOn = true; } catch (Throwable ignored) { }
+        }
         handler.removeCallbacks(recheck);
         handler.postDelayed(recheck, 700);
     }
+
+    private boolean battReceiverOn;
+    private final android.content.BroadcastReceiver battReceiver = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {
+            if (!showing) return;
+            readStatus();
+        }
+    };
 
     private final Runnable recheck = new Runnable() { @Override public void run() { if (showing) readStatus(); } };
 
@@ -506,6 +521,7 @@ final class BlocksPanel {
         if (!showing) return;
         showing = false;
         handler.removeCallbacks(recheck);
+        if (battReceiverOn) { try { ctx.unregisterReceiver(battReceiver); } catch (Throwable ignored) { } battReceiverOn = false; }
         HostLink.epdHint(Panel.PANEL_HINT_MS, Panel.PANEL_HINT_PCT);
         root.setVisibility(View.GONE);
         // 下次打开面板时不再带着上次的结果
@@ -514,6 +530,7 @@ final class BlocksPanel {
 
     private void destroy() {
         handler.removeCallbacksAndMessages(null);
+        if (battReceiverOn) { try { ctx.unregisterReceiver(battReceiver); } catch (Throwable ignored) { } battReceiverOn = false; }
         showing = false;
         if (attached) { try { wm.removeViewImmediate(root); } catch (Throwable ignored) { } attached = false; }
     }

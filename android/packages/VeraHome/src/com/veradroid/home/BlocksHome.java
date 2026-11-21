@@ -237,6 +237,7 @@ final class BlocksHome {
         if (!name.contentEquals(stLeft.getText())) stLeft.setText(name);
         String r = clock + "    " + state;
         if (!r.contentEquals(stRight.getText())) stRight.setText(r);
+        refreshMe();
     }
 
     // ------------------------------------------------------------------ minute tick: only the clock card's text changes
@@ -1140,7 +1141,7 @@ final class BlocksHome {
 
     // ------------------------------------------------------------------ 我的
 
-    private TextView meBattery;
+    private TextView meBattery, meBatterySub;
 
     private View buildMe() {
         LinearLayout content = new LinearLayout(a);
@@ -1181,7 +1182,10 @@ final class BlocksHome {
         devBox.addView(Blocks.hair(a));
         LinearLayout r1 = new LinearLayout(a);
         Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
-        String[][] cells = { { (st.get("battery") == null ? "—" : st.get("battery")) + "%", "剩余电量", "Battery" },
+        int[] live = Ui.liveBattery(a);
+        String initBat = live != null ? String.valueOf(live[0]) : st.get("battery");
+        boolean initChg = live != null ? (live[1] == 1) : "1".equals(st.get("charging"));
+        String[][] cells = { { (initBat == null ? "—" : initBat) + "%", initChg ? "充电中" : "剩余电量", "Battery" },
             { storageUsed() + "%", "存储已用", "Storage" }, { version(), "桌面版本", "Version" } };
         for (int i = 0; i < 3; i++) {
             if (i > 0) r1.addView(Blocks.vrule(a), new LinearLayout.LayoutParams(Math.max(1, Blocks.stroke(a) - 1), ViewGroup.LayoutParams.MATCH_PARENT));
@@ -1189,9 +1193,10 @@ final class BlocksHome {
             cl.setOrientation(LinearLayout.VERTICAL);
             cl.setPadding(dp(10), dp(6), dp(6), dp(6));
             TextView v = BlocksCards.line(a, cells[i][0], 17, true);
-            if (i == 0) meBattery = v;
+            TextView sub = BlocksCards.line(a, cells[i][1], 12, false);
+            if (i == 0) { meBattery = v; meBatterySub = sub; }
             cl.addView(v);
-            cl.addView(BlocksCards.line(a, cells[i][1], 12, false));
+            cl.addView(sub);
             cl.addView(Blocks.cap(a, cells[i][2]));
             r1.addView(cl, Blocks.weight(1));
         }
@@ -1328,13 +1333,19 @@ final class BlocksHome {
         return p;
     }
 
-    /** 电量每次进“我的”都可能变：只改那一格的字。 */
+    /** 电量每次进“我的”或收到电池广播都实时更新：只改那一格的字。 */
     private void refreshMe() {
         if (meBattery == null) return;
         int[] live = Ui.liveBattery(a);
-        String b = live != null ? String.valueOf(live[0]) : HostLink.kv(HostLink.CTL + "status").get("battery");
+        Map<String, String> st = live == null ? HostLink.kv(HostLink.CTL + "status") : null;
+        String b = live != null ? String.valueOf(live[0]) : st.get("battery");
+        boolean chg = live != null ? (live[1] == 1) : "1".equals(st.get("charging"));
         String s = (b == null ? "—" : b) + "%";
         if (!s.contentEquals(meBattery.getText())) meBattery.setText(s);
+        if (meBatterySub != null) {
+            String sub = chg ? "充电中" : "剩余电量";
+            if (!sub.contentEquals(meBatterySub.getText())) meBatterySub.setText(sub);
+        }
     }
 
     String model() {

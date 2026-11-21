@@ -226,15 +226,32 @@ final class Panel {
             frame.setVisibility(View.VISIBLE);
         }
         HostLink.cmd("status");   // 只是请宿主把状态文件写新（电量、亮度），不改任何设置
+        if (!battReceiverOn) {
+            android.content.IntentFilter bf = new android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+            bf.addAction(Intent.ACTION_POWER_CONNECTED);
+            bf.addAction(Intent.ACTION_POWER_DISCONNECTED);
+            bf.addAction(Intent.ACTION_TIME_TICK);
+            try { ctx.registerReceiver(battReceiver, bf); battReceiverOn = true; } catch (Throwable ignored) { }
+        }
         handler.removeCallbacks(recheck);
         handler.postDelayed(recheck, 700);
     }
+
+    private boolean battReceiverOn;
+    private final android.content.BroadcastReceiver battReceiver = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {
+            if (!showing) return;
+            paintClock();
+            readStatus();
+        }
+    };
 
     /** 收起：窗口留着，只是不可见；趁这时换回第一屏，下次出来第一帧就是对的。 */
     private void finish() {
         if (!showing) return;
         showing = false;
         handler.removeCallbacks(recheck);
+        if (battReceiverOn) { try { ctx.unregisterReceiver(battReceiver); } catch (Throwable ignored) { } battReceiverOn = false; }
         HostLink.epdHint(PANEL_HINT_MS, PANEL_HINT_PCT);
         frame.setVisibility(View.GONE);
         if (current != P_MAIN) show(P_MAIN);
@@ -242,6 +259,7 @@ final class Panel {
 
     private void destroy() {
         handler.removeCallbacksAndMessages(null);
+        if (battReceiverOn) { try { ctx.unregisterReceiver(battReceiver); } catch (Throwable ignored) { } battReceiverOn = false; }
         showing = false;
         if (attached) { try { wm.removeViewImmediate(frame); } catch (Throwable ignored) { } attached = false; }
     }
