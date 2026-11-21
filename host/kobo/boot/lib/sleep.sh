@@ -95,6 +95,7 @@ kobo_exit_sleep() {
     fi
     touch "$W/lastinput" 2>/dev/null || true
     rm -f "$X/ctl/sleep"
+    type wifi_ps_off >/dev/null 2>&1 && wifi_ps_off
     epd_send REDRAW
     t "sleep: woke up and redrew screen"
 }

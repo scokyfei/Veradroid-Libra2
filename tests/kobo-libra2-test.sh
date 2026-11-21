@@ -138,6 +138,12 @@ grep -qE '^com\.tencent\.weread\.eink .*KFB_SETTLE=30' "$TOP/host/kobo/boot/appp
     && awk '/^settings_load\(\)/,/^}/' "$TOP/host/kobo/boot/lib/settings.sh" | awk '/smooth_apply/{if(!s)s=NR} /settings\.app/{if(!a)a=NR} END{exit !(s && a && s<a)}' \
     && ok "WeRead EPD profile + smooth_apply runs before per-app overrides" \
     || fail "WeRead EPD profile or settings_load ordering wrong"
+grep -q 'ethernet-service-wifi.jar' "$TOP/host/kobo/boot/lib/container.sh" \
+    && grep -q 'rtl8723ds' "$TOP/host/kobo/boot/lib/network.sh" \
+    && grep -q 'rmem_max' "$TOP/host/kobo/boot/lib/network.sh" \
+    && [ -f "$TOP/tools/kobo/patch-ethernet-wifi.py" ] \
+    && ok "Wi-Fi transport reporting (ethernet-service-wifi.jar) + RTL8723DS LPS disable + TCP rmem_max wired" \
+    || fail "missing ethernet-service-wifi.jar or RTL8723DS LPS / rmem_max tuning"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"

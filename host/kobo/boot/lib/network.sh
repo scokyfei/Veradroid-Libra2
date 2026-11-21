@@ -11,41 +11,55 @@ wifi_dev() { for d in wlan0 eth0; do [ -d "/sys/class/net/$d" ] && { echo "$d"; 
 
 wifi_ps_state() {
     d=$(wifi_dev)
+    if [ -r "/proc/net/rtl8723ds/$d/ps_info" ]; then
+        grep -q 'LPS mode: NO LPS' "/proc/net/rtl8723ds/$d/ps_info" 2>/dev/null && echo off || echo on
+        return 0
+    fi
     iwconfig "$d" 2>/dev/null | sed -n 's/.*Power Management:\(o[nf]*\).*/\1/p'
 }
 
 wifi_ps_set() {
     d=$(wifi_dev)
+    if [ -r "/proc/net/rtl8723ds/$d/ps_info" ] && command -v iwpriv >/dev/null 2>&1; then
+        if [ "$1" = off ]; then
+            echo 0 > /sys/module/8723ds/parameters/rtw_power_mgnt 2>/dev/null || true
+            iwpriv "$d" pm_set "lps=0" >/dev/null 2>&1 || true
+            iwpriv "$d" pm_set "ips=0" >/dev/null 2>&1 || true
+        else
+            echo 2 > /sys/module/8723ds/parameters/rtw_power_mgnt 2>/dev/null || true
+            iwpriv "$d" pm_set "lps=2" >/dev/null 2>&1 || true
+            iwpriv "$d" pm_set "ips=1" >/dev/null 2>&1 || true
+        fi
+        return 0
+    fi
     iwconfig "$d" power "$1" 2>/dev/null || true
 }
 
 wifi_ps_off() {
     [ -f "$W/wifi.ps" ] && return 0
-    [ "$(wifi_ps_state)" = on ] && wifi_ps_set off && touch "$W/wifi.ps" && t "wifi: power saving off"
+    if [ "$(wifi_ps_state)" = on ]; then
+        wifi_ps_set off
+        touch "$W/wifi.ps"
+        t "wifi: power saving off"
+    fi
     return 0
 }
 
 wifi_ps_restore() {
     [ -f "$W/wifi.ps" ] && rm -f "$W/wifi.ps" && wifi_ps_set on && t "wifi: power saving restored"
+    if [ ! -f "$W/sleeping" ] && [ -f "$W/net.rmem.state" ]; then
+        read -r rm wm < "$W/net.rmem.state"
+        [ -n "$rm" ] && echo "$rm" > /proc/sys/net/core/rmem_max 2>/dev/null || true
+        [ -n "$wm" ] && echo "$wm" > /proc/sys/net/core/wmem_max 2>/dev/null || true
+        rm -f "$W/net.rmem.state"
+    fi
     return 0
 }
 
 wifi_ps_tick() {
     case "${WIFI_PS:-auto}" in
         on)  wifi_ps_restore ;;
-        off) wifi_ps_off ;;
-        *)
-            d=$(wifi_dev); now=$(cut -d. -f1 /proc/uptime)
-            rx=$(cat "/sys/class/net/$d/statistics/rx_bytes" 2>/dev/null || echo 0)
-            set -- $(cat "$W/wifi.rx" 2>/dev/null); prx=${2:-$rx}; pt=${1:-$now}
-            echo "$now $rx" > "$W/wifi.rx"
-            busy=
-            [ -f "$W/fwd.id" ] && busy=fwd
-            dt=$((now - pt))
-            [ "$dt" -gt 0 ] && [ $(( (rx - prx) / dt )) -ge "${WIFI_BUSY_BPS:-32768}" ] && busy=rx
-            if [ -n "$busy" ]; then echo "$now" > "$W/wifi.busy"; wifi_ps_off
-            elif [ -f "$W/wifi.ps" ] && [ $((now - $(cat "$W/wifi.busy" 2>/dev/null || echo 0))) -ge 60 ]; then wifi_ps_restore
-            fi ;;
+        *)   [ -f "$W/sleeping" ] || [ -f "$W/saver_frozen" ] || wifi_ps_off ;;
     esac
 }
 
@@ -89,4 +103,10 @@ hostnet_fix_rules() {
 net_start() {
     hostnet_fix_rules
     hostnet_write
+    wifi_ps_off
+    if [ ! -f "$W/net.rmem.state" ] && [ -w /proc/sys/net/core/rmem_max ]; then
+        echo "$(cat /proc/sys/net/core/rmem_max 2>/dev/null) $(cat /proc/sys/net/core/wmem_max 2>/dev/null)" > "$W/net.rmem.state"
+        echo 1048576 > /proc/sys/net/core/rmem_max 2>/dev/null || true
+        echo 1048576 > /proc/sys/net/core/wmem_max 2>/dev/null || true
+    fi
 }

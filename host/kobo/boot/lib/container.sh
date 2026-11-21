@@ -206,6 +206,18 @@ container_start() {
                 && t "container: installed Kobo VeraHome.apk (cleared stale odex)"
         fi
     fi
+    # Install Wi-Fi-transport-enabled ethernet-service.jar so apps (WeRead offline book
+    # download, etc.) see TYPE_WIFI + TRANSPORT_WIFI on shared hostnet wlan0
+    if [ -f "$VD/bin/ethernet-service-wifi.jar" ] && [ -d "$R/system/framework" ]; then
+        if ! cmp -s "$VD/bin/ethernet-service-wifi.jar" "$R/system/framework/ethernet-service.jar"; then
+            cp "$VD/bin/ethernet-service-wifi.jar" "$R/system/framework/ethernet-service.jar.new" \
+                && chmod 644 "$R/system/framework/ethernet-service.jar.new" \
+                && mv -f "$R/system/framework/ethernet-service.jar.new" "$R/system/framework/ethernet-service.jar" \
+                && rm -f "$R/system/framework/oat/arm/ethernet-service.odex" \
+                && rm -f "$SYS/data/dalvik-cache/arm/system@framework@ethernet-service.jar@classes.dex" \
+                && t "container: installed Wi-Fi-transport ethernet-service.jar"
+        fi
+    fi
     sysfont_prepare
     fstrim_defuse
     docs_snapshot
