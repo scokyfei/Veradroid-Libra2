@@ -1145,12 +1145,14 @@ final class BlocksHome {
     private View buildMe() {
         LinearLayout content = new LinearLayout(a);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), 0, dp(16), dp(8));
+        content.setPadding(dp(16), 0, dp(16), dp(6));
         LinearLayout pg = new LinearLayout(a);
         pg.setOrientation(LinearLayout.VERTICAL);
-        pg.addView(Blocks.pageHead(a, a.standalone ? "Settings" : "Device / local reader", a.standalone ? "设置" : "我的", Blocks.squareButton(a, a.standalone ? Icons.Kind.CLOSE : Icons.Kind.MORE, new View.OnClickListener() {
+        LinearLayout head = Blocks.pageHead(a, a.standalone ? "Settings" : "Device / local reader", a.standalone ? "设置" : "我的", Blocks.squareButton(a, a.standalone ? Icons.Kind.CLOSE : Icons.Kind.MORE, new View.OnClickListener() {
             @Override public void onClick(View v) { if (a.standalone) a.finish(); else a.mainMenu(); }
-        })));
+        }));
+        head.setPadding(dp(16), dp(4), dp(16), dp(4));
+        pg.addView(head);
         // 设备卡片：上面是机器，下面一排三格（电量 / 存储 / 版本），同一个双线框里，格子之间竖线隔开
         LinearLayout devBox = new LinearLayout(a);
         devBox.setOrientation(LinearLayout.VERTICAL);
@@ -1159,18 +1161,17 @@ final class BlocksHome {
         devBox.setPadding(ip, ip, ip + Blocks.shade(a), ip + Blocks.shade(a));
         LinearLayout dev = new LinearLayout(a);
         dev.setGravity(Gravity.CENTER_VERTICAL);
-        dev.setPadding(dp(10), dp(10), dp(10), dp(10));
+        dev.setPadding(dp(10), dp(8), dp(10), dp(8));
         FrameLayout ib = new FrameLayout(a);
         ib.setBackground(Blocks.plain(a));
-        ib.addView(new Icons.IconView(a, Icons.Kind.DEVICE), new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER));
-        dev.addView(ib, Blocks.lp(dp(64), dp(64)));
+        ib.addView(new Icons.IconView(a, Icons.Kind.DEVICE), new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.CENTER));
+        dev.addView(ib, Blocks.lp(dp(56), dp(56)));
         LinearLayout dc = new LinearLayout(a);
         dc.setOrientation(LinearLayout.VERTICAL);
-        dc.setPadding(dp(14), 0, 0, 0);
+        dc.setPadding(dp(12), 0, 0, 0);
         dc.addView(Blocks.cap(a, "Local device"));
-        dc.addView(BlocksCards.line(a, prefs.getString("name", "VeraDroid").length() > 0 ? prefs.getString("name", "VeraDroid") : "VeraDroid", 19, true));
-        dc.addView(BlocksCards.line(a, model() + " · Android " + Build.VERSION.RELEASE, 14, false));
-        dc.addView(BlocksCards.line(a, "VeraHome " + version() + " · 构建 " + buildDate(), 13, false));
+        dc.addView(BlocksCards.line(a, prefs.getString("name", "VeraDroid").length() > 0 ? prefs.getString("name", "VeraDroid") : "VeraDroid", 18, true));
+        dc.addView(BlocksCards.line(a, model() + " · Android " + Build.VERSION.RELEASE + " · " + buildDate(), 13, false));
         dev.addView(dc, Blocks.weight(1));
         dev.addView(new Icons.IconView(a, Icons.Kind.CHEV_R), Blocks.lp(dp(18), dp(18)));
         dev.setClickable(true);
@@ -1186,8 +1187,8 @@ final class BlocksHome {
             if (i > 0) r1.addView(Blocks.vrule(a), new LinearLayout.LayoutParams(Math.max(1, Blocks.stroke(a) - 1), ViewGroup.LayoutParams.MATCH_PARENT));
             LinearLayout cl = new LinearLayout(a);
             cl.setOrientation(LinearLayout.VERTICAL);
-            cl.setPadding(dp(10), dp(8), dp(6), dp(8));
-            TextView v = BlocksCards.line(a, cells[i][0], 18, true);
+            cl.setPadding(dp(10), dp(6), dp(6), dp(6));
+            TextView v = BlocksCards.line(a, cells[i][0], 17, true);
             if (i == 0) meBattery = v;
             cl.addView(v);
             cl.addView(BlocksCards.line(a, cells[i][1], 12, false));
@@ -1198,27 +1199,27 @@ final class BlocksHome {
         content.addView(devBox, Blocks.gap(a, 2));
         // 后台在做的事：系统更新 / 安装应用 / 优化应用（方块进度小卡片，没有就不显示）
         content.addView(TaskCards.strip(a), Blocks.match());
-        content.addView(quickRow(st), Blocks.gap(a, 10));
+        content.addView(quickRow(st), Blocks.gap(a, 8));
         // 阅读统计
         int done = 0;
         if (a.libOn()) for (Lib.Book b : Lib.all()) if (b.percent >= 100) done++;
         LinearLayout r2 = new LinearLayout(a);
-        r2.addView(Blocks.stat(a, Stats.shortDuration(Stats.monthMs(a)), "本月阅读", "This month"), cell(0));
-        r2.addView(Blocks.stat(a, String.valueOf(done), "已读完", "Finished"), cell(1));
-        r2.addView(Blocks.stat(a, String.valueOf(Stats.bookmarkCount(a)), "书签", "Bookmarks"), cell(2));
+        r2.addView(meStat(Stats.shortDuration(Stats.monthMs(a)), "本月阅读", "This month"), cell(0));
+        r2.addView(meStat(String.valueOf(done), "已读完", "Finished"), cell(1));
+        r2.addView(meStat(String.valueOf(Stats.bookmarkCount(a)), "书签", "Bookmarks"), cell(2));
         for (int i = 0; i < r2.getChildCount(); i++) {
             View v = r2.getChildAt(i);
             v.setClickable(true);
             v.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View x) { a.startActivity(new Intent(a, StatsActivity.class)); a.overridePendingTransition(0, 0); } });
             Blocks.fast(v);
         }
-        content.addView(r2, Blocks.gap(a, 10));
+        content.addView(r2, Blocks.gap(a, 8));
         // 设置分类
         LinearLayout sh = new LinearLayout(a);
         sh.setGravity(Gravity.BOTTOM);
         sh.addView(Ui.text(a, "设备与设置", 16, true), Blocks.weight(1));
         sh.addView(Blocks.cap(a, "Preferences"));
-        content.addView(sh, Blocks.gap(a, 14));
+        content.addView(sh, Blocks.gap(a, 10));
         LinearLayout list = new LinearLayout(a);
         list.setOrientation(LinearLayout.VERTICAL);
         list.setBackground(Blocks.frameDouble(a));
@@ -1234,11 +1235,54 @@ final class BlocksHome {
         for (int i = 0; i < rows.length; i++) {
             final int k = keys[i];
             if (i > 0) list.addView(Blocks.hair(a));
-            list.addView(Blocks.navRow(a, rows[i][0], rows[i][1], new View.OnClickListener() { @Override public void onClick(View v) { backTo = ME; go(k); } }));
+            list.addView(meNavRow(rows[i][0], rows[i][1], new View.OnClickListener() { @Override public void onClick(View v) { backTo = ME; go(k); } }));
         }
         content.addView(list, Blocks.gap(a, 4));
         pg.addView(paged(content), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         return pg;
+    }
+
+    /** “我的”页的紧凑统计格与设置行，让整页（含全部“设备与设置”）在单屏内完整显示。 */
+    private LinearLayout meStat(String value, String zh, String en) {
+        LinearLayout t = new LinearLayout(a);
+        t.setOrientation(LinearLayout.VERTICAL);
+        t.setBackground(Blocks.frame(a));
+        t.setPadding(dp(10), dp(6), dp(8) + Blocks.shade(a), dp(6) + Blocks.shade(a));
+        TextView v = Ui.text(a, value, 18, true);
+        v.setSingleLine(true);
+        t.addView(v);
+        TextView z = Ui.text(a, zh, 12, false);
+        z.setSingleLine(true);
+        t.addView(z);
+        t.addView(Blocks.cap(a, en));
+        return t;
+    }
+
+    private LinearLayout meNavRow(String zh, String hint, View.OnClickListener l) {
+        LinearLayout r = new LinearLayout(a);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dp(12), dp(7), dp(8), dp(7));
+        r.setMinimumHeight(dp(56));
+        LinearLayout mid = new LinearLayout(a);
+        mid.setOrientation(LinearLayout.VERTICAL);
+        mid.setGravity(Gravity.CENTER_HORIZONTAL);
+        TextView t = Ui.text(a, zh, 17, true);
+        t.setGravity(Gravity.CENTER);
+        mid.addView(t);
+        if (hint != null) {
+            TextView h = Ui.text(a, hint, 12, false);
+            h.setGravity(Gravity.CENTER);
+            h.setSingleLine(true);
+            h.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            mid.addView(h);
+        }
+        r.addView(mid, Blocks.weight(1));
+        r.addView(new Icons.IconView(a, Icons.Kind.CHEV_R), Blocks.lp(dp(18), dp(18)));
+        r.setClickable(true);
+        r.setOnClickListener(l);
+        Blocks.fast(r);
+        return r;
     }
 
     /** 我的页的快捷设置：Wi-Fi 开关、亮度（下拉面板）、整屏刷新、动画档位。每格点一下只改它自己那一格的字。 */
@@ -1253,12 +1297,12 @@ final class BlocksHome {
             c.setOrientation(LinearLayout.VERTICAL);
             c.setGravity(Gravity.CENTER_HORIZONTAL);
             c.setBackground(Blocks.frame(a));
-            c.setPadding(dp(4), dp(8), dp(4) + Blocks.shade(a), dp(6) + Blocks.shade(a));
-            c.addView(new Icons.IconView(a, k[i]), Blocks.lp(dp(26), dp(26)));
+            c.setPadding(dp(4), dp(6), dp(4) + Blocks.shade(a), dp(5) + Blocks.shade(a));
+            c.addView(new Icons.IconView(a, k[i]), Blocks.lp(dp(24), dp(24)));
             TextView name = Ui.text(a, t[i][0], 13, true);
             name.setGravity(Gravity.CENTER);
             c.addView(name, Blocks.match());
-            final TextView val = Ui.text(a, t[i][1], 12, false);
+            final TextView val = Ui.text(a, t[i][1], 11, false);
             val.setGravity(Gravity.CENTER);
             c.addView(val, Blocks.match());
             c.setClickable(true);
