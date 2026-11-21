@@ -159,6 +159,15 @@ tune_apply() {
         [ -w "$ig/above_hispeed_delay" ] && echo 20000 > "$ig/above_hispeed_delay" 2>/dev/null || true
         t "cpufreq: interactive tuned (go_hispeed=85 target=75/80/85 io_is_busy=0 min_sample=20ms)"
     fi
+    # Switch flash eMMC scheduler from cfq to deadline (matches Koboweread io-tune; avoids rotational time-slices)
+    sf=/sys/block/mmcblk0/queue/scheduler
+    if [ -w "$sf" ] && grep -qw deadline "$sf" 2>/dev/null; then
+        cur_s=$(sed -n 's/.*\[\([^]]*\)\].*/\1/p' "$sf" 2>/dev/null)
+        if [ -n "$cur_s" ] && [ "$cur_s" != deadline ]; then
+            [ -f "$W/iosched.state" ] || echo "$cur_s" > "$W/iosched.state"
+            echo deadline > "$sf" 2>/dev/null && t "io: mmcblk0 scheduler=deadline (was $cur_s)"
+        fi
+    fi
     return 0
 }
 
@@ -175,6 +184,10 @@ tune_restore() {
             [ -w "$ig/$k" ] && echo "$v" > "$ig/$k" 2>/dev/null || true
         done < "$W/cpufreq.interactive.state"
         rm -f "$W/cpufreq.interactive.state"
+    fi
+    if [ -f "$W/iosched.state" ] && [ -w /sys/block/mmcblk0/queue/scheduler ]; then
+        cat "$W/iosched.state" > /sys/block/mmcblk0/queue/scheduler 2>/dev/null || true
+        rm -f "$W/iosched.state"
     fi
 }
 

@@ -14,12 +14,23 @@
 extern long syscall(long, ...);
 extern int open(const char *, int, ...);
 extern int close(int);
+extern long read(int, void *, size_t);
 extern int ioctl(int, unsigned long, ...);
 extern int *__errno(void);
 extern void *dlopen(const char *, int);
 extern void *dlsym(void *, const char *);
+extern int getpid(void);
+extern unsigned int getuid(void);
+extern int usleep(unsigned int);
+extern int setpriority(int, unsigned int, int);
+extern int pthread_create(long *, const void *, void *(*)(void *), void *);
+extern int pthread_detach(long);
+extern void *opendir(const char *);
+extern void *readdir(void *);
+extern int closedir(void *);
 
 #define RTLD_LAZY       1
+#define PRIO_PROCESS    0
 #define ARM_NR_MADVISE  220L
 #define ERR_ENOSYS      38
 #define O_RDWR_CLOEXEC  (2 | 02000000)
@@ -33,8 +44,11 @@ struct kobo_madv_req {
     uint32_t advice;
 };
 
+static void maybe_init_weread_opt(void);
+
 int madvise(void *addr, size_t length, int advice)
 {
+    maybe_init_weread_opt();
     int saved_errno = *__errno();
     int rc = (int)syscall(ARM_NR_MADVISE, addr, length, advice);
     if (rc == 0 || *__errno() != ERR_ENOSYS) {
@@ -132,4 +146,278 @@ int SSL_write(void *ssl, const void *buf, int num)
     }
 
     return real_ssl_write(ssl, buf, num);
+}
+
+/*
+ * WeRead 1.9.7 runtime optimizations (inspired by Koboweread, zero APK edits):
+ *  1. Raise Skia software glyph cache to 16 MB / 16384 glyphs so CJK text is
+ *     not constantly evicted and re-rasterized on page turns.
+ *  2. Defer WRWebViewPool.preInit (sets isInited=true via JNI before home
+ *     activity) to avoid loading ~27 MB libwebviewchromium on startup.
+ *  3. Deprioritize heavy background pools (WRCommonPool, WRNetworkPool,
+ *     WRLowPriorityPo, BUGLY_ASYNC, RxIo/Computation, glide) to nice 19 and
+ *     boost TypeSetting to nice -2 so page turns & typesetting never starve.
+ *  4. Call VMRuntime.trimHeap() when MemAvailable < 150 MB to keep long
+ *     reading sessions snappy on 512 MB RAM.
+ */
+struct kobo_dirent {
+    uint64_t d_ino;
+    int64_t  d_off;
+    uint16_t d_reclen;
+    uint8_t  d_type;
+    char     d_name[256];
+};
+
+static int str_eq(const char *a, const char *b)
+{
+    while (*a && *a == *b) { a++; b++; }
+    return *a == 0 && *b == 0;
+}
+
+static int str_starts(const char *s, const char *pfx)
+{
+    while (*pfx) {
+        if (*s++ != *pfx++) return 0;
+    }
+    return 1;
+}
+
+static int read_small_file(const char *path, char *buf, int sz)
+{
+    int fd = open(path, 0);
+    if (fd < 0) return -1;
+    long n = read(fd, buf, (size_t)(sz - 1));
+    close(fd);
+    if (n < 0) n = 0;
+    buf[n] = 0;
+    return (int)n;
+}
+
+static int parse_uint(const char *s)
+{
+    int v = 0;
+    while (*s >= '0' && *s <= '9') {
+        v = v * 10 + (*s - '0');
+        s++;
+    }
+    return v;
+}
+
+static int read_mem_available_kb(void)
+{
+    char buf[1024];
+    int n = read_small_file("/proc/meminfo", buf, sizeof(buf));
+    if (n <= 0) return 999999;
+    const char *p = buf;
+    while (*p) {
+        if (str_starts(p, "MemAvailable:")) {
+            p += 13;
+            while (*p == ' ' || *p == '\t') p++;
+            return parse_uint(p);
+        }
+        while (*p && *p != '\n') p++;
+        if (*p == '\n') p++;
+    }
+    return 999999;
+}
+
+static void tune_weread_threads(void)
+{
+    void *d = opendir("/proc/self/task");
+    if (!d) return;
+    struct kobo_dirent *ent;
+    char path[64], comm[32];
+    while ((ent = (struct kobo_dirent *)readdir(d)) != NULL) {
+        if (ent->d_name[0] < '1' || ent->d_name[0] > '9')
+            continue;
+        int k = 0;
+        const char *a = "/proc/self/task/";
+        while (*a) path[k++] = *a++;
+        for (const char *s = ent->d_name; *s && k < 48; ) path[k++] = *s++;
+        a = "/comm";
+        while (*a) path[k++] = *a++;
+        path[k] = 0;
+        if (read_small_file(path, comm, sizeof(comm)) <= 0)
+            continue;
+        unsigned int tid = (unsigned int)parse_uint(ent->d_name);
+        if (tid == 0) continue;
+        if (str_starts(comm, "WRCommonPool") ||
+            str_starts(comm, "WRNetworkPool") ||
+            str_starts(comm, "WRLowPriorityPo") ||
+            str_starts(comm, "BUGLY_ASYNC") ||
+            str_starts(comm, "RxIoScheduler") ||
+            str_starts(comm, "RxComputationSc") ||
+            str_starts(comm, "glide-")) {
+            setpriority(PRIO_PROCESS, tid, 19);
+        } else if (str_starts(comm, "TypeSetting")) {
+            setpriority(PRIO_PROCESS, tid, -2);
+        }
+    }
+    closedir(d);
+}
+
+/* Minimal JNI 1.1+ vtable helpers (ABI-fixed slot indices, zero external headers). */
+typedef void *jobj;
+typedef void ***JNIEnvPtr;
+typedef void ***JavaVMPtr;
+
+static void jni_clear_exc(JNIEnvPtr e)
+{
+    uint8_t (*exc_chk)(JNIEnvPtr) = (uint8_t (*)(JNIEnvPtr))((*e)[228]);
+    void (*exc_clr)(JNIEnvPtr) = (void (*)(JNIEnvPtr))((*e)[17]);
+    if (exc_chk(e)) exc_clr(e);
+}
+
+static const char *defer_webview_pool(JNIEnvPtr e, jobj app)
+{
+    jobj (*find_cls)(JNIEnvPtr, const char *) = (jobj (*)(JNIEnvPtr, const char *))((*e)[6]);
+    jobj (*get_mid)(JNIEnvPtr, jobj, const char *, const char *) = (jobj (*)(JNIEnvPtr, jobj, const char *, const char *))((*e)[33]);
+    jobj (*call_obj)(JNIEnvPtr, jobj, jobj, ...) = (jobj (*)(JNIEnvPtr, jobj, jobj, ...))((*e)[34]);
+    jobj (*get_sfid)(JNIEnvPtr, jobj, const char *, const char *) = (jobj (*)(JNIEnvPtr, jobj, const char *, const char *))((*e)[144]);
+    uint8_t (*get_sbool)(JNIEnvPtr, jobj, jobj) = (uint8_t (*)(JNIEnvPtr, jobj, jobj))((*e)[146]);
+    void (*set_sbool)(JNIEnvPtr, jobj, jobj, uint8_t) = (void (*)(JNIEnvPtr, jobj, jobj, uint8_t))((*e)[155]);
+    jobj (*new_str)(JNIEnvPtr, const char *) = (jobj (*)(JNIEnvPtr, const char *))((*e)[167]);
+
+    jobj ctx = find_cls(e, "android/content/Context");
+    jobj m_cl = ctx ? get_mid(e, ctx, "getClassLoader", "()Ljava/lang/ClassLoader;") : NULL;
+    if (!m_cl) return "no_get_cl";
+    jobj cl = call_obj(e, app, m_cl);
+    jni_clear_exc(e);
+    if (!cl) return "cl_null";
+
+    jobj cl_cls = find_cls(e, "java/lang/ClassLoader");
+    jobj m_load = cl_cls ? get_mid(e, cl_cls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;") : NULL;
+    if (!m_load) return "no_load_cls";
+    jobj s_name = new_str(e, "com.tencent.weread.WRWebViewPool");
+    if (!s_name) return "no_str";
+    jobj pool = call_obj(e, cl, m_load, s_name);
+    jni_clear_exc(e);
+    if (!pool) return "pool_missing";
+
+    jobj f_inited = get_sfid(e, pool, "isInited", "Z");
+    jni_clear_exc(e);
+    if (!f_inited) return "no_isInited";
+    if (get_sbool(e, pool, f_inited)) return "too_late";
+    set_sbool(e, pool, f_inited, 1);
+    return "deferred";
+}
+
+static void jni_trim_heap(JNIEnvPtr e)
+{
+    jobj (*find_cls)(JNIEnvPtr, const char *) = (jobj (*)(JNIEnvPtr, const char *))((*e)[6]);
+    jobj (*get_smid)(JNIEnvPtr, jobj, const char *, const char *) = (jobj (*)(JNIEnvPtr, jobj, const char *, const char *))((*e)[113]);
+    jobj (*call_sobj)(JNIEnvPtr, jobj, jobj, ...) = (jobj (*)(JNIEnvPtr, jobj, jobj, ...))((*e)[114]);
+    jobj (*get_mid)(JNIEnvPtr, jobj, const char *, const char *) = (jobj (*)(JNIEnvPtr, jobj, const char *, const char *))((*e)[33]);
+    void (*call_void)(JNIEnvPtr, jobj, jobj, ...) = (void (*)(JNIEnvPtr, jobj, jobj, ...))((*e)[61]);
+
+    jobj vmr = find_cls(e, "dalvik/system/VMRuntime");
+    if (!vmr) { jni_clear_exc(e); return; }
+    jobj m_get = get_smid(e, vmr, "getRuntime", "()Ldalvik/system/VMRuntime;");
+    jobj m_trim = get_mid(e, vmr, "trimHeap", "()V");
+    if (!m_get || !m_trim) { jni_clear_exc(e); return; }
+    jobj rt = call_sobj(e, vmr, m_get);
+    jni_clear_exc(e);
+    if (rt) {
+        call_void(e, rt, m_trim);
+        jni_clear_exc(e);
+    }
+}
+
+static void *weread_opt_thread(void *unused)
+{
+    (void)unused;
+    void *log = dlopen("liblog.so", RTLD_LAZY);
+    int (*say)(int, const char *, const char *, ...) =
+        log ? (int (*)(int, const char *, const char *, ...))dlsym(log, "__android_log_print") : NULL;
+
+    /* 1. Raise Skia software glyph cache to 16 MB / 16384 glyphs */
+    void *skia = dlopen("libskia.so", RTLD_LAZY);
+    if (skia) {
+        unsigned (*set_lim)(unsigned) = (unsigned (*)(unsigned))dlsym(skia, "_ZN10SkGraphics17SetFontCacheLimitEj");
+        int (*set_cnt)(int) = (int (*)(int))dlsym(skia, "_ZN10SkGraphics22SetFontCacheCountLimitEi");
+        unsigned (*get_lim)(void) = (unsigned (*)(void))dlsym(skia, "_ZN10SkGraphics17GetFontCacheLimitEv");
+        int (*get_cnt)(void) = (int (*)(void))dlsym(skia, "_ZN10SkGraphics22GetFontCacheCountLimitEv");
+        if (set_lim) set_lim(16u << 20);
+        if (set_cnt) set_cnt(16384);
+        if (say && get_lim && get_cnt)
+            say(4, "KoboWeRead", "SKIA_FONT_CACHE limit=%u count_limit=%d", get_lim(), get_cnt());
+    }
+
+    /* 2. Attach daemon thread to ART and defer WRWebViewPool.preInit */
+    int (*get_vms)(JavaVMPtr *, int, int *) =
+        (int (*)(JavaVMPtr *, int, int *))dlsym((void *)-2L, "JNI_GetCreatedJavaVMs");
+    if (!get_vms) {
+        void *art = dlopen("/system/lib/libart.so", RTLD_LAZY);
+        if (!art) art = dlopen("libart.so", RTLD_LAZY);
+        if (art) get_vms = (int (*)(JavaVMPtr *, int, int *))dlsym(art, "JNI_GetCreatedJavaVMs");
+    }
+    JavaVMPtr vm = NULL;
+    JNIEnvPtr env = NULL;
+    int nvms = 0;
+    if (get_vms && get_vms(&vm, 1, &nvms) == 0 && nvms >= 1 && vm) {
+        int (*attach)(JavaVMPtr, void **, void *) = (int (*)(JavaVMPtr, void **, void *))((*vm)[7]);
+        if (attach(vm, (void **)&env, NULL) == 0 && env) {
+            jobj (*find_cls)(JNIEnvPtr, const char *) = (jobj (*)(JNIEnvPtr, const char *))((*env)[6]);
+            jobj (*get_smid)(JNIEnvPtr, jobj, const char *, const char *) = (jobj (*)(JNIEnvPtr, jobj, const char *, const char *))((*env)[113]);
+            jobj (*call_sobj)(JNIEnvPtr, jobj, jobj, ...) = (jobj (*)(JNIEnvPtr, jobj, jobj, ...))((*env)[114]);
+            jobj at = find_cls(env, "android/app/ActivityThread");
+            jobj m_cur = at ? get_smid(env, at, "currentApplication", "()Landroid/app/Application;") : NULL;
+            jobj app = NULL;
+            for (int i = 0; m_cur && i < 400 && !app; i++) {
+                app = call_sobj(env, at, m_cur);
+                jni_clear_exc(env);
+                if (!app) usleep(15000);
+            }
+            if (app) {
+                const char *res = defer_webview_pool(env, app);
+                if (say) say(4, "KoboWeRead", "WEBVIEW_POOL result=%s", res);
+            } else if (say) {
+                say(4, "KoboWeRead", "WEBVIEW_POOL skipped=no_app");
+            }
+        }
+    } else if (say) {
+        say(4, "KoboWeRead", "WEBVIEW_POOL skipped=no_vm get_vms=%p nvms=%d", (void *)get_vms, nvms);
+    }
+
+    /* 3. Background thread-pool priority loop + low-memory VMRuntime.trimHeap() */
+    int ticks = 0;
+    int last_trim = -180;
+    for (;;) {
+        tune_weread_threads();
+        int step = (ticks < 30) ? 2 : 15;
+        usleep((unsigned int)step * 1000000u);
+        ticks += step;
+        if (env && (ticks - last_trim) >= 180 && (ticks % 60) < step) {
+            int avail = read_mem_available_kb();
+            if (avail < 150000) {
+                jni_trim_heap(env);
+                last_trim = ticks;
+                if (say) say(4, "KoboWeRead", "MEM_TRIM avail_kb=%d", avail);
+            }
+        }
+    }
+    return NULL;
+}
+
+static volatile int init_pid = 0;
+
+static void maybe_init_weread_opt(void)
+{
+    int pid = getpid();
+    if (__builtin_expect(init_pid == pid, 1))
+        return;
+    if (getuid() < 10000)
+        return;
+    char cmd[64];
+    if (read_small_file("/proc/self/cmdline", cmd, sizeof(cmd)) <= 0)
+        return;
+    if (str_starts(cmd, "zygote") || str_starts(cmd, "<pre-initialized>"))
+        return;
+    if (__sync_lock_test_and_set(&init_pid, pid) == pid)
+        return;
+    if (str_eq(cmd, "com.tencent.weread.eink")) {
+        long tid = 0;
+        if (pthread_create(&tid, NULL, weread_opt_thread, NULL) == 0)
+            pthread_detach(tid);
+    }
 }

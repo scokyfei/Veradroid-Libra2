@@ -154,6 +154,13 @@ grep -q 'kobo_deep_suspend' "$TOP/host/kobo/boot/lib/sleep.sh" \
     && grep -q '^CACHE_DEDUP_S=30' "$TOP/host/kobo/models/libra2.conf" \
     && ok "Power optimization wired (deep mem suspend + adaptive Wi-Fi LPS + governor/dedup tuning)" \
     || fail "missing power optimization hooks in sleep.sh/network.sh/libra2.conf"
+grep -q 'SetFontCacheLimit' "$TOP/tools/kobo/libkobo_madvise.c" \
+    && grep -q 'WRWebViewPool' "$TOP/tools/kobo/libkobo_madvise.c" \
+    && grep -q 'tune_weread_threads' "$TOP/tools/kobo/libkobo_madvise.c" \
+    && grep -q 'trimHeap' "$TOP/tools/kobo/libkobo_madvise.c" \
+    && grep -q 'deadline' "$TOP/host/kobo/boot/lib/memory.sh" \
+    && ok "Koboweread-inspired WeRead optimizations wired (16MB Skia glyph cache + WebView defer + pool priority + trimHeap + deadline IO)" \
+    || fail "missing WeRead Skia/WebView/pool/trimHeap/deadline optimizations"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"
