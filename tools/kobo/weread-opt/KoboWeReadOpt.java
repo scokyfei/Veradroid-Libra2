@@ -27,18 +27,30 @@ import android.util.Log;
 import android.util.SparseArray;
 import android.view.View;
 import android.view.ViewGroup;
+import android.content.res.AssetManager;
+import android.graphics.Typeface;
+import android.util.LruCache;
 import android.widget.TextView;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class KoboWeReadOpt {
     private static final String TAG = "KoboWeRead";
@@ -49,13 +61,49 @@ public final class KoboWeReadOpt {
         started = true;
         if ("com.tencent.weread.eink".equals(procName)) {
             Log.i(TAG, "OPT_INIT proc=main");
+            FontMap.start(app);
             FontSizeCache.start(app);
+            SyncThrottle.start(app);
+            MarkUsersCache.start(app);
             ReaderPageRelease.start(app);
+            ChapterPrefetch.start(app);
+            MemoryTrim.start(true);
             RMonitorStopper.start(app);
         } else if ("com.tencent.weread.eink:seg".equals(procName)) {
             Log.i(TAG, "OPT_INIT proc=seg");
             SegDictRelease.start(app);
+            MemoryTrim.start(false);
         }
+    }
+
+    static Method findMethod(Class<?> c, String name, Class<?>... types) throws NoSuchMethodException {
+        for (Class<?> k = c; k != null; k = k.getSuperclass()) {
+            try {
+                Method m = k.getDeclaredMethod(name, types);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException ignored) {
+            }
+        }
+        throw new NoSuchMethodException(c.getName() + "." + name);
+    }
+
+    static int readMemAvailableKb() {
+        BufferedReader in = null;
+        try {
+            in = new BufferedReader(new FileReader("/proc/meminfo"));
+            String line;
+            while ((line = in.readLine()) != null) {
+                if (line.startsWith("MemAvailable:")) {
+                    String[] parts = line.substring(13).trim().split("\\s+");
+                    return Integer.parseInt(parts[0]);
+                }
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            try { if (in != null) in.close(); } catch (Throwable ignored) {}
+        }
+        return -1;
     }
 
     static Field findField(Class<?> c, String name) throws NoSuchFieldException {
@@ -641,6 +689,575 @@ public final class KoboWeReadOpt {
             }
             if (pass < 2) {
                 handler.postDelayed(this, 25000);
+            }
+        }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* 5. FontMap (Koboweread: mmap bundled 11.3 MB SourceHanSerifCN OTF)     */
+    /* ---------------------------------------------------------------------- */
+    private static final class FontMap implements Runnable {
+        private static final String ASSET = "fonts/SourceHanSerifCN-Medium_FDK_motify_strip.otf";
+        private static final String FILE_PATH = "/data/local/tmp/kobo-fonts/SourceHanSerifCN-Medium_FDK_motify_strip.otf";
+        private static final long EXPECTED_BYTES = 11373656L;
+        private final Application app;
+
+        private FontMap(Application app) { this.app = app; }
+
+        static void start(Application app) {
+            Thread t = new Thread(new FontMap(app), "kobo-font-map");
+            t.setDaemon(true);
+            t.start();
+        }
+
+        @SuppressWarnings("unchecked")
+        public void run() {
+            try {
+                File f = new File(FILE_PATH);
+                if (!f.isFile() || f.length() != EXPECTED_BYTES) {
+                    Log.i(TAG, "FONT_MAP skipped size=" + (f.isFile() ? f.length() : -1));
+                    return;
+                }
+                AssetManager mgr = app.getAssets();
+                Field cf = findField(Typeface.class, "sDynamicTypefaceCache");
+                Method uidM = findMethod(Typeface.class, "createAssetUid", AssetManager.class, String.class);
+                LruCache<String, Typeface> cache = (LruCache<String, Typeface>) cf.get(null);
+                if (cache == null) { Log.i(TAG, "FONT_MAP cache_null"); return; }
+                Typeface face = Typeface.createFromFile(f);
+                if (face == null) { Log.i(TAG, "FONT_MAP create_failed"); return; }
+                for (int tick = 0; tick < 900; tick++) {
+                    String key = (String) uidM.invoke(null, mgr, ASSET);
+                    if (key == null) return;
+                    synchronized (cache) {
+                        Typeface old = cache.get(key);
+                        if (old == null) {
+                            cache.put(key, face);
+                            Log.i(TAG, "FONT_MAP mapped key=" + key);
+                        } else if (old != face) {
+                            Log.i(TAG, "FONT_MAP loaded_from_asset key=" + key);
+                            return;
+                        }
+                    }
+                    Thread.sleep(2000);
+                }
+            } catch (Throwable err) {
+                Log.w(TAG, "FONT_MAP err=" + err);
+            }
+        }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* 6. SyncThrottle (Koboweread: 12h throttle on 3 heavy per-open syncs)   */
+    /* ---------------------------------------------------------------------- */
+    private static final class SyncThrottle implements Runnable, InvocationHandler {
+        private static final long WINDOW_MS = 12L * 3600 * 1000;
+        private static final long PAGING_MS = 30 * 1000;
+        private static final String[][] TARGETS = {
+            { "holder:getBookDetailService", "com.tencent.weread.bookdetailservice.model.BaseBookDetailService", "LoadBookLightRead", "0" },
+            { "of:com.tencent.weread.bestmarkcontentservice.model.BestMarkContentService", "com.tencent.weread.bestmarkcontentservice.model.BaseBestMarkContentService", "LoadBestBookMarks", "0" },
+            { "holder:getBookReviewListService", "com.tencent.weread.bookreviewlistservice.model.BaseBookReviewListService", "LoadBookChapterReviewList", "0,1,2" },
+        };
+        private final Application app;
+        private final Handler handler;
+        private final Map<Object, String[]> targets = new IdentityHashMap<Object, String[]>();
+        private final Map<Object, Object> real = new IdentityHashMap<Object, Object>();
+        private final Map<String, Long> last = new HashMap<String, Long>();
+        private File store;
+        private Method emptyMethod;
+        private int polls, passed, skipped;
+
+        private SyncThrottle(Application app, Handler h) { this.app = app; this.handler = h; }
+
+        static void start(Application app) {
+            Handler h = new Handler(Looper.getMainLooper());
+            h.postDelayed(new SyncThrottle(app, h), 500);
+        }
+
+        public void run() {
+            try {
+                if (++polls > 600) return;
+                Class<?> atc = Class.forName("android.app.ActivityThread");
+                Object at = atc.getMethod("currentActivityThread").invoke(null);
+                if (at == null) { handler.postDelayed(this, 100); return; }
+                Map<?, ?> acts = (Map<?, ?>) findField(at.getClass(), "mActivities").get(at);
+                if (acts == null || acts.isEmpty()) { handler.postDelayed(this, 150); return; }
+                install(app.getClassLoader(), new File(app.getFilesDir(), "kobo-sync-throttle"));
+            } catch (Throwable err) {
+                Log.w(TAG, "SYNC_THROTTLE err=" + err);
+            }
+        }
+
+        private void install(ClassLoader cl, File file) throws Exception {
+            store = file;
+            load();
+            emptyMethod = Class.forName("rx.Observable", true, cl).getMethod("empty");
+            Object holder = Class.forName("com.tencent.weread.serviceholder.ServiceHolder", true, cl).getField("INSTANCE").get(null);
+            Object companion = Class.forName("com.tencent.weread.network.WRKotlinService", true, cl).getField("Companion").get(null);
+            int wrapped = 0;
+            for (String[] row : TARGETS) {
+                try {
+                    Object service;
+                    if (row[0].startsWith("holder:")) {
+                        Object fn = holder.getClass().getMethod(row[0].substring(7)).invoke(holder);
+                        service = fn.getClass().getMethod("invoke").invoke(fn);
+                    } else {
+                        service = companion.getClass().getMethod("of", Class.class)
+                                .invoke(companion, Class.forName(row[0].substring(3), true, cl));
+                    }
+                    Class<?> iface = Class.forName(row[1], true, cl);
+                    Field d = findField(service.getClass(), "$$delegate_0");
+                    Object old = d.get(service);
+                    if (old == null || !iface.isInterface() || !iface.isInstance(old)) continue;
+                    if (Proxy.isProxyClass(old.getClass()) && Proxy.getInvocationHandler(old) == this) continue;
+                    Object proxy = Proxy.newProxyInstance(cl, new Class<?>[] { iface }, this);
+                    synchronized (this) { targets.put(proxy, row); real.put(proxy, old); }
+                    d.set(service, proxy);
+                    if (d.get(service) == proxy) wrapped++;
+                } catch (Throwable err) {
+                    Log.w(TAG, "SYNC_THROTTLE skip=" + row[2] + " err=" + err);
+                }
+            }
+            Log.i(TAG, "SYNC_THROTTLE ready wrapped=" + wrapped + " known=" + last.size());
+        }
+
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            if (method.getDeclaringClass() == Object.class) {
+                String n = method.getName();
+                if ("equals".equals(n)) return proxy == args[0];
+                if ("hashCode".equals(n)) return System.identityHashCode(proxy);
+                if ("toString".equals(n)) return "SyncThrottle@" + Integer.toHexString(System.identityHashCode(proxy));
+            }
+            String[] row;
+            Object target;
+            synchronized (this) { row = targets.get(proxy); target = real.get(proxy); }
+            if (target == null) throw new IllegalStateException("SyncThrottle: unknown proxy");
+            if (row != null && method.getName().equals(row[2]) && args != null) {
+                StringBuilder key = new StringBuilder(row[2]);
+                for (String idx : row[3].split(",")) {
+                    int k = Integer.parseInt(idx);
+                    key.append('/').append(k < args.length ? args[k] : "?");
+                }
+                String k = key.toString();
+                long now = System.currentTimeMillis();
+                boolean pass;
+                synchronized (this) {
+                    Long t = last.get(k);
+                    pass = t == null || now - t >= WINDOW_MS || now < t || now - t < PAGING_MS;
+                    if (pass && (t == null || now - t >= PAGING_MS || now < t)) {
+                        last.put(k, now);
+                        save(now);
+                    }
+                    if (pass) passed++; else skipped++;
+                }
+                Log.i(TAG, "SYNC_THROTTLE " + (pass ? "pass " : "skip ") + k + " passed=" + passed + " skipped=" + skipped);
+                if (!pass) return emptyMethod.invoke(null);
+            }
+            try { return method.invoke(target, args); }
+            catch (InvocationTargetException e) { throw e.getCause(); }
+        }
+
+        private void load() {
+            try {
+                if (!store.exists()) return;
+                byte[] b = new byte[(int) Math.min(store.length(), 1 << 20)];
+                FileInputStream in = new FileInputStream(store);
+                try {
+                    int n = 0, r;
+                    while (n < b.length && (r = in.read(b, n, b.length - n)) > 0) n += r;
+                } finally { in.close(); }
+                for (String line : new String(b, "UTF-8").split("\n")) {
+                    int tab = line.indexOf('\t');
+                    if (tab > 0) {
+                        try { last.put(line.substring(tab + 1), Long.parseLong(line.substring(0, tab))); }
+                        catch (NumberFormatException ignored) {}
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        private void save(long now) {
+            try {
+                StringBuilder s = new StringBuilder();
+                for (Iterator<Map.Entry<String, Long>> it = last.entrySet().iterator(); it.hasNext();) {
+                    Map.Entry<String, Long> e = it.next();
+                    if (now - e.getValue() >= WINDOW_MS || now < e.getValue()) { it.remove(); continue; }
+                    s.append(e.getValue()).append('\t').append(e.getKey()).append('\n');
+                }
+                File tmp = new File(store.getPath() + ".tmp");
+                FileOutputStream out = new FileOutputStream(tmp);
+                try { out.write(s.toString().getBytes("UTF-8")); } finally { out.close(); }
+                tmp.renameTo(store);
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* 7. MarkUsersCache (Koboweread: 4000-entry LRU for best-mark user DB)   */
+    /* ---------------------------------------------------------------------- */
+    private static final class MarkUsersCache implements Runnable, InvocationHandler {
+        private static final int MAX = 4000;
+        private final Application app;
+        private final Handler handler;
+        private Field field;
+        private Object original;
+        private volatile boolean off;
+        private int polls;
+        private long calls, hits, misses;
+        private final LinkedHashMap<Object, Object> cache = new LinkedHashMap<Object, Object>(256, 0.75f, true) {
+            protected boolean removeEldestEntry(Map.Entry<Object, Object> e) { return size() > MAX; }
+        };
+        private final Runnable reporter = new Runnable() {
+            public void run() {
+                long c, h, m; int sz;
+                synchronized (cache) { c = calls; h = hits; m = misses; sz = cache.size(); }
+                Log.i(TAG, "MARK_USERS calls=" + c + " hits=" + h + " misses=" + m + " size=" + sz);
+            }
+        };
+
+        private MarkUsersCache(Application app, Handler h) { this.app = app; this.handler = h; }
+
+        static void start(Application app) {
+            Handler h = new Handler(Looper.getMainLooper());
+            h.postDelayed(new MarkUsersCache(app, h), 600);
+        }
+
+        public void run() {
+            try {
+                if (++polls > 600) return;
+                Class<?> atc = Class.forName("android.app.ActivityThread");
+                Object at = atc.getMethod("currentActivityThread").invoke(null);
+                if (at == null) { handler.postDelayed(this, 100); return; }
+                Map<?, ?> acts = (Map<?, ?>) findField(at.getClass(), "mActivities").get(at);
+                if (acts == null || acts.isEmpty()) { handler.postDelayed(this, 150); return; }
+                ClassLoader cl = app.getClassLoader();
+                Class<?> svc = Class.forName("com.tencent.weread.bestmarkcontentservice.model.BestMarkContentService", true, cl);
+                Field f = findField(svc, "getUserById");
+                Class<?> iface = f.getType();
+                Object old = f.get(null);
+                if (!iface.isInterface() || old == null || !iface.isInstance(old)) return;
+                original = old;
+                field = f;
+                Object proxy = Proxy.newProxyInstance(cl, new Class<?>[] { iface }, this);
+                f.set(null, proxy);
+                Log.i(TAG, "MARK_USERS ready max=" + MAX);
+            } catch (Throwable err) {
+                Log.w(TAG, "MARK_USERS err=" + err);
+            }
+        }
+
+        public Object invoke(Object p, Method method, Object[] args) throws Throwable {
+            if (method.getDeclaringClass() == Object.class) {
+                String n = method.getName();
+                if ("equals".equals(n)) return p == args[0];
+                if ("hashCode".equals(n)) return System.identityHashCode(p);
+                if ("toString".equals(n)) return "MarkUsersCache@" + Integer.toHexString(System.identityHashCode(p));
+            }
+            if (off || args == null || args.length != 1 || !"invoke".equals(method.getName()) || args[0] == null) {
+                return call(method, args);
+            }
+            Object key = args[0], user;
+            synchronized (cache) { user = cache.get(key); calls++; if (user != null) hits++; }
+            if (user == null) {
+                user = call(method, args);
+                synchronized (cache) { misses++; if (user != null) cache.put(key, user); }
+            }
+            handler.removeCallbacks(reporter);
+            handler.postDelayed(reporter, 10000);
+            return user;
+        }
+
+        private Object call(Method method, Object[] args) throws Throwable {
+            try { return method.invoke(original, args); }
+            catch (InvocationTargetException e) { throw e.getCause(); }
+        }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* 8. ChapterPrefetch (Koboweread: adjacent +-3 & charging whole-book)    */
+    /* ---------------------------------------------------------------------- */
+    private static final class ChapterPrefetch implements Runnable {
+        private static final String BOOK_FRAGMENT = "com.tencent.weread.book.fragment.BookFragment";
+        private static final long TICK_MS = 10000, FAST_TICK_MS = 1000;
+        private static final long SETTLE_MS = 30000, PENDING_MS = 120000, STAY_MS = 45000, BOOK_IDLE_MS = 120000;
+        private static final int RANGE = 3;
+        private static final String[] POWER_PATHS = {
+            "/sys/class/power_supply/mc13892_bat/status",
+            "/sys/class/power_supply/battery/status",
+            "/sys/class/power_supply/ricoh619-battery/status"
+        };
+
+        private final Application app;
+        private final Handler handler;
+        private Class<?> bookFragmentClass;
+        private Method pageContainer, firstCharPos, charChapter, charPosition;
+        private Method checkTypeSetting, canReTypeSetting, visibleRealChapter, needTypeSetting, chapters, chapterUid;
+        private Field cursorField, preloadSetField, retypingField;
+        private Object fragment;
+        private long fragmentSince, pendingSince, movedAt, pageAt;
+        private final Set<Integer> tried = new HashSet<Integer>();
+        private final Set<Integer> prepared = new HashSet<Integer>();
+        private int pendingUid, lastAt, startedCnt, doneCnt, bookDone, polls;
+        private String lastPage;
+        private boolean pendingBook, bookActive, bookComplete, failed;
+
+        private ChapterPrefetch(Application app, Handler h) { this.app = app; this.handler = h; }
+
+        static void start(Application app) {
+            Handler h = new Handler(Looper.getMainLooper());
+            h.postDelayed(new ChapterPrefetch(app, h), TICK_MS);
+        }
+
+        public void run() {
+            if (failed) return;
+            try { tick(); }
+            catch (Throwable err) {
+                failed = true;
+                Log.w(TAG, "CHAPTER_PREFETCH err=" + err);
+                return;
+            }
+            handler.postDelayed(this, pendingUid != 0 || bookActive ? FAST_TICK_MS : TICK_MS);
+        }
+
+        @SuppressWarnings("unchecked")
+        private void tick() throws Exception {
+            Class<?> atc = Class.forName("android.app.ActivityThread");
+            Object at = atc.getMethod("currentActivityThread").invoke(null);
+            if (at == null) return;
+            if (bookFragmentClass == null) {
+                if (++polls > 360) return;
+                ClassLoader cl = app.getClassLoader();
+                Class<?> bf = Class.forName(BOOK_FRAGMENT, false, cl);
+                checkTypeSetting = findMethod(bf, "checkTypeSetting", int.class);
+                canReTypeSetting = findMethod(bf, "isChapterCanReTypeSetting", int.class);
+                visibleRealChapter = findMethod(bf, "getVisibleRealChapter");
+                cursorField = findField(bf, "mReaderCursor");
+                preloadSetField = findField(bf, "preloadTypeSettingChapterSet");
+                retypingField = findField(bf, "currentRetypeSetting");
+                Class<?> cursor = Class.forName("com.tencent.weread.reader.cursor.WRReaderCursor", false, cl);
+                needTypeSetting = cursor.getMethod("isChapterNeedTypeSetting", int.class);
+                chapters = cursor.getMethod("chapters");
+                chapterUid = Class.forName("com.tencent.weread.storage.ChapterIndexInterface", false, cl).getMethod("getId");
+                pageContainer = findMethod(bf, "getPageContainer");
+                firstCharPos = findMethod(bf, "getFirstVisibleCharPos");
+                Class<?> cp = Class.forName("com.tencent.weread.reader.container.pagecontainer.CharPosition", false, cl);
+                charChapter = cp.getMethod("getChapterUid");
+                charPosition = cp.getMethod("getPosition");
+                bookFragmentClass = bf;
+                Log.i(TAG, "CHAPTER_PREFETCH ready range=" + RANGE + " power=" + power());
+            }
+            Object f = findBookFragment(at);
+            if (f == null) return;
+            if (f != fragment) {
+                bookActive = false;
+                fragment = f;
+                fragmentSince = System.currentTimeMillis();
+                tried.clear();
+                prepared.clear();
+                pendingUid = 0;
+                lastAt = 0;
+                lastPage = null;
+                bookComplete = false;
+                bookDone = 0;
+            }
+            long now = System.currentTimeMillis();
+            Object where = pageContainer.invoke(f) == null ? null : firstCharPos.invoke(f);
+            if (where != null) {
+                String pg = charChapter.invoke(where) + ":" + charPosition.invoke(where);
+                if (!pg.equals(lastPage)) {
+                    if (lastPage != null && bookActive) bookActive = false;
+                    lastPage = pg;
+                    pageAt = now;
+                }
+            }
+            if (bookActive && !charging()) bookActive = false;
+            if (now - fragmentSince < SETTLE_MS) return;
+            Object cursor = cursorField.get(f);
+            if (cursor == null) return;
+            if (pendingUid != 0) {
+                boolean need = (Boolean) needTypeSetting.invoke(cursor, pendingUid);
+                long age = now - pendingSince;
+                if (need && age < PENDING_MS) return;
+                if (!need) {
+                    doneCnt++;
+                    prepared.add(pendingUid);
+                    if (pendingBook) bookDone++;
+                }
+                Log.i(TAG, "CHAPTER_PREFETCH " + (need ? "timeout" : "done") + " uid=" + pendingUid + " ms=" + age + " mode=" + (pendingBook ? "book" : "near"));
+                pendingUid = 0;
+            }
+            if ((Boolean) retypingField.get(f)) return;
+            int[] visible = (int[]) visibleRealChapter.invoke(f);
+            if (visible == null || visible.length == 0) return;
+            if (visible[0] != lastAt) { lastAt = visible[0]; movedAt = now; }
+            if (now - movedAt < STAY_MS) return;
+            List<?> list = (List<?>) chapters.invoke(cursor);
+            if (list == null || list.isEmpty()) return;
+            List<Integer> uids = new ArrayList<Integer>(list.size());
+            for (Object c : list) uids.add((Integer) chapterUid.invoke(c));
+            int at0 = uids.indexOf(visible[0]);
+            if (at0 < 0) return;
+            Collection<Integer> preload = (Collection<Integer>) preloadSetField.get(f);
+            if (startNearest(f, cursor, uids, at0, 1, RANGE, preload, false)) return;
+            if (bookComplete || now - pageAt < BOOK_IDLE_MS || now - movedAt < BOOK_IDLE_MS || !charging()) return;
+            if (!bookActive) {
+                bookActive = true;
+                Log.i(TAG, "BOOK_PREFETCH start chapters=" + uids.size() + " current=" + visible[0]);
+            }
+            if (startNearest(f, cursor, uids, at0, RANGE + 1, uids.size(), preload, true)) return;
+            bookActive = false;
+            bookComplete = true;
+            Log.i(TAG, "BOOK_PREFETCH complete book_done=" + bookDone + " prepared=" + prepared.size());
+        }
+
+        private boolean startNearest(Object f, Object cursor, List<Integer> uids, int at0, int from, int to,
+                                     Collection<Integer> preload, boolean book) throws Exception {
+            for (int d = from; d <= to; d++) {
+                for (int sign = 1; sign >= -1; sign -= 2) {
+                    int i = at0 + sign * d;
+                    if (i < 0 || i >= uids.size()) continue;
+                    int uid = uids.get(i);
+                    if (tried.contains(uid)) continue;
+                    tried.add(uid);
+                    if (!(Boolean) canReTypeSetting.invoke(f, uid)) continue;
+                    if (!(Boolean) needTypeSetting.invoke(cursor, uid)) continue;
+                    if (preload != null) preload.add(uid);
+                    pendingUid = uid;
+                    pendingSince = System.currentTimeMillis();
+                    pendingBook = book;
+                    startedCnt++;
+                    checkTypeSetting.invoke(f, uid);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static String power() {
+            for (String p : POWER_PATHS) {
+                BufferedReader in = null;
+                try {
+                    File f = new File(p);
+                    if (!f.canRead()) continue;
+                    in = new BufferedReader(new FileReader(f));
+                    String l = in.readLine();
+                    if (l != null && l.trim().length() > 0) return l.trim();
+                } catch (Throwable ignored) {
+                } finally {
+                    try { if (in != null) in.close(); } catch (Throwable ignored) {}
+                }
+            }
+            return "none";
+        }
+
+        private static boolean charging() {
+            String p = power();
+            return !"none".equals(p) && !"Discharging".equals(p) && !"Unknown".equals(p);
+        }
+
+        private Object findBookFragment(Object at) throws Exception {
+            Map<?, ?> acts = (Map<?, ?>) findField(at.getClass(), "mActivities").get(at);
+            if (acts == null) return null;
+            for (Object record : acts.values()) {
+                Object activity = findField(record.getClass(), "activity").get(record);
+                if (activity == null) continue;
+                Method fm;
+                try { fm = activity.getClass().getMethod("getSupportFragmentManager"); }
+                catch (NoSuchMethodException none) { continue; }
+                Object found = search(fm.invoke(activity), 0);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        private Object search(Object manager, int depth) throws Exception {
+            if (manager == null || depth > 4) return null;
+            List<?> list = (List<?>) manager.getClass().getMethod("getFragments").invoke(manager);
+            if (list == null) return null;
+            for (Object fr : list) {
+                if (fr == null) continue;
+                if (bookFragmentClass.isInstance(fr)) {
+                    if ((Boolean) fr.getClass().getMethod("isResumed").invoke(fr)) return fr;
+                    continue;
+                }
+                Object child;
+                try { child = fr.getClass().getMethod("getChildFragmentManager").invoke(fr); }
+                catch (Throwable ignored) { continue; }
+                Object found = search(child, depth + 1);
+                if (found != null) return found;
+            }
+            return null;
+        }
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* 9. MemoryTrim (Koboweread: 160MB heap trim / 120MB TRIM_MEMORY_CRIT)   */
+    /* ---------------------------------------------------------------------- */
+    private static final class MemoryTrim implements Runnable {
+        private static final long PERIOD_MS = 30000;
+        private static final long HEAP_EVERY_MS = 120000;
+        private static final long APP_EVERY_MS = 300000;
+        private static final int HEAP_BELOW_KB = 160 * 1024;
+        private static final int APP_BELOW_KB = 120 * 1024;
+        private static final int TRIM_MEMORY_RUNNING_CRITICAL = 15;
+
+        private final boolean mainProc;
+        private long lastHeap, lastApp;
+        private int failures;
+
+        private MemoryTrim(boolean mainProc) { this.mainProc = mainProc; }
+
+        static void start(boolean mainProc) {
+            Thread t = new Thread(new MemoryTrim(mainProc), "kobo-mem-trim");
+            t.setDaemon(true);
+            t.setPriority(Thread.MIN_PRIORITY);
+            t.start();
+        }
+
+        public void run() {
+            try { Thread.sleep(PERIOD_MS); } catch (InterruptedException stop) { return; }
+            Log.i(TAG, "MEM_TRIM ready proc=" + (mainProc ? "main" : "seg"));
+            while (failures < 3) {
+                try {
+                    Thread.sleep(PERIOD_MS);
+                    int avail = readMemAvailableKb();
+                    long now = SystemClock.uptimeMillis();
+                    if (avail > 0 && avail < HEAP_BELOW_KB && now - lastHeap >= HEAP_EVERY_MS) {
+                        lastHeap = now;
+                        int before = readSelfRssKb();
+                        Class<?> vm = Class.forName("dalvik.system.VMRuntime");
+                        Object rt = vm.getMethod("getRuntime").invoke(null);
+                        vm.getMethod("concurrentGC").invoke(rt);
+                        vm.getMethod("trimHeap").invoke(rt);
+                        Log.i(TAG, "MEM_TRIM heap proc=" + (mainProc ? "main" : "seg")
+                                + " avail_kb=" + avail + " rss_kb=" + before + "->" + readSelfRssKb());
+                    }
+                    if (mainProc && avail > 0 && avail < APP_BELOW_KB && now - lastApp >= APP_EVERY_MS) {
+                        lastApp = now;
+                        final Class<?> atc = Class.forName("android.app.ActivityThread");
+                        final Object at = atc.getMethod("currentActivityThread").invoke(null);
+                        if (at != null && Looper.getMainLooper() != null) {
+                            final Method handle = findMethod(atc, "handleTrimMemory", int.class);
+                            final int a = avail;
+                            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                                public void run() {
+                                    try {
+                                        int before = readSelfRssKb();
+                                        handle.invoke(at, TRIM_MEMORY_RUNNING_CRITICAL);
+                                        Log.i(TAG, "MEM_TRIM app level=15 avail_kb=" + a
+                                                + " rss_kb=" + before + "->" + readSelfRssKb());
+                                    } catch (Throwable err) {
+                                        Log.w(TAG, "MEM_TRIM app err=" + err);
+                                    }
+                                }
+                            });
+                        }
+                    }
+                } catch (InterruptedException stop) {
+                    return;
+                } catch (Throwable err) {
+                    failures++;
+                    Log.w(TAG, "MEM_TRIM err=" + err);
+                }
             }
         }
     }

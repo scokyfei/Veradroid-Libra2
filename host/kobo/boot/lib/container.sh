@@ -89,7 +89,7 @@ display_start() {
         --anim-steps "${KFB_ANIM_STEPS:-8}" --anim-min "${KFB_ANIM_MIN:-45}" \
         --scroll-delay "${KFB_SCROLLDELAY:-500}" \
         --scroll-style "${KFB_SCROLLSTYLE:-1}" --scroll-wfm "${KFB_SCROLLWFM:-a2}" \
-        --gcn "${KFB_GCN:-20}" \
+        --gcn "${KFB_GCN:-0}" \
         --eclipse "${KFB_ECLIPSE:-1}" --dark-crush "${KFB_DARKCRUSH:-36}" --heavy-flash "${KFB_HEAVY_FLASH:-1}" \
         --nice "${KFB_EPD_NICE:--8}" $(rot_args) >>"$W/epd.log" 2>&1 &
     echo $! > "$W/epd.pid"
@@ -242,6 +242,73 @@ container_start() {
     bdb="$SYS/data/data/com.tencent.weread.eink/databases/bugly_db_"
     if [ -f "$bdb" ] && [ "$(wc -c < "$bdb" 2>/dev/null || echo 0)" -gt 524288 ]; then
         rm -f "$bdb" "${bdb}-journal" "${bdb}-wal" "${bdb}-shm" 2>/dev/null || true
+    fi
+    # Koboweread: extract WeRead's bundled 11.3 MB SourceHanSerifCN-Medium OTF once for mmap Typeface caching
+    # (avoids inflating 11 MB into un-reclaimable anonymous RAM on first book open).
+    wr_font="$SYS/data/local/tmp/kobo-fonts/SourceHanSerifCN-Medium_FDK_motify_strip.otf"
+    if [ ! -f "$wr_font" ] || [ "$(wc -c < "$wr_font" 2>/dev/null || echo 0)" != 11373656 ]; then
+        for wr_apk in "$SYS"/data/app/com.tencent.weread.eink-*/base.apk; do
+            [ -f "$wr_apk" ] || continue
+            mkdir -p "$SYS/data/local/tmp/kobo-fonts" 2>/dev/null || true
+            chmod 755 "$SYS/data/local/tmp" "$SYS/data/local/tmp/kobo-fonts" 2>/dev/null || true
+            if unzip -p "$wr_apk" assets/fonts/SourceHanSerifCN-Medium_FDK_motify_strip.otf > "$wr_font.tmp" 2>/dev/null \
+                && [ "$(wc -c < "$wr_font.tmp" 2>/dev/null || echo 0)" = 11373656 ]; then
+                chmod 644 "$wr_font.tmp" && mv -f "$wr_font.tmp" "$wr_font" \
+                    && t "container: extracted WeRead bundled font for mmap (11.3 MB)"
+            else
+                rm -f "$wr_font.tmp" 2>/dev/null || true
+            fi
+            break
+        done
+    fi
+    # Koboweread: switch WeRead WRBook & WRReader SQLite databases to WAL mode offline (before Android starts)
+    # so concurrent reads/writes never block main-thread queries behind rollback journal locks.
+    if [ -x /mnt/onboard/.adds/koreader/luajit ] && [ -f /mnt/onboard/.adds/koreader/libs/libsqlite3.so.0 ]; then
+        for wr_db in "$SYS"/data/data/com.tencent.weread.eink/databases/[0-9]*/WRBook \
+                     "$SYS"/data/data/com.tencent.weread.eink/databases/[0-9]*/WRReader; do
+            [ -f "$wr_db" ] || continue
+            # SQLite header byte 18: 1 = legacy journal, 2 = WAL (skip already-WAL DBs in 0 ms)
+            wr_jm=$(dd if="$wr_db" bs=1 skip=18 count=1 2>/dev/null | od -An -tu1 | tr -d ' \n')
+            [ "$wr_jm" = 2 ] && continue
+            wr_own=$(stat -c '%u:%g' "$wr_db" 2>/dev/null || echo "10010:10010")
+            wr_mod=$(stat -c '%a' "$wr_db" 2>/dev/null || echo "600")
+            wr_bk="$SYS/data/local/tmp/wal-backup/$(basename "$wr_db")"
+            if [ ! -f "$wr_bk" ]; then
+                mkdir -p "$SYS/data/local/tmp/wal-backup" 2>/dev/null || true
+                cp "$wr_db" "$wr_bk.tmp" 2>/dev/null && mv -f "$wr_bk.tmp" "$wr_bk" || true
+            fi
+            wr_res=$(LD_LIBRARY_PATH=/mnt/onboard/.adds/koreader/libs /mnt/onboard/.adds/koreader/luajit -e '
+local ffi = require("ffi")
+ffi.cdef[[
+typedef struct sqlite3 sqlite3; typedef struct sqlite3_stmt sqlite3_stmt;
+int sqlite3_open_v2(const char *, sqlite3 **, int, const char *);
+int sqlite3_prepare_v2(sqlite3 *, const char *, int, sqlite3_stmt **, const char **);
+int sqlite3_step(sqlite3_stmt *); const unsigned char *sqlite3_column_text(sqlite3_stmt *, int);
+int sqlite3_finalize(sqlite3_stmt *); int sqlite3_close(sqlite3 *);
+int sqlite3_busy_timeout(sqlite3 *, int);
+]]
+local lib = ffi.load("/mnt/onboard/.adds/koreader/libs/libsqlite3.so.0")
+local pdb = ffi.new("sqlite3 *[1]")
+if lib.sqlite3_open_v2(arg[1], pdb, 2, nil) ~= 0 then os.exit(1) end
+local db = pdb[0]; lib.sqlite3_busy_timeout(db, 5000)
+local function one(sql)
+  local st = ffi.new("sqlite3_stmt *[1]")
+  if lib.sqlite3_prepare_v2(db, sql, -1, st, nil) ~= 0 then os.exit(2) end
+  local rc, v = lib.sqlite3_step(st[0]), ""
+  if rc == 100 then local t = lib.sqlite3_column_text(st[0], 0); v = t ~= nil and ffi.string(t) or "" end
+  lib.sqlite3_finalize(st[0]); return v
+end
+if one("PRAGMA quick_check") ~= "ok" then lib.sqlite3_close(db); os.exit(3) end
+one("PRAGMA journal_mode=wal")
+local m = one("PRAGMA journal_mode")
+lib.sqlite3_close(db)
+io.write(m)
+' "$wr_db" 2>/dev/null || true)
+            chown "$wr_own" "$wr_db" 2>/dev/null || true
+            chmod "$wr_mod" "$wr_db" 2>/dev/null || true
+            rm -f "${wr_db}-wal" "${wr_db}-shm" 2>/dev/null || true
+            t "container: SQLite WAL $(basename "$wr_db") -> ${wr_res:-failed}"
+        done
     fi
     docs_snapshot
     if [ -f "$SYS/data/system/uiderrors.txt" ]; then

@@ -10,11 +10,15 @@
  */
 #include <stdint.h>
 #include <stddef.h>
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+#endif
 
 extern long syscall(long, ...);
 extern int open(const char *, int, ...);
 extern int close(int);
 extern long read(int, void *, size_t);
+extern long readlink(const char *, char *, size_t);
 extern int ioctl(int, unsigned long, ...);
 extern int *__errno(void);
 extern void *dlopen(const char *, int);
@@ -381,25 +385,14 @@ static void tune_weread_threads(void)
         unsigned int tid = (unsigned int)parse_uint(ent->d_name);
         if (tid == 0) continue;
         if (str_starts(comm, "WRCommonPool") ||
-            str_starts(comm, "WRNetworkPool") ||
-            str_starts(comm, "WRLowPriorityPo") ||
-            str_starts(comm, "RxIoScheduler") ||
-            str_starts(comm, "RxComputationSc") ||
-            str_starts(comm, "glide-")) {
-            /* Use mild nice 6 (not 19!): on single-core Cortex-A9, nice 19 starves
-               threads holding SQLiteConnectionPool locks or reaching ART GC safepoints
-               (observed 11s SQLite contention & 240ms GC suspend stalls). */
-            setpriority(PRIO_PROCESS, tid, 6);
-        } else if (str_starts(comm, "BUGLY_ASYNC") ||
-                   str_starts(comm, "Bugly") ||
-                   str_starts(comm, "RMonitor_") ||
-                   str_starts(comm, "OssLog")) {
-            /* Keep Bugly/telemetry threads below normal (nice 8) without nice 19 starvation
-               (Bugly-ThreadMonitor0 grabs main Looper MessageQueue lock: nice 19 caused 933ms UI freeze). */
-            setpriority(PRIO_PROCESS, tid, 8);
+            str_starts(comm, "WRNetworkPool")) {
+            /* Match Koboweread PoolPriority.java: put ONLY WRCommonPool & WRNetworkPool
+               at nice 19 so they yield completely to UI/page-turns after book open,
+               while NEVER touching Bugly-ThreadMonitor0 (avoids MessageQueue lock inversion). */
+            setpriority(PRIO_PROCESS, tid, 19);
         } else if (str_starts(comm, "TypeSetting")) {
             /* Give chapter typesetting near-UI priority (-6) so TOC chapter jumps
-               win the single Cortex-A9 core over background pools (nice 6) and :seg (nice 8). */
+               win the single Cortex-A9 core over background pools. */
             setpriority(PRIO_PROCESS, tid, -6);
         }
     }
@@ -607,25 +600,232 @@ static void *weread_seg_opt_thread(void *unused)
     if (say) say(4, "KoboWeRead", "SEG_OPT ready env=%p", (void *)env);
 
     int ticks = 0;
-    int last_trim = -90;
     for (;;) {
         lower_all_threads_nice8();
         int step = (ticks < 20) ? 2 : 10;
         usleep((unsigned int)step * 1000000u);
         ticks += step;
-        if (env && (ticks - last_trim) >= 90 && (ticks % 30) < step) {
-            int avail = read_mem_available_kb();
-            /* Only force blocking GC+trimHeap when RAM is actually tight (<80 MB);
-               normal reading with :seg sits around 120-145 MB and should not stutter. */
-            if (avail < 80000) {
-                int before = read_self_rss_kb();
-                jni_trim_heap(env);
-                last_trim = ticks;
-                if (say) say(4, "KoboWeRead", "SEG_TRIM avail_kb=%d rss_kb=%d->%d", avail, before, read_self_rss_kb());
-            }
-        }
     }
     return NULL;
+}
+
+/* ---- Koboweread: ARM NEON Skia glyph & solid-color row blitters + log fsync skip ---- */
+#ifdef __ARM_NEON
+typedef void (*kobo_blit_mask_fn)(uint32_t *, size_t, const uint8_t *, size_t, uint32_t, int, int);
+static kobo_blit_mask_fn orig_blit_mask = NULL;
+static uint32_t (*sk_premultiply)(uint32_t) = NULL;
+static int sk_alpha_lane = 3;
+
+static inline uint8x8_t k_mul255(uint8x8_t x, uint8x8_t y)
+{
+    return vshrn_n_u16(vaddw_u8(vmull_u8(x, y), x), 8);
+}
+
+static inline uint8_t k_mul255s(uint8_t x, uint8_t y)
+{
+    return (uint8_t)((x * y + x) >> 8);
+}
+
+static void neon_blit_mask(uint32_t *dst, size_t dstRB, const uint8_t *mask, size_t maskRB,
+                           uint32_t color, int w, int h)
+{
+    int mode = (color == 0xFF000000u) ? 0 : ((color >> 24) == 0xFFu) ? 1 : 2;
+    uint32_t pm = sk_premultiply(color);
+    uint8_t s[4];
+    for (int k = 0; k < 4; k++) s[k] = (uint8_t)(pm >> (8 * k));
+    const uint8x8_t ff = vdup_n_u8(255);
+    for (; h > 0; h--, dst = (uint32_t *)((char *)dst + dstRB), mask += maskRB) {
+        int x = 0;
+        for (; x + 8 <= w; x += 8) {
+            uint8x8x4_t d = vld4_u8((const uint8_t *)(dst + x));
+            uint8x8_t aa = vld1_u8(mask + x);
+            if (mode == 0) {
+                uint8x8_t inv = vsub_u8(ff, aa);
+                for (int k = 0; k < 4; k++) d.val[k] = k_mul255(d.val[k], inv);
+                d.val[sk_alpha_lane] = vadd_u8(d.val[sk_alpha_lane], aa);
+            } else {
+                uint8x8_t left[4], inv;
+                for (int k = 0; k < 4; k++) left[k] = k_mul255(vdup_n_u8(s[k]), aa);
+                inv = vsub_u8(ff, mode == 1 ? aa : left[sk_alpha_lane]);
+                for (int k = 0; k < 4; k++) d.val[k] = vadd_u8(left[k], k_mul255(d.val[k], inv));
+            }
+            vst4_u8((uint8_t *)(dst + x), d);
+        }
+        for (; x < w; x++) {
+            uint8_t *p = (uint8_t *)(dst + x), aa = mask[x], inv, left[4];
+            if (mode == 0) {
+                inv = (uint8_t)(255 - aa);
+                for (int k = 0; k < 4; k++) p[k] = k_mul255s(p[k], inv);
+                p[sk_alpha_lane] = (uint8_t)(p[sk_alpha_lane] + aa);
+                continue;
+            }
+            for (int k = 0; k < 4; k++) left[k] = k_mul255s(s[k], aa);
+            inv = (uint8_t)(255 - (mode == 1 ? aa : left[sk_alpha_lane]));
+            for (int k = 0; k < 4; k++) p[k] = (uint8_t)(left[k] + k_mul255s(p[k], inv));
+        }
+    }
+}
+
+static int neon_blit_matches(void)
+{
+    static uint32_t a[3 * 40], b[3 * 40];
+    static uint8_t m[3 * 41];
+    static const uint32_t colors[] = {
+        0xFF000000u, 0xFF333333u, 0xFF8A5A2Bu, 0x80405060u, 0x20FFFFFFu, 0xFFFFFFFFu
+    };
+    uint32_t seed = 12345u;
+    for (unsigned c = 0; c < sizeof(colors) / sizeof(*colors); c++) {
+        for (unsigned i = 0; i < 3 * 41; i++) {
+            seed = seed * 1103515245u + 12345u;
+            m[i] = (uint8_t)(i % 5 == 0 ? 0 : i % 7 == 0 ? 255 : (seed >> 16));
+        }
+        for (unsigned i = 0; i < 3 * 40; i++) {
+            seed = seed * 1103515245u + 12345u;
+            uint8_t al = (uint8_t)(i % 3 ? 255 : (seed >> 24));
+            uint8_t r = (uint8_t)((((seed >> 8) & 255u) * (al + 1u)) >> 8);
+            uint8_t g = (uint8_t)((((seed >> 16) & 255u) * (al + 1u)) >> 8);
+            uint8_t bl = (uint8_t)(((seed & 255u) * (al + 1u)) >> 8);
+            uint8_t px[4] = { r, g, bl, r };
+            px[sk_alpha_lane] = al;
+            a[i] = b[i] = (uint32_t)px[0] | ((uint32_t)px[1] << 8) | ((uint32_t)px[2] << 16) | ((uint32_t)px[3] << 24);
+        }
+        orig_blit_mask(a, 40 * 4, m, 41, colors[c], 37, 3);
+        neon_blit_mask(b, 40 * 4, m, 41, colors[c], 37, 3);
+        for (unsigned i = 0; i < 3 * 40; i++)
+            if (a[i] != b[i]) return -(int)(c + 1);
+    }
+    return 1;
+}
+
+static void install_neon_blit(void *skia, int (*say)(int, const char *, const char *, ...))
+{
+    kobo_blit_mask_fn *slot = (kobo_blit_mask_fn *)dlsym(skia, "_ZN6SkOpts16blit_mask_d32_a8E");
+    sk_premultiply = (uint32_t (*)(uint32_t))dlsym(skia, "_Z18SkPreMultiplyColorj");
+    if (!slot || !*slot || !sk_premultiply) {
+        if (say) say(4, "KoboWeRead", "NEON_BLIT missing_symbols");
+        return;
+    }
+    uint32_t black = sk_premultiply(0xFF000000u);
+    for (sk_alpha_lane = 0; sk_alpha_lane < 4 && ((black >> (8 * sk_alpha_lane)) & 0xFFu) != 0xFFu; sk_alpha_lane++);
+    if (sk_alpha_lane == 4) {
+        if (say) say(4, "KoboWeRead", "NEON_BLIT no_alpha_lane");
+        return;
+    }
+    orig_blit_mask = *slot;
+    int ok = neon_blit_matches();
+    if (ok == 1) *slot = neon_blit_mask;
+    if (say) say(4, "KoboWeRead", "NEON_BLIT %s alpha_lane=%d", ok == 1 ? "installed" : "mismatch", sk_alpha_lane);
+}
+
+typedef void (*kobo_row_color_fn)(uint32_t *, const uint32_t *, int, uint32_t);
+static kobo_row_color_fn orig_row_color = NULL;
+
+static void neon_row_color(uint32_t *dst, const uint32_t *src, int count, uint32_t color)
+{
+    unsigned inv = 255u - (color >> 24);
+    inv += inv >> 7;
+    const uint8_t a = (uint8_t)inv;
+    uint8_t c[16];
+    for (int k = 0; k < 16; k++) c[k] = (uint8_t)(color >> (8 * (k & 3)));
+    const uint8x16_t cv = vld1q_u8(c);
+    const uint8x8_t av = vdup_n_u8(a);
+    const uint16x8_t rnd = vdupq_n_u16(128);
+    const uint16x8_t add_lo = vaddq_u16(vshll_n_u8(vget_low_u8(cv), 8), rnd);
+    const uint16x8_t add_hi = vaddq_u16(vshll_n_u8(vget_high_u8(cv), 8), rnd);
+    const uint8_t *s8 = (const uint8_t *)src;
+    uint8_t *d8 = (uint8_t *)dst;
+    int n = count * 4, i = 0;
+    for (; i + 16 <= n; i += 16) {
+        uint8x16_t x = vld1q_u8(s8 + i);
+        uint16x8_t lo = vaddq_u16(vmull_u8(vget_low_u8(x), av), add_lo);
+        uint16x8_t hi = vaddq_u16(vmull_u8(vget_high_u8(x), av), add_hi);
+        vst1q_u8(d8 + i, vcombine_u8(vshrn_n_u16(lo, 8), vshrn_n_u16(hi, 8)));
+    }
+    for (; i < n; i++) d8[i] = (uint8_t)((uint16_t)(s8[i] * a + (c[i & 3] << 8) + 128) >> 8);
+}
+
+static int neon_color_matches(void)
+{
+    static uint32_t s[40], a[40], b[40];
+    uint32_t seed = 54321u;
+    for (unsigned al = 0; al < 256; al++) {
+        seed = seed * 1103515245u + 12345u;
+        uint32_t color = (al << 24) | ((seed >> 8) & 0xFFFFFFu);
+        for (unsigned i = 0; i < 40; i++) {
+            seed = seed * 1103515245u + 12345u;
+            s[i] = seed ^ (seed << 7);
+            a[i] = b[i] = s[i];
+        }
+        orig_row_color(a, s, 37, color);
+        neon_row_color(b, s, 37, color);
+        for (unsigned i = 0; i < 40; i++)
+            if (a[i] != b[i]) return -(int)(al + 1);
+        orig_row_color(a, a, 37, color);
+        neon_row_color(b, b, 37, color);
+        for (unsigned i = 0; i < 40; i++)
+            if (a[i] != b[i]) return -(int)(al + 1) - 1000;
+    }
+    return 1;
+}
+
+static void install_neon_color(void *skia, int (*say)(int, const char *, const char *, ...))
+{
+    kobo_row_color_fn *slot = (kobo_row_color_fn *)dlsym(skia, "_ZN6SkOpts16blit_row_color32E");
+    if (!slot || !*slot) {
+        if (say) say(4, "KoboWeRead", "NEON_COLOR missing_symbols");
+        return;
+    }
+    orig_row_color = *slot;
+    int ok = neon_color_matches();
+    if (ok == 1) *slot = neon_row_color;
+    if (say) say(4, "KoboWeRead", "NEON_COLOR %s", ok == 1 ? "installed" : "mismatch");
+}
+#endif
+
+/* Skip fsync/fdatasync ONLY on WeRead's own log files (wr-*.log, wr.log.*, /log/, /logs/, /BusReport/);
+   SQLite, LevelDB, and SharedPreferences still sync normally. Eliminates 2-4s autoflush stalls on book close. */
+static int str_has(const char *s, const char *w)
+{
+    for (; *s; s++) {
+        int k = 0;
+        while (w[k] && s[k] == w[k]) k++;
+        if (!w[k]) return 1;
+    }
+    return 0;
+}
+
+static int skip_weread_log_sync(int fd)
+{
+    if (!is_weread_proc() || fd < 0) return 0;
+    char p[40], l[256];
+    int k = 0;
+    const char *pre = "/proc/self/fd/";
+    while (*pre) p[k++] = *pre++;
+    char dig[16];
+    int dn = 0, v = fd;
+    if (v == 0) dig[dn++] = '0';
+    else while (v > 0 && dn < 12) { dig[dn++] = (char)('0' + (v % 10)); v /= 10; }
+    while (dn > 0) p[k++] = dig[--dn];
+    p[k] = 0;
+    long n = readlink(p, l, sizeof(l) - 1);
+    if (n <= 0) return 0;
+    l[n] = 0;
+    const char *base = l;
+    for (const char *c = l; *c; c++) if (*c == '/') base = c + 1;
+    return str_has(l, "/log/") || str_has(l, "/logs/") || str_has(l, "/BusReport/") ||
+           (base[0] == 'w' && base[1] == 'r' && (base[2] == '-' || str_has(base, "wr.log.")));
+}
+
+int fsync(int fd)
+{
+    if (skip_weread_log_sync(fd)) return 0;
+    return (int)syscall(118L, fd);
+}
+
+int fdatasync(int fd)
+{
+    if (skip_weread_log_sync(fd)) return 0;
+    return (int)syscall(148L, fd);
 }
 
 static void *weread_opt_thread(void *unused)
@@ -635,9 +835,13 @@ static void *weread_opt_thread(void *unused)
     int (*say)(int, const char *, const char *, ...) =
         log ? (int (*)(int, const char *, const char *, ...))dlsym(log, "__android_log_print") : NULL;
 
-    /* 1. Raise Skia software glyph cache to 16 MB / 16384 glyphs */
+    /* 1. Install NEON Skia blitters (byte-for-byte self-verified) + 16 MB Skia glyph cache */
     void *skia = dlopen("libskia.so", RTLD_LAZY);
     if (skia) {
+#ifdef __ARM_NEON
+        install_neon_blit(skia, say);
+        install_neon_color(skia, say);
+#endif
         unsigned (*set_lim)(unsigned) = (unsigned (*)(unsigned))dlsym(skia, "_ZN10SkGraphics17SetFontCacheLimitEj");
         int (*set_cnt)(int) = (int (*)(int))dlsym(skia, "_ZN10SkGraphics22SetFontCacheCountLimitEi");
         unsigned (*get_lim)(void) = (unsigned (*)(void))dlsym(skia, "_ZN10SkGraphics17GetFontCacheLimitEv");
@@ -686,24 +890,13 @@ static void *weread_opt_thread(void *unused)
         say(4, "KoboWeRead", "WEBVIEW_POOL skipped=no_vm get_vms=%p nvms=%d", (void *)get_vms, nvms);
     }
 
-    /* 3. Background thread-pool priority loop + low-memory concurrentGC()+trimHeap() */
+    /* 3. Background thread-pool priority loop (memory trimming handled by Java MemoryTrim) */
     int ticks = 0;
-    int last_trim = -90;
     for (;;) {
         tune_weread_threads();
-        /* Scan every 3s so freshly spawned TypeSetting threads on TOC chapter jumps get boosted promptly. */
         int step = (ticks < 30) ? 2 : 3;
         usleep((unsigned int)step * 1000000u);
         ticks += step;
-        if (env && (ticks - last_trim) >= 90 && (ticks % 30) < step) {
-            int avail = read_mem_available_kb();
-            if (avail < 80000) {
-                int before = read_self_rss_kb();
-                jni_trim_heap(env);
-                last_trim = ticks;
-                if (say) say(4, "KoboWeRead", "MEM_TRIM avail_kb=%d rss_kb=%d->%d", avail, before, read_self_rss_kb());
-            }
-        }
     }
     return NULL;
 }
