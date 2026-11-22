@@ -53,6 +53,28 @@ bgnice_tick() {
         done
         mv -f $W/bgnice/$bp.tmp $W/bgnice/$bp
     done
+    # Reclaim idle IME caches & cached helper processes while reading in WeRead
+    if [ "$(cat "$X/fg" 2>/dev/null)" = "com.tencent.weread.eink" ]; then
+        for d in /proc/[0-9]*; do
+            cm=$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null | awk '{print $1}')
+            case "$cm" in
+                com.veradroid.ime)
+                    ip=${d#/proc/}
+                    iadj=$(cat "$d/oom_score_adj" 2>/dev/null || echo 0)
+                    irss=$(awk '/^VmRSS:/{print $2}' "$d/status" 2>/dev/null || echo 0)
+                    if [ "${iadj:-0}" -ge 200 ] 2>/dev/null && [ "${irss:-0}" -gt 8192 ] 2>/dev/null \
+                        && [ "$(cat "$W/ime.trimmed" 2>/dev/null)" != "$ip" ]; then
+                        echo "$ip" > "$W/ime.trimmed"
+                        ( adb_sh "am send-trim-memory com.veradroid.ime COMPLETE" >/dev/null 2>&1 || true ) &
+                    fi ;;
+                com.android.defcontainer|com.android.statementservice|com.android.externalstorage)
+                    hadj=$(cat "$d/oom_score_adj" 2>/dev/null || echo 0)
+                    [ "${hadj:-0}" -ge 700 ] 2>/dev/null && kill "${d#/proc/}" 2>/dev/null || true ;;
+            esac
+        done
+    else
+        rm -f "$W/ime.trimmed" 2>/dev/null || true
+    fi
     return 0
 }
 # 停止 / 冻结前：全部放回（BG_NICE=0 的那一次 tick）

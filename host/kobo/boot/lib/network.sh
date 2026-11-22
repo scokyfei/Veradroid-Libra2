@@ -21,18 +21,24 @@ wifi_ps_state() {
 wifi_ps_set() {
     d=$(wifi_dev)
     if [ -r "/proc/net/rtl8723ds/$d/ps_info" ] && command -v iwpriv >/dev/null 2>&1; then
-        if [ "$1" = off ]; then
-            echo 0 > /sys/module/8723ds/parameters/rtw_power_mgnt 2>/dev/null || true
-            iwpriv "$d" pm_set "lps=0" >/dev/null 2>&1 || true
-            iwpriv "$d" pm_set "ips=0" >/dev/null 2>&1 || true
-        else
-            echo 2 > /sys/module/8723ds/parameters/rtw_power_mgnt 2>/dev/null || true
-            iwpriv "$d" pm_set "lps=2" >/dev/null 2>&1 || true
-            iwpriv "$d" pm_set "ips=1" >/dev/null 2>&1 || true
-        fi
+        case "$1" in
+            off)
+                echo 0 > /sys/module/8723ds/parameters/rtw_power_mgnt 2>/dev/null || true
+                iwpriv "$d" pm_set "lps=0" >/dev/null 2>&1 || true
+                iwpriv "$d" pm_set "ips=0" >/dev/null 2>&1 || true ;;
+            lps)
+                # Awake idle reading: keep LPS=2 (~70-80 mA savings) with IPS=0 so SSH/WebAdmin stay reachable
+                echo 2 > /sys/module/8723ds/parameters/rtw_power_mgnt 2>/dev/null || true
+                iwpriv "$d" pm_set "lps=2" >/dev/null 2>&1 || true
+                iwpriv "$d" pm_set "ips=0" >/dev/null 2>&1 || true ;;
+            *)
+                echo 2 > /sys/module/8723ds/parameters/rtw_power_mgnt 2>/dev/null || true
+                iwpriv "$d" pm_set "lps=2" >/dev/null 2>&1 || true
+                iwpriv "$d" pm_set "ips=1" >/dev/null 2>&1 || true ;;
+        esac
         return 0
     fi
-    iwconfig "$d" power "$1" 2>/dev/null || true
+    iwconfig "$d" power "$([ "$1" = off ] && echo off || echo on)" 2>/dev/null || true
 }
 
 wifi_ps_off() {
@@ -76,7 +82,7 @@ wifi_ps_tick() {
     if [ "$delta" -gt 65536 ] || { [ "$last_s" -gt 0 ] && [ "$idle_s" -lt 15 ]; }; then
         wifi_ps_off
     else
-        [ -f "$W/wifi.ps" ] && rm -f "$W/wifi.ps" && wifi_ps_set on && t "wifi: idle (${idle_s}s) -> power saving on"
+        [ -f "$W/wifi.ps" ] && rm -f "$W/wifi.ps" && wifi_ps_set lps && t "wifi: idle (${idle_s}s) -> LPS=2 (ips=0)"
     fi
     return 0
 }
@@ -121,10 +127,10 @@ hostnet_fix_rules() {
 net_start() {
     hostnet_fix_rules
     hostnet_write
-    # Default to power-saving LPS=2; adaptive wifi_ps_tick() boosts to LPS=0 during downloads.
+    # Default to awake power-saving LPS=2 (ips=0); adaptive wifi_ps_tick() boosts to LPS=0 on interaction/downloads.
     case "${WIFI_PS:-auto}" in
         off) wifi_ps_off ;;
-        *)   wifi_ps_set on ;;
+        *)   wifi_ps_set lps ;;
     esac
     if [ ! -f "$W/net.rmem.state" ] && [ -w /proc/sys/net/core/rmem_max ]; then
         echo "$(cat /proc/sys/net/core/rmem_max 2>/dev/null) $(cat /proc/sys/net/core/wmem_max 2>/dev/null)" > "$W/net.rmem.state"

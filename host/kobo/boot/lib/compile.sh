@@ -170,6 +170,23 @@ compile_watch() {
        [ "$(cut -d. -f1 /proc/uptime)" -ge "$(cat $W/compile.retry_at 2>/dev/null || echo 0)" ]; then
         rm -f $W/compile.retry_at; compile_kick
     fi
+    # Charging + idle (>=120s): refresh WeRead speed-profile AOT when live JIT profile grew >=2KB (at most once/24h)
+    if [ -x "$VD/boot/weread-speed-profile.sh" ] && ! alive $W/compile.pid && ! alive $W/weread.prof.pid \
+        && type kobo_is_charging >/dev/null 2>&1 && kobo_is_charging \
+        && [ "$(compile_idle_s)" -ge 120 ]; then
+        wp_cur=$SYS/data/misc/profiles/cur/0/com.tencent.weread.eink/primary.prof
+        wp_ref=$SYS/data/misc/profiles/ref/com.tencent.weread.eink/primary.prof
+        wp_st=$SYS/data/local/tmp/kobo-weread-prof.stamp
+        wp_now=$(date +%s 2>/dev/null || echo 0)
+        wp_last=$(stat -c %Y "$wp_st" 2>/dev/null || echo 0)
+        wp_csz=$(wc -c < "$wp_cur" 2>/dev/null || echo 0)
+        wp_rsz=$(wc -c < "$wp_ref" 2>/dev/null || echo 0)
+        if [ $((wp_now - wp_last)) -ge 86400 ] && [ "$wp_csz" -ge $((wp_rsz + 2048)) ]; then
+            t "compile: charging+idle WeRead speed-profile refresh (cur=${wp_csz}B ref=${wp_rsz}B)"
+            ( nice -n 19 sh "$VD/boot/weread-speed-profile.sh" >>"$LOG" 2>&1 && touch "$wp_st" || true; rm -f "$W/weread.prof.pid" ) </dev/null &
+            echo $! > "$W/weread.prof.pid"
+        fi
+    fi
     f=$SYS/data/system/packages.list
     s=$(stat -c '%Y %s' $f 2>/dev/null) || return 0
     [ "$s" = "$(cat $W/pkglist.stamp 2>/dev/null)" ] && return 0

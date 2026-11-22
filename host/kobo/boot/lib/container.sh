@@ -268,9 +268,42 @@ container_start() {
         for wr_db in "$SYS"/data/data/com.tencent.weread.eink/databases/[0-9]*/WRBook \
                      "$SYS"/data/data/com.tencent.weread.eink/databases/[0-9]*/WRReader; do
             [ -f "$wr_db" ] || continue
-            # SQLite header byte 18: 1 = legacy journal, 2 = WAL (skip already-WAL DBs in 0 ms)
+            # SQLite header byte 18: 1 = legacy journal, 2 = WAL
             wr_jm=$(dd if="$wr_db" bs=1 skip=18 count=1 2>/dev/null | od -An -tu1 | tr -d ' \n')
-            [ "$wr_jm" = 2 ] && continue
+            if [ "$wr_jm" = 2 ]; then
+                # Periodic offline WAL checkpoint(TRUNCATE) + PRAGMA optimize when -wal >= 2MB or >= 7 days
+                wr_name=$(basename "$wr_db")
+                wr_wal_sz=$(wc -c < "${wr_db}-wal" 2>/dev/null || echo 0)
+                wr_stamp="$SYS/data/local/tmp/kobo-db-maint.$wr_name.stamp"
+                wr_now=$(date +%s 2>/dev/null || echo 0)
+                wr_last=$(stat -c %Y "$wr_stamp" 2>/dev/null || echo 0)
+                if [ "${wr_wal_sz:-0}" -ge 2097152 ] 2>/dev/null || [ $((wr_now - wr_last)) -ge 604800 ] 2>/dev/null; then
+                    wr_own=$(stat -c '%u:%g' "$wr_db" 2>/dev/null || echo "10010:10010")
+                    wr_mod=$(stat -c '%a' "$wr_db" 2>/dev/null || echo "600")
+                    LD_LIBRARY_PATH=/mnt/onboard/.adds/koreader/libs /mnt/onboard/.adds/koreader/luajit -e '
+local ffi = require("ffi")
+ffi.cdef[[
+typedef struct sqlite3 sqlite3;
+int sqlite3_open_v2(const char *, sqlite3 **, int, const char *);
+int sqlite3_exec(sqlite3 *, const char *, void *, void *, char **);
+int sqlite3_busy_timeout(sqlite3 *, int); int sqlite3_close(sqlite3 *);
+]]
+local lib = ffi.load("/mnt/onboard/.adds/koreader/libs/libsqlite3.so.0")
+local pdb = ffi.new("sqlite3 *[1]")
+if lib.sqlite3_open_v2(arg[1], pdb, 2, nil) ~= 0 then os.exit(1) end
+local db = pdb[0]; lib.sqlite3_busy_timeout(db, 5000)
+lib.sqlite3_exec(db, "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA optimize;", nil, nil, nil)
+lib.sqlite3_close(db)
+' "$wr_db" 2>/dev/null && {
+                        chown "$wr_own" "$wr_db" "${wr_db}-wal" "${wr_db}-shm" 2>/dev/null || true
+                        chmod "$wr_mod" "$wr_db" 2>/dev/null || true
+                        mkdir -p "$SYS/data/local/tmp" 2>/dev/null || true
+                        touch "$wr_stamp" 2>/dev/null || true
+                        t "container: SQLite maint $wr_name (wal=${wr_wal_sz}B -> truncated + optimize)"
+                    } || true
+                fi
+                continue
+            fi
             wr_own=$(stat -c '%u:%g' "$wr_db" 2>/dev/null || echo "10010:10010")
             wr_mod=$(stat -c '%a' "$wr_db" 2>/dev/null || echo "600")
             wr_bk="$SYS/data/local/tmp/wal-backup/$(basename "$wr_db")"
