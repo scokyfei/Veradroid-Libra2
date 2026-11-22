@@ -38,3 +38,9 @@
      sh /mnt/onboard/.adds/veradroid-libra2/boot/stop.sh
      ```
    - 退出回 Kobo：长按屏幕**左下角 2 秒**，或在 VeraHome 下拉面板点击返回。
+
+## 性能优化清单与实机基准记录
+
+完整的系统级、跨应用分档及微信读书专属优化措施清单（含各项目的作用范围、代码位置及实机基准测试基线）请参见：
+
+- [`docs/kobo-libra2-optimizations.md`](../../docs/kobo-libra2-optimizations.md)
