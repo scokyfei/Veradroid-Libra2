@@ -472,12 +472,11 @@ static int maybe_animate(FBInkConfig *c, int w, int h, int flash)
         fprintf(stderr, "epd: kobo wipe once dir=%d steps=%d\n", d1, os);
         return 1;
     }
-    if (anim_mode == 0) return 0;
+    if (anim_mode == 0 || !one) return 0;
     int st = anim_steps;
     if (st < 4) st = 4;
     if (st > 16) st = 16;
-    int want = one || ((long)w * h > (long)W * H * anim_min_pct / 100);
-    if (!want || w < st * 16 || h < st * 16) return 0;
+    if (w < st * 16 || h < st * 16) return 0;
     swipe_steps = st;
     int dir = anim_dir;
     switch (anim_mode) {
@@ -507,11 +506,10 @@ static int maybe_animate(FBInkConfig *c, int w, int h, int flash)
         fprintf(stderr, "epd: swipe once dir=%d steps=%d\n", d1, os);
         return 1;
     }
-    if (anim_mode == 0) return 0;
+    if (anim_mode == 0 || !one) return 0;
     if (anim_steps < 1) anim_steps = 1;
     if (anim_steps > MTK_MAX_SWIPE) anim_steps = MTK_MAX_SWIPE;
-    int want = one || ((long)w * h > (long)W * H * anim_min_pct / 100);
-    if (!want || w < anim_steps || h < anim_steps) return 0;
+    if (w < anim_steps || h < anim_steps) return 0;
     swipe_steps = anim_steps;
     int dir = anim_dir;
     switch (anim_mode) {
