@@ -89,6 +89,7 @@ display_start() {
         --anim-steps "${KFB_ANIM_STEPS:-8}" --anim-min "${KFB_ANIM_MIN:-45}" \
         --scroll-delay "${KFB_SCROLLDELAY:-500}" \
         --scroll-style "${KFB_SCROLLSTYLE:-1}" --scroll-wfm "${KFB_SCROLLWFM:-a2}" \
+        --gcn "${KFB_GCN:-20}" \
         --nice "${KFB_EPD_NICE:--8}" $(rot_args) >>"$W/epd.log" 2>&1 &
     echo $! > "$W/epd.pid"
     rot_deg > "$W/rotate"

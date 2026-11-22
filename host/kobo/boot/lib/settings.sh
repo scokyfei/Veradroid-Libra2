@@ -11,14 +11,14 @@ settings_defaults() {
     ANDROID_DNS="223.5.5.5 223.6.6.6"
     KFB_CONTRAST=1.3
     KFB_DITHER=0
-    KFB_FLASH=8
+    KFB_FLASH=6
     KFB_INVERT=0
     KFB_LIGHTF=0
     KFB_DARKEN=0
     KFB_SETTLE=50
     KFB_MODE=0
     KFB_HOLD=70
-    KFB_ANIM_MODE=1
+    KFB_ANIM_MODE=0
     KFB_ANIM_DIR=2
     KFB_ANIM_STEPS=8
     KFB_ANIM_MIN=45
@@ -61,10 +61,12 @@ settings_defaults() {
     KFB_DIM=off
     KFB_IMG=0
     KFB_SMOOTH=0
-    KFB_PACE=0
+    KFB_PACE=1
     KFB_CLEAN=0
     KFB_REAGL_MIN=35
     KFB_SCROLLDU=0
+    KFB_GCN=20
+    KFB_NEWWIN=1
     USB_ASK=0
     WIFI_PS=auto
     APP_COMPILE=auto
@@ -86,7 +88,7 @@ smooth_apply() {
     case "$KFB_SMOOTH" in
         1) KFB_PACE=1; KFB_HOLD=0;  KFB_CLEAN=500; KFB_REAGL_MIN=85; KFB_MODE=0 ;;                 # 流畅优先：马上快刷（DU），跟着面板走，停下来再补一遍灰度
         2) KFB_PACE=1; KFB_HOLD=70; KFB_CLEAN=0;   KFB_REAGL_MIN=35; KFB_MODE=0 ;;                 # 均衡：按钮高亮和整页合成一次刷新；变化超过 35% 直接用 REAGL
-        3) KFB_PACE=0; KFB_HOLD=70; KFB_CLEAN=0;   KFB_REAGL_MIN=35; KFB_MODE=3; KFB_SETTLE=120 ;; # 画质优先：驱动自动选波形（整页 REAGL / 灰度 GC16），合并中间帧
+        3) KFB_PACE=1; KFB_HOLD=70; KFB_CLEAN=0;   KFB_REAGL_MIN=35; KFB_MODE=3; KFB_SETTLE=120 ;; # 画质优先：驱动自动选波形（整页 REAGL / 灰度 GC16），防碰撞合并中间帧
         *) KFB_SMOOTH=0 ;;
     esac
 }

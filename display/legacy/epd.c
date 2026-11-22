@@ -353,6 +353,66 @@ static int last_swipe_dir = 0;
 static int g_color = 0;       /* MTK color panel (Colorsoft): REAGL is GLRC16 there (GLR16 without SKIP_CFA logs an error per update) */
 static int skip_cfa = 0;      /* --skip-cfa 1: experimental, off by default. On the cs-5192 emulator it removed the per-REAGL dmesg
                                  error but small refreshes took ~160 ms instead of ~60 ms (emulated MDP; real panel unknown) */
+#ifdef FBINK_FOR_KOBO
+/* Kobo Mk.9+ (Libra 2) KOReader-style night mode (Eclipse waveforms GLKW16/GCK16) & ghosting control:
+   - g_has_eclipse: detected at startup from FBInk has_eclipse_wfm + kernel waveform_mode_{gck16,glkw16}
+   - g_dark_page: auto-detected from current frame dark pixel share (hysteresis >=65% enter, <=45% exit),
+     covering both system KFB_INVERT=1 and app-native dark themes (e.g. WeRead night mode) without inverting images
+   - g_dark_crush: crushes OLED dark-gray backgrounds (<=36, e.g. #121212..#242424) to pure black 0 and mildly lifts
+     text contrast in dark mode so GLKW16 ("from black to any") stays uniform and ghost-free
+   - prev_has_heavy / cur_has_heavy: detects large illustrations or heavy dark blocks so leaving them triggers one
+     automatic full flash (GC16 in light mode, GCK16 in dark mode) when flash_every > 0
+   - coll_dirty: queues one quiet cleanup pass when EPDC hardware collisions happen on non-picture (text/popup) regions */
+static int g_has_eclipse = 0;
+static int g_eclipse_en = 1;
+static int g_dark_page = 0;
+static int g_dark_known = 0;
+static int g_dark_crush = 36;
+static uint8_t dark_lut[256];
+static int prev_has_heavy = 0;
+static int cur_has_heavy = 0;
+static long last_heavy_flash = -100000;
+static unsigned long n_heavy_flash = 0, n_dark_trans = 0, n_coll_clean = 0;
+static int coll_dirty = 0;
+static int coll_clean_ms = 350;
+
+static void build_dark_lut(void)
+{
+    int c = g_dark_crush;
+    if (c < 0) c = 0;
+    if (c > 80) c = 80;
+    double span = 255.0 - (double)c;
+    for (int i = 0; i < 256; i++) {
+        if (i <= c) dark_lut[i] = 0;
+        else {
+            double v = pow((double)(i - c) / span, 0.72) * 255.0 + 0.5;
+            dark_lut[i] = v >= 255.0 ? 255 : (uint8_t)v;
+        }
+    }
+}
+
+/* Sample cur_y8 on a 16x16 grid (<0.05 ms on Cortex-A9) to classify dark background & heavy image/dark coverage. */
+static void kobo_analyze_frame(const uint8_t *y8, int *out_dark_pct, int *out_mid_pct)
+{
+    long n = 0, dark = 0, mid = 0;
+    for (int y = 8; y < H; y += 16) {
+        const uint8_t *row = y8 + (size_t)y * W;
+        for (int x = 8; x < W; x += 16) {
+            uint8_t v = row[x];
+            n++;
+            if (v <= 64) dark++;
+            if (v >= 40 && v <= 215) mid++;
+        }
+    }
+    *out_dark_pct = n ? (int)(dark * 100 / n) : 0;
+    *out_mid_pct = n ? (int)(mid * 100 / n) : 0;
+}
+
+static void kobo_polish_dark_y8(uint8_t *y8, size_t n)
+{
+    for (size_t i = 0; i < n; i++) y8[i] = dark_lut[y8[i]];
+}
+#endif
 static int refresh_cfa(int x, int y, int w, int h, const FBInkConfig *c);
 
 static int maybe_animate(FBInkConfig *c, int w, int h, int flash)
@@ -724,6 +784,18 @@ static void set_wfm(FBInkConfig *c, int mode, WFM_MODE_INDEX_T auto_wfm)
 #ifndef FBINK_FOR_KOBO
     if (c->wfm_mode == WFM_REAGL) c->is_flashing = true;
     if (c->wfm_mode == WFM_REAGL && g_color && !g_cfa) c->wfm_mode = WFM_GLRC16;   /* still FULL, as the driver wants it */
+#else
+    if (g_has_eclipse && g_eclipse_en && g_dark_page) {
+        if (mode == M_FULL) {
+            c->wfm_mode = WFM_GCK16;
+            c->is_flashing = true;
+        } else if (c->wfm_mode != WFM_DU && c->wfm_mode != WFM_A2) {
+            /* Eclipse dark-background 16-gray waveform (GLKW16): from-black-to-any, non-flashing.
+               Keep M_QPASS non-flashing too so scroll/picture cleanup on dark pages never white-flashes. */
+            c->wfm_mode = WFM_GLKW16;
+            c->is_flashing = false;
+        }
+    }
 #endif
     if (c->wfm_mode == WFM_AUTO) c->dithering_mode = HWD_PASSTHROUGH;
 }
@@ -813,6 +885,13 @@ static int open_fb(void)
     g_is_mtk = 0;
     g_cfa = 0;
     g_color = 0;
+    if (st.has_eclipse_wfm &&
+        access("/sys/class/graphics/fb0/waveform_mode_gck16", F_OK) == 0 &&
+        access("/sys/class/graphics/fb0/waveform_mode_glkw16", F_OK) == 0) {
+        g_has_eclipse = 1;
+    }
+    build_dark_lut();
+    fprintf(stderr, "epd: kobo eclipse=%d (en=%d) dark_crush=%d\n", g_has_eclipse, g_eclipse_en, g_dark_crush);
 #else
     g_is_mtk = st.is_mtk;
     /* Oasis 2 / Oasis 3 (FBInk platform "Zelda", i.MX7D EPDC + PxP): any HW dithering request (ordered, quant 7 for
@@ -1049,8 +1128,8 @@ static int push_y8(const uint8_t *buf, int x, int y, int w, int h, int mode)
 #endif
     free(mono);
     if ((g_cfa || g_rawmtk) && rc >= 0) rc = refresh_cfa(x, y, w, h, &c);
-    /* flash=1 only for the GC16 full refresh that really flashes (REAGL is also sent FULL but does not flash) */
-    int fl = c.is_flashing && c.wfm_mode == WFM_GC16;
+    /* flash=1 only for the GC16 / GCK16 full refresh that really flashes (REAGL / GLKW16 do not flash) */
+    int fl = c.is_flashing && (c.wfm_mode == WFM_GC16 || c.wfm_mode == WFM_GCK16);
     if (fl && rc >= 0) n_flash++;
     fprintf(stderr, "[%ld] epd: %dx%d+%d+%d mode=%d wfm=%d full=%d flash=%d anim=%d -> %d (%ld ms)%s\n", t0, w, h, x, y, mode, c.wfm_mode,
             c.is_flashing, fl, anim, rc, now_ms() - t0, fl ? " FLASH" : "");
@@ -1060,9 +1139,9 @@ static int push_y8(const uint8_t *buf, int x, int y, int w, int h, int mode)
            (collision) and the partial waveforms leave pixels between the two pictures */
         int coll = !g_cleaning && qpass_ms > 0 && busy_overlap(x, y, x + w, y + h, t0) > 0;
         busy_add(x, y, w, h, t0);
-        {   /* quality pass bookkeeping: REAGL (sent FULL) and the GC16 FULL flash are full quality; GL16 FULL is full quality
+        {   /* quality pass bookkeeping: REAGL (sent FULL) and the GC16/GCK16 FULL flash are full quality; GL16 FULL is full quality
                only where it stands in for REAGL (4-bit i.MX). 1-bit, swipes and collisions count as low quality. */
-            int fullq = c.is_flashing && (c.wfm_mode == WFM_GC16 || c.wfm_mode == WFM_REAGL ||
+            int fullq = c.is_flashing && (c.wfm_mode == WFM_GC16 || c.wfm_mode == WFM_GCK16 || c.wfm_mode == WFM_REAGL ||
 #ifndef FBINK_FOR_KOBO
                                           c.wfm_mode == WFM_GLRC16 ||
 #endif
@@ -1079,7 +1158,26 @@ static int push_y8(const uint8_t *buf, int x, int y, int w, int h, int mode)
                 if (y + h > cl_y1) cl_y1 = y + h;
             }
             cl_last = t0;
-        } else if (cl_valid && x <= cl_x0 && y <= cl_y0 && x + w >= cl_x1 && y + h >= cl_y1) cl_valid = 0;   /* a gray refresh covered it */
+#ifdef FBINK_FOR_KOBO
+        /* Non-picture collision cleanup: on Kobo EPDC v2, overlapping partial updates leave semi-gray ghosting
+           on text/dialogs as well as images. Queue one quiet REAGL/GLKW16 pass once the panel is still. */
+        } else if (coll && !g_scroll && !g_cleaning && !fl && (long)w * h >= (long)W * H * 3 / 100) {
+            if (!cl_valid) { cl_x0 = x; cl_y0 = y; cl_x1 = x + w; cl_y1 = y + h; cl_valid = 1; }
+            else {
+                if (x < cl_x0) cl_x0 = x;
+                if (y < cl_y0) cl_y0 = y;
+                if (x + w > cl_x1) cl_x1 = x + w;
+                if (y + h > cl_y1) cl_y1 = y + h;
+            }
+            cl_last = t0;
+            coll_dirty = 1;
+#endif
+        } else if (cl_valid && x <= cl_x0 && y <= cl_y0 && x + w >= cl_x1 && y + h >= cl_y1) {
+            cl_valid = 0;   /* a clean gray refresh covered it */
+#ifdef FBINK_FOR_KOBO
+            coll_dirty = 0;
+#endif
+        }
     }
     return rc;
 }
@@ -1192,8 +1290,29 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
     last_page = page;
     if (g_rot) rgba_to_y8_rot(page_at(shm, page, (size_t)LW * LH * 4), 0, 0, g_rot == 180 ? VW : LW, LH, cur_y8);
     else if (fy1 > fy0) rgba_to_y8_opaque(page_at(shm, page, (size_t)W * H * 4), W * 4, 0, fy0, W, fy1 - fy0, cur_y8 + (size_t)fy0 * W);
+#ifdef FBINK_FOR_KOBO
+    int dark_pct = 0, mid_pct = 0, dark_trans = 0;
+    kobo_analyze_frame(cur_y8, &dark_pct, &mid_pct);
+    int next_dark = g_dark_known ? (g_dark_page ? (dark_pct > 45) : (dark_pct >= 65)) : (dark_pct >= 65);
+    if (g_dark_known && next_dark != g_dark_page) dark_trans = 1;
+    g_dark_page = next_dark;
+    g_dark_known = 1;
+    if (g_dark_page && g_dark_crush > 0) kobo_polish_dark_y8(cur_y8, (size_t)W * H);
+    cur_has_heavy = g_dark_page ? (mid_pct >= 22) : (mid_pct >= 20 || dark_pct >= 28);
+    if (dark_trans) {
+        n_dark_trans++;
+        flip_count = 0; gc_count = 0; prev_has_heavy = cur_has_heavy;
+        fprintf(stderr, "[%ld] epd: dark_page=%d (dark=%d%% mid=%d%% eclipse=%d) -> full transition flash\n",
+                now_ms(), g_dark_page, dark_pct, mid_pct, g_has_eclipse && g_eclipse_en);
+        push_region(0, 0, W, H, M_FULL);
+        return 0;
+    }
+#endif
     if (!prev_valid || force_full) {
-        if (mode == M_FULL) flip_count = 0;
+        if (mode == M_FULL) { flip_count = 0; gc_count = 0; }
+#ifdef FBINK_FOR_KOBO
+        prev_has_heavy = cur_has_heavy;
+#endif
         push_region(0, 0, W, H, mode);
         return 0;
     }
@@ -1260,6 +1379,9 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
         if (now_ms() >= newwin_until) newwin_until = 0;
         else if (flip_total * 100 >= (long)W * H * page_pct) {
             newwin_until = 0; flip_count = 0; gc_count = 0; n_newwin++;
+#ifdef FBINK_FOR_KOBO
+            prev_has_heavy = cur_has_heavy;
+#endif
             if (timing_flag && access(timing_flag, F_OK) == 0) fprintf(stderr, "[%ld] epd: new window: full flash\n", now_ms());
             push_region(0, 0, W, H, M_FULL);
             return 0;
@@ -1310,6 +1432,19 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
         if (timing_flag && access(timing_flag, F_OK) == 0) fprintf(stderr, "[%ld] epd: GCN %d reached: flash when still\n", now_ms(), gc_every);
         return 3;
     }
+#ifdef FBINK_FOR_KOBO
+    /* KOReader-style heavy-image/dark-block leave cleanup: when leaving a page with a large illustration or heavy
+       dark block (and the user did not disable flashing via KFB_FLASH=0), upgrade the next page turn to a quiet
+       full flash (GC16 in light mode, GCK16 in dark mode) to wipe persistent grayscale ghosting. */
+    if (flash_every > 0 && mode == M_AUTO && !g_scroll && prev_has_heavy &&
+        (flipped || flip_total * 100 >= (long)W * H * 50) && now_ms() - last_heavy_flash >= 1500) {
+        last_heavy_flash = now_ms();
+        flip_count = 0; gc_count = 0; g_burst = 0; n_heavy_flash++;
+        fprintf(stderr, "[%ld] epd: leaving heavy image/dark page (cur_heavy=%d) -> flash when still\n",
+                last_heavy_flash, cur_has_heavy);
+        return 3;
+    }
+#endif
     {
         int rm = reagl_min;
         if (hint_until && now_ms() < hint_until) { if (hint_pct < rm) rm = hint_pct; }
@@ -1329,6 +1464,7 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
         if (mode == M_AUTO && ui_mode != 2 && (frame_big || ((ui_mode == 1 || ui_mode == 3) && flip_total * 100 >= (long)W * H * page_pct)))
             wm = M_REAGL;
         push_region(0, wy0, W, wy1, wm);
+        prev_has_heavy = cur_has_heavy;
         frame_big = 0; g_burst = 0;
         return 0;
     }
@@ -1380,6 +1516,10 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
         if (timing_flag && access(timing_flag, F_OK) == 0) fprintf(stderr, "[%ld] epd: scroll frame %d%s\n", now_ms(), scroll_frames, scroll_on ? "" : " (fling)");
     }
     for (int i = 0; i < nc; i++) push_region(cx0[i], cy0[i], cx1[i], cy1[i], mode);
+#ifdef FBINK_FOR_KOBO
+    if (!g_scroll && (mode == M_FULL || flip_total * 100 >= (long)W * H * page_pct))
+        prev_has_heavy = cur_has_heavy;
+#endif
     frame_big = 0; g_burst = 0; g_scroll = 0;
     return 0;
 }
@@ -1740,8 +1880,18 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
            A deadline only while a frame is held back or a clean-up is due. */
         long deadline = -1, nowt = now_ms();
         if (held_page >= 0) deadline = held_until;
-        else if ((clean_ms > 0 || burst_dirty) && cl_valid) {
-            int cw = clean_ms > 0 ? clean_ms : burst_du_ms;
+        else if ((clean_ms > 0 || burst_dirty
+#ifdef FBINK_FOR_KOBO
+                  || coll_dirty
+#endif
+                  ) && cl_valid) {
+            int cw = clean_ms > 0 ? clean_ms : (burst_dirty && burst_du_ms > 0 ? burst_du_ms :
+#ifdef FBINK_FOR_KOBO
+                                                coll_clean_ms
+#else
+                                                burst_du_ms
+#endif
+                                                );
             long d = (cl_last > last_frame_ms ? cl_last : last_frame_ms) + cw;
             deadline = d > nowt ? d : nowt + (busy_any(nowt) ? 1000 : 0);      /* due but the panel is busy: the pipe wakes us */
         }
@@ -1774,7 +1924,11 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
         if (sr > 0 && pfd >= 0 && FD_ISSET(pfd, &rf)) { char junk[64]; while (read(pfd, junk, sizeof(junk)) > 0) {} panel_event = 1; }
         if (sr == 0 || (panel_event && !FD_ISSET(ffd, &rf))) {
             nowt = now_ms();
-            if (access(sleepf, F_OK) == 0) { held_page = -1; cl_valid = 0; burst_dirty = 0; need_full = 1; pend_y0 = -1; qp_valid = 0; scroll_dirty = 0; scroll_frames = 0; scroll_on = 0; continue; }
+            if (access(sleepf, F_OK) == 0) { held_page = -1; cl_valid = 0; burst_dirty = 0;
+#ifdef FBINK_FOR_KOBO
+                coll_dirty = 0;
+#endif
+                need_full = 1; pend_y0 = -1; qp_valid = 0; scroll_dirty = 0; scroll_frames = 0; scroll_on = 0; continue; }
             if (held_page >= 0) {
                 int expired = nowt >= held_until;
                 if (held_why == 4) {   /* launch hold: the badge after 600 ms, then wait for content / the end of LAUNCH */
@@ -1818,7 +1972,11 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
                 /* touch scroll over and the picture still: one full-quality refresh of what was drawn 1-bit (A2 / DU) */
                 int x0 = cl_x0, y0 = cl_y0, x1 = cl_x1, y1 = cl_y1;
                 int big = (long)(x1 - x0) * (y1 - y0) > (long)W * H * 6 / 10;
-                cl_valid = 0; burst_dirty = 0; scroll_dirty = 0; scroll_frames = 0; n_scroll_clean++;
+                cl_valid = 0; burst_dirty = 0;
+#ifdef FBINK_FOR_KOBO
+                coll_dirty = 0;
+#endif
+                scroll_dirty = 0; scroll_frames = 0; n_scroll_clean++;
                 if (timing_flag && access(timing_flag, F_OK) == 0) fprintf(stderr, "[%ld] epd: scroll cleanup %dx%d+%d+%d\n", nowt, x1 - x0, y1 - y0, x0, y0);
                 g_cleaning = 1;
                 if (big) push_region(0, 0, W, H, M_QPASS); else push_region(x0, y0, x1, y1, M_QPASS);
@@ -1827,11 +1985,38 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
                 if (qp_valid && (big || (qp_x0 >= x0 && qp_y0 >= y0 && qp_x1 <= x1 && qp_y1 <= y1))) { qp_valid = 0; qp_n = 0; qp_lowq = 0; qp_done = nowt; }
             } else if (scroll_frames && !scroll_on && !scroll_dirty && !scroll_active(nowt)) {
                 scroll_frames = 0; scroll_pwr(0);
-            } else if (qp_due() && !scroll_dirty && nowt >= qp_at() && nowt - last_frame_ms >= qpass_ms && !busy_any(nowt) && !((clean_ms > 0 || burst_dirty) && cl_valid)) {
+            } else if (qp_due() && !scroll_dirty && nowt >= qp_at() && nowt - last_frame_ms >= qpass_ms && !busy_any(nowt) && !((clean_ms > 0 || burst_dirty
+#ifdef FBINK_FOR_KOBO
+                       || coll_dirty
+#endif
+                       ) && cl_valid)) {
                 qp_run(nowt);
-            } else if ((clean_ms > 0 || burst_dirty) && cl_valid && nowt - cl_last >= (clean_ms > 0 ? clean_ms : burst_du_ms) && nowt - last_frame_ms >= (clean_ms > 0 ? clean_ms : burst_du_ms) && !busy_any(nowt)) {
-                /* the picture has been still for a while: one 16-gray pass over what was drawn 1-bit */
+            } else if ((clean_ms > 0 || burst_dirty
+#ifdef FBINK_FOR_KOBO
+                       || coll_dirty
+#endif
+                       ) && cl_valid && !busy_any(nowt) &&
+                       nowt - cl_last >= (clean_ms > 0 ? clean_ms : (burst_dirty && burst_du_ms > 0 ? burst_du_ms :
+#ifdef FBINK_FOR_KOBO
+                                          coll_clean_ms
+#else
+                                          burst_du_ms
+#endif
+                                          )) &&
+                       nowt - last_frame_ms >= (clean_ms > 0 ? clean_ms : (burst_dirty && burst_du_ms > 0 ? burst_du_ms :
+#ifdef FBINK_FOR_KOBO
+                                                coll_clean_ms
+#else
+                                                burst_du_ms
+#endif
+                                                ))) {
+                /* the picture has been still for a while: one 16-gray pass over what was drawn 1-bit (or collided on Kobo) */
                 int x0 = cl_x0, y0 = cl_y0, x1 = cl_x1, y1 = cl_y1;
+#ifdef FBINK_FOR_KOBO
+                int was_coll = coll_dirty && !burst_dirty && clean_ms <= 0;
+                coll_dirty = 0;
+                if (was_coll) n_coll_clean++;
+#endif
                 cl_valid = 0; burst_dirty = 0;
                 /* a picture inside it that is due for the quality pass: the same refresh, sent FULL (one refresh, not two) */
                 int big = (long)(x1 - x0) * (y1 - y0) > (long)W * H * 6 / 10;
@@ -1968,8 +2153,20 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
             else if (!strncmp(line, "MONO", 4)) { int v; if (sscanf(line + 4, "%d", &v) == 1 && v >= 0 && v <= 254) mono_level = v; }
             else if (!strncmp(line, "MAXDEFER", 8)) { int v; if (sscanf(line + 8, "%d", &v) == 1 && v >= 0 && v <= 10000) max_defer_ms = v; }
             else if (!strcmp(line, "STATS"))
-                fprintf(stderr, "[%ld] epd: stats sent=%lu flash=%lu qpass=%lu scroll_frames=%lu scroll_paced=%lu scroll_clean=%lu scroll_held=%lu gcn=%lu newwin=%lu\n",
-                        now_ms(), n_sent, n_flash, n_qpass, n_scroll_frames, n_scroll_paced, n_scroll_clean, n_scroll_held, n_gcn, n_newwin);
+                fprintf(stderr, "[%ld] epd: stats sent=%lu flash=%lu qpass=%lu scroll_frames=%lu scroll_paced=%lu scroll_clean=%lu scroll_held=%lu gcn=%lu newwin=%lu"
+#ifdef FBINK_FOR_KOBO
+                        " dark=%d eclipse=%d heavy_flash=%lu dark_trans=%lu coll_clean=%lu"
+#endif
+                        "\n",
+                        now_ms(), n_sent, n_flash, n_qpass, n_scroll_frames, n_scroll_paced, n_scroll_clean, n_scroll_held, n_gcn, n_newwin
+#ifdef FBINK_FOR_KOBO
+                        , g_dark_page, g_has_eclipse && g_eclipse_en, n_heavy_flash, n_dark_trans, n_coll_clean
+#endif
+                        );
+#ifdef FBINK_FOR_KOBO
+            else if (!strncmp(line, "ECLIPSE", 7)) { int v; if (sscanf(line + 7, "%d", &v) == 1) { g_eclipse_en = v != 0; fprintf(stderr, "epd: eclipse_en=%d (hw=%d)\n", g_eclipse_en, g_has_eclipse); } }
+            else if (!strncmp(line, "DARKCRUSH", 9)) { int v; if (sscanf(line + 9, "%d", &v) == 1 && v >= 0 && v <= 80) { g_dark_crush = v; build_dark_lut(); if (g_dark_page) redraw = 1; fprintf(stderr, "epd: dark_crush=%d\n", g_dark_crush); } }
+#endif
             else if (!strncmp(line, "NOFLIP", 6)) { int v; if (sscanf(line + 6, "%d", &v) == 1 && v >= 0 && v <= 5000) noflip_until = now_ms() + v; }
             else if (!strncmp(line, "HINT", 4)) {
                 int ms, pc;

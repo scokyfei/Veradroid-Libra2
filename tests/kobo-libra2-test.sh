@@ -170,6 +170,15 @@ grep -q 'kobo-weread-opt.jar' "$TOP/host/kobo/boot/lib/container.sh" \
     && grep -q 'weread_boot_prefetch' "$TOP/host/kobo/boot/lib/afterboot.sh" \
     && ok "WeRead FontSizeCache + ReaderPageRelease + SegDictRelease + speed-profile + boot-prefetch wired" \
     || fail "missing WeRead opt JAR / speed-profile / boot-prefetch hooks"
+grep -q 'WFM_GLKW16' "$TOP/display/legacy/epd.c" \
+    && grep -q 'WFM_GCK16' "$TOP/display/legacy/epd.c" \
+    && grep -q 'kobo_polish_dark_y8' "$TOP/display/legacy/epd.c" \
+    && grep -q 'prev_has_heavy' "$TOP/display/legacy/epd.c" \
+    && grep -q 'coll_dirty' "$TOP/display/legacy/epd.c" \
+    && grep -q '^KFB_GCN=20' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q '^KFB_NEWWIN=1' "$TOP/host/kobo/models/libra2.conf" \
+    && ok "Kobo Libra 2 Eclipse nightmode (GLKW16/GCK16 + dark crush) and KOReader-style ghosting control wired" \
+    || fail "missing Kobo Eclipse nightmode or ghosting control wiring"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"
