@@ -392,10 +392,12 @@ static void build_dark_lut(void)
     }
 }
 
-/* Sample cur_y8 on a 16x16 grid (<0.05 ms on Cortex-A9) to classify dark background & heavy image/dark coverage. */
-static void kobo_analyze_frame(const uint8_t *y8, int *out_dark_pct, int *out_mid_pct)
+/* Sample cur_y8 on a 16x16 grid (<0.05 ms on Cortex-A9) to classify dark background, heavy image/dark coverage,
+   and whether the content area (below the 64px status bar) has any visible non-black content (filters empty
+   all-black Android Activity transition surfaces). */
+static void kobo_analyze_frame(const uint8_t *y8, int *out_dark_pct, int *out_mid_pct, int *out_body_vis)
 {
-    long n = 0, dark = 0, mid = 0;
+    long n = 0, dark = 0, mid = 0, bvis = 0;
     for (int y = 8; y < H; y += 16) {
         const uint8_t *row = y8 + (size_t)y * W;
         for (int x = 8; x < W; x += 16) {
@@ -403,10 +405,12 @@ static void kobo_analyze_frame(const uint8_t *y8, int *out_dark_pct, int *out_mi
             n++;
             if (v <= 64) dark++;
             if (v >= 40 && v <= 215) mid++;
+            if (y >= 64 && v > 24) bvis++;
         }
     }
     *out_dark_pct = n ? (int)(dark * 100 / n) : 0;
     *out_mid_pct = n ? (int)(mid * 100 / n) : 0;
+    *out_body_vis = (int)bvis;
 }
 
 static void kobo_polish_dark_y8(uint8_t *y8, size_t n)
@@ -1293,9 +1297,18 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
     if (g_rot) rgba_to_y8_rot(page_at(shm, page, (size_t)LW * LH * 4), 0, 0, g_rot == 180 ? VW : LW, LH, cur_y8);
     else if (fy1 > fy0) rgba_to_y8_opaque(page_at(shm, page, (size_t)W * H * 4), W * 4, 0, fy0, W, fy1 - fy0, cur_y8 + (size_t)fy0 * W);
 #ifdef FBINK_FOR_KOBO
-    int dark_pct = 0, mid_pct = 0, dark_trans = 0;
-    kobo_analyze_frame(cur_y8, &dark_pct, &mid_pct);
-    int next_dark = g_dark_known ? (g_dark_page ? (dark_pct > 45) : (dark_pct >= 65)) : (dark_pct >= 65);
+    int dark_pct = 0, mid_pct = 0, body_vis = 0, dark_trans = 0;
+    kobo_analyze_frame(cur_y8, &dark_pct, &mid_pct, &body_vis);
+    /* Suppress empty all-black Android Activity transition surfaces (body below 64px status bar is
+       100% black with zero visible text/UI): prevents ugly black screen + spurious GCK16/GC16 double flash
+       when opening or closing books while in light mode. */
+    if (!g_invert && !g_dark_page && prev_valid && !force_full && mode == M_AUTO && dark_pct >= 95 && body_vis == 0) {
+        if (timing_flag && access(timing_flag, F_OK) == 0)
+            fprintf(stderr, "[%ld] epd: skip empty black transition frame (dark=%d%% body_vis=0)\n", now_ms(), dark_pct);
+        return 0;
+    }
+    int want_dark = (dark_pct >= 65) && (g_invert || body_vis > 0);
+    int next_dark = g_dark_known ? (g_dark_page ? (dark_pct > 45) : want_dark) : want_dark;
     if (g_dark_known && next_dark != g_dark_page) dark_trans = 1;
     g_dark_page = next_dark;
     g_dark_known = 1;
@@ -1304,8 +1317,8 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
     if (dark_trans) {
         n_dark_trans++;
         flip_count = 0; gc_count = 0; prev_has_heavy = cur_has_heavy;
-        fprintf(stderr, "[%ld] epd: dark_page=%d (dark=%d%% mid=%d%% eclipse=%d) -> full transition flash\n",
-                now_ms(), g_dark_page, dark_pct, mid_pct, g_has_eclipse && g_eclipse_en);
+        fprintf(stderr, "[%ld] epd: dark_page=%d (dark=%d%% mid=%d%% vis=%d eclipse=%d) -> full transition flash\n",
+                now_ms(), g_dark_page, dark_pct, mid_pct, body_vis, g_has_eclipse && g_eclipse_en);
         push_region(0, 0, W, H, M_FULL);
         return 0;
     }
