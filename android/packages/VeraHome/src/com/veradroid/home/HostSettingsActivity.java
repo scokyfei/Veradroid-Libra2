@@ -194,6 +194,8 @@ public class HostSettingsActivity extends Activity {
                 "KFB_NEWWIN", new String[] { "关（默认）", "开" }, new String[] { "0", "1" }, "0", null);
             stepper("全局 NEON 文字与字形加速", "为微信读书以外的其他应用也启用 ARM NEON 文字/矩形混合加速与 8 MB 字形缓存（微信读书始终启用 16 MB）。",
                 "KFB_SKIA_OPT", new String[] { "仅微信读书", "所有应用（默认）" }, new String[] { "0", "1" }, "1", null);
+            stepper("文字笔锋加黑", "在 Skia 字形混合层对文字抗锯齿边缘做 E-Ink Gamma 加黑，让宋体细横画与笔锋更饱满锐利，且完全不影响封面与插图灰阶（翻页即时生效）。",
+                "KFB_FONT_GAMMA", new String[] { "关", "轻度", "适中（默认）", "浓郁" }, new String[] { "0", "1", "2", "3" }, "2", null);
         }
         section("画面");
         stepper("浅色过滤", Panel.LIGHTF_DESC, "KFB_LIGHTF", Panel.LIGHTF_L, Panel.LIGHTF_V, "0", null);

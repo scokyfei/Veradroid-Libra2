@@ -39,6 +39,8 @@ final class BlocksSettings {
     static final String[] MODE_V = { "0", "1", "2", "3" };
     static final String[] DARKCRUSH_L = { "关", "轻", "标准", "强" };
     static final String[] DARKCRUSH_V = { "0", "24", "36", "48" };
+    static final String[] FONTGAMMA_L = { "关", "轻度", "适中", "浓郁" };
+    static final String[] FONTGAMMA_V = { "0", "1", "2", "3" };
     static final String[] GCN_L = { "关", "20 次", "30 次", "50 次" };
     static final String[] GCN_V = { "0", "20", "30", "50" };
     static final String[] FONT_L = { "小", "标准", "大", "特大" };
@@ -206,6 +208,8 @@ final class BlocksSettings {
                 @Override public void onToggle(boolean on) { host("KFB_NEWWIN=" + (on ? 1 : 0)); } })));
             add(ng, Blocks.row(a, "全局 NEON 文字与字形加速", "Skia NEON & glyph cache for all apps", toggle(!"0".equals(cfg.get("KFB_SKIA_OPT")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("KFB_SKIA_OPT=" + (on ? 1 : 0)); } })));
+            add(ng, Blocks.row(a, "文字笔锋加黑", "E-Ink glyph-edge Gamma (images untouched)", new Blocks.Stepper(a, FONTGAMMA_L, idx(FONTGAMMA_V, cfg.get("KFB_FONT_GAMMA"), 2), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("KFB_FONT_GAMMA=" + FONTGAMMA_V[i]); } })));
         }
         if (HostLink.isKobo()) {
             LinearLayout kr = group(c, "方向与实体按键");

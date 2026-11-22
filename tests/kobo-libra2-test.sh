@@ -178,7 +178,10 @@ grep -q 'kobo-weread-opt.jar' "$TOP/host/kobo/boot/lib/container.sh" \
     && grep -q 'load_weread_opt_jar' "$TOP/tools/kobo/libkobo_madvise.c" \
     && grep -q 'other_app_skia_opt_thread' "$TOP/tools/kobo/libkobo_madvise.c" \
     && grep -q 'KFB_SKIA_OPT' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q 'KFB_FONT_GAMMA' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q 'font_gamma_lut' "$TOP/tools/kobo/libkobo_madvise.c" \
     && grep -q 'KFB_SKIA_OPT' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && grep -q 'KFB_FONT_GAMMA' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
     && grep -q 'SegPrestart' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \
     && grep -q 'FontSizeCache' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \
     && grep -q 'FontMap' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \

@@ -625,6 +625,80 @@ typedef void (*kobo_blit_mask_fn)(uint32_t *, size_t, const uint8_t *, size_t, u
 static kobo_blit_mask_fn orig_blit_mask = NULL;
 static uint32_t (*sk_premultiply)(uint32_t) = NULL;
 static int sk_alpha_lane = 3;
+static volatile int font_gamma_level = 0;
+
+/* Precomputed E-Ink glyph-edge alpha Gamma LUTs: round(255 * (a / 255)^(1 / g)).
+   Only affects Skia A8 glyph masks (text), leaving images, covers, and gray UI untouched. */
+static const uint8_t font_gamma_lut[3][256] = {
+    /* level 1: gamma=1.30 (轻度) */
+    {
+          0,   4,   6,   8,  10,  12,  14,  16,  18,  19,  21,  23,  24,  26,  27,  29,
+         30,  32,  33,  35,  36,  37,  39,  40,  41,  43,  44,  45,  47,  48,  49,  50,
+         52,  53,  54,  55,  57,  58,  59,  60,  61,  63,  64,  65,  66,  67,  68,  69,
+         71,  72,  73,  74,  75,  76,  77,  78,  79,  81,  82,  83,  84,  85,  86,  87,
+         88,  89,  90,  91,  92,  93,  94,  95,  96,  97,  98,  99, 100, 102, 103, 104,
+        105, 106, 107, 108, 109, 110, 111, 112, 112, 113, 114, 115, 116, 117, 118, 119,
+        120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 134,
+        135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 146, 147, 148, 149,
+        150, 151, 152, 153, 154, 155, 155, 156, 157, 158, 159, 160, 161, 162, 163, 163,
+        164, 165, 166, 167, 168, 169, 170, 170, 171, 172, 173, 174, 175, 176, 176, 177,
+        178, 179, 180, 181, 182, 182, 183, 184, 185, 186, 187, 188, 188, 189, 190, 191,
+        192, 193, 193, 194, 195, 196, 197, 198, 198, 199, 200, 201, 202, 203, 203, 204,
+        205, 206, 207, 207, 208, 209, 210, 211, 212, 212, 213, 214, 215, 216, 216, 217,
+        218, 219, 220, 220, 221, 222, 223, 224, 224, 225, 226, 227, 228, 228, 229, 230,
+        231, 232, 232, 233, 234, 235, 236, 236, 237, 238, 239, 239, 240, 241, 242, 243,
+        243, 244, 245, 246, 246, 247, 248, 249, 250, 250, 251, 252, 253, 253, 254, 255,
+    },
+    /* level 2: gamma=1.55 (适中) */
+    {
+          0,   7,  11,  15,  17,  20,  23,  25,  27,  29,  32,  34,  35,  37,  39,  41,
+         43,  44,  46,  48,  49,  51,  52,  54,  56,  57,  58,  60,  61,  63,  64,  65,
+         67,  68,  69,  71,  72,  73,  75,  76,  77,  78,  80,  81,  82,  83,  84,  86,
+         87,  88,  89,  90,  91,  93,  94,  95,  96,  97,  98,  99, 100, 101, 102, 103,
+        105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
+        121, 122, 123, 124, 125, 126, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135,
+        136, 137, 138, 138, 139, 140, 141, 142, 143, 144, 145, 146, 146, 147, 148, 149,
+        150, 151, 152, 153, 153, 154, 155, 156, 157, 158, 158, 159, 160, 161, 162, 163,
+        163, 164, 165, 166, 167, 168, 168, 169, 170, 171, 172, 172, 173, 174, 175, 176,
+        176, 177, 178, 179, 180, 180, 181, 182, 183, 183, 184, 185, 186, 186, 187, 188,
+        189, 190, 190, 191, 192, 193, 193, 194, 195, 196, 196, 197, 198, 199, 199, 200,
+        201, 201, 202, 203, 204, 204, 205, 206, 207, 207, 208, 209, 209, 210, 211, 212,
+        212, 213, 214, 214, 215, 216, 217, 217, 218, 219, 219, 220, 221, 222, 222, 223,
+        224, 224, 225, 226, 226, 227, 228, 228, 229, 230, 230, 231, 232, 233, 233, 234,
+        235, 235, 236, 237, 237, 238, 239, 239, 240, 241, 241, 242, 243, 243, 244, 245,
+        245, 246, 247, 247, 248, 249, 249, 250, 250, 251, 252, 252, 253, 254, 254, 255,
+    },
+    /* level 3: gamma=1.85 (浓郁) */
+    {
+          0,  13,  19,  23,  27,  30,  34,  37,  39,  42,  44,  47,  49,  51,  53,  55,
+         57,  59,  61,  63,  64,  66,  68,  69,  71,  73,  74,  76,  77,  79,  80,  82,
+         83,  84,  86,  87,  89,  90,  91,  92,  94,  95,  96,  97,  99, 100, 101, 102,
+        103, 105, 106, 107, 108, 109, 110, 111, 112, 113, 115, 116, 117, 118, 119, 120,
+        121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 133, 134, 135,
+        136, 137, 138, 139, 140, 141, 142, 143, 143, 144, 145, 146, 147, 148, 149, 150,
+        150, 151, 152, 153, 154, 155, 155, 156, 157, 158, 159, 159, 160, 161, 162, 163,
+        163, 164, 165, 166, 167, 167, 168, 169, 170, 170, 171, 172, 173, 173, 174, 175,
+        176, 176, 177, 178, 179, 179, 180, 181, 182, 182, 183, 184, 184, 185, 186, 187,
+        187, 188, 189, 189, 190, 191, 191, 192, 193, 193, 194, 195, 196, 196, 197, 198,
+        198, 199, 200, 200, 201, 202, 202, 203, 204, 204, 205, 205, 206, 207, 207, 208,
+        209, 209, 210, 211, 211, 212, 213, 213, 214, 214, 215, 216, 216, 217, 218, 218,
+        219, 219, 220, 221, 221, 222, 222, 223, 224, 224, 225, 225, 226, 227, 227, 228,
+        228, 229, 230, 230, 231, 231, 232, 233, 233, 234, 234, 235, 235, 236, 237, 237,
+        238, 238, 239, 239, 240, 241, 241, 242, 242, 243, 243, 244, 245, 245, 246, 246,
+        247, 247, 248, 248, 249, 250, 250, 251, 251, 252, 252, 253, 253, 254, 254, 255,
+    },
+};
+
+static void refresh_font_gamma(void)
+{
+    char buf[8];
+    int n = read_small_file("/data/local/tmp/kobo-font-gamma", buf, sizeof(buf));
+    if (n > 0 && buf[0] >= '0' && buf[0] <= '3') {
+        font_gamma_level = buf[0] - '0';
+    } else {
+        font_gamma_level = 0;
+    }
+}
 
 static inline uint8x8_t k_mul255(uint8x8_t x, uint8x8_t y)
 {
@@ -639,6 +713,10 @@ static inline uint8_t k_mul255s(uint8_t x, uint8_t y)
 static void neon_blit_mask(uint32_t *dst, size_t dstRB, const uint8_t *mask, size_t maskRB,
                            uint32_t color, int w, int h)
 {
+    static unsigned int fg_ticks = 0;
+    if ((++fg_ticks & 4095u) == 0u) refresh_font_gamma();
+    int glvl = font_gamma_level;
+    const uint8_t *glut = (glvl >= 1 && glvl <= 3) ? font_gamma_lut[glvl - 1] : NULL;
     int mode = (color == 0xFF000000u) ? 0 : ((color >> 24) == 0xFFu) ? 1 : 2;
     uint32_t pm = sk_premultiply(color);
     uint8_t s[4];
@@ -648,7 +726,14 @@ static void neon_blit_mask(uint32_t *dst, size_t dstRB, const uint8_t *mask, siz
         int x = 0;
         for (; x + 8 <= w; x += 8) {
             uint8x8x4_t d = vld4_u8((const uint8_t *)(dst + x));
-            uint8x8_t aa = vld1_u8(mask + x);
+            uint8x8_t aa;
+            if (glut) {
+                uint8_t mg[8];
+                for (int k = 0; k < 8; k++) mg[k] = glut[mask[x + k]];
+                aa = vld1_u8(mg);
+            } else {
+                aa = vld1_u8(mask + x);
+            }
             if (mode == 0) {
                 uint8x8_t inv = vsub_u8(ff, aa);
                 for (int k = 0; k < 4; k++) d.val[k] = k_mul255(d.val[k], inv);
@@ -662,7 +747,7 @@ static void neon_blit_mask(uint32_t *dst, size_t dstRB, const uint8_t *mask, siz
             vst4_u8((uint8_t *)(dst + x), d);
         }
         for (; x < w; x++) {
-            uint8_t *p = (uint8_t *)(dst + x), aa = mask[x], inv, left[4];
+            uint8_t *p = (uint8_t *)(dst + x), aa = glut ? glut[mask[x]] : mask[x], inv, left[4];
             if (mode == 0) {
                 inv = (uint8_t)(255 - aa);
                 for (int k = 0; k < 4; k++) p[k] = k_mul255s(p[k], inv);
@@ -722,9 +807,13 @@ static void install_neon_blit(void *skia, int (*say)(int, const char *, const ch
         return;
     }
     orig_blit_mask = *slot;
+    font_gamma_level = 0;
     int ok = neon_blit_matches();
-    if (ok == 1) *slot = neon_blit_mask;
-    if (say) say(4, "KoboWeRead", "NEON_BLIT %s alpha_lane=%d", ok == 1 ? "installed" : "mismatch", sk_alpha_lane);
+    if (ok == 1) {
+        refresh_font_gamma();
+        *slot = neon_blit_mask;
+    }
+    if (say) say(4, "KoboWeRead", "NEON_BLIT %s alpha_lane=%d font_gamma=%d", ok == 1 ? "installed" : "mismatch", sk_alpha_lane, font_gamma_level);
 }
 
 typedef void (*kobo_row_color_fn)(uint32_t *, const uint32_t *, int, uint32_t);
@@ -1018,6 +1107,9 @@ static void *weread_opt_thread(void *unused)
     int ticks = 0;
     for (;;) {
         tune_weread_threads();
+#ifdef __ARM_NEON
+        refresh_font_gamma();
+#endif
         int step = (ticks < 30) ? 2 : 3;
         usleep((unsigned int)step * 1000000u);
         ticks += step;
