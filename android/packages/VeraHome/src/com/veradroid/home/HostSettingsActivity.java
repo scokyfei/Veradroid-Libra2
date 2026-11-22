@@ -179,7 +179,20 @@ public class HostSettingsActivity extends Activity {
             "KFB_REAGL_MIN", new String[] { "三成", "翻页（默认）", "一半", "七成", "接近整屏" }, new String[] { "30", "35", "50", "70", "85" }, "35", null);
         stepper("整屏闪刷", "每翻这么多页，整个屏幕黑白闪一下，彻底清掉残影（和 Kobo 的“页面刷新”一样）。",
             "KFB_FLASH", new String[] { "不按页数闪", "每页", "每 3 页", "每 6 页", "每 8 页", "每 10 页", "每 20 页" },
-            new String[] { "0", "1", "3", "6", "8", "10", "20" }, "8", null);
+            new String[] { "0", "1", "3", "6", "8", "10", "20" }, "6", null);
+        if (HostLink.isKobo()) {
+            section("夜间与残影（Libra 2）");
+            stepper("夜间原生波形（Eclipse）", "在系统反色或应用深色模式下自动切换硬件 GLKW16 / GCK16 波形：黑底更匀、白字更锐利，全刷暗闪不刺眼。",
+                "KFB_ECLIPSE", new String[] { "关", "开（默认）" }, new String[] { "0", "1" }, "1", null);
+            stepper("暗底压纯黑", "暗色页面中把深灰背景（如 #181818）压成纯黑并轻提白字对比度，消除深灰底斑驳残影；看暗色漫画可设为关。",
+                "KFB_DARKCRUSH", new String[] { "关", "轻", "标准（默认）", "强" }, new String[] { "0", "24", "36", "48" }, "36", null);
+            stepper("大图后自动清残影", "离开包含大面积插图或深色块的页面时，自动做一次整屏全刷清残影（开启“不按页数闪”时同步停用）。",
+                "KFB_HEAVY_FLASH", new String[] { "关", "开（默认）" }, new String[] { "0", "1" }, "1", null);
+            stepper("非翻页定时全刷", "开关目录、弹窗、划词等非翻页局部刷新累计达到此次数后自动整屏清残影。",
+                "KFB_GCN", new String[] { "关", "每 20 次（默认）", "每 30 次", "每 50 次" }, new String[] { "0", "20", "30", "50" }, "20", null);
+            stepper("切换应用首屏全刷", "切换到新应用的第一屏自动全刷一次，防止上一个界面的底影带入新页面。",
+                "KFB_NEWWIN", new String[] { "关", "开（默认）" }, new String[] { "0", "1" }, "1", null);
+        }
         section("画面");
         stepper("浅色过滤", Panel.LIGHTF_DESC, "KFB_LIGHTF", Panel.LIGHTF_L, Panel.LIGHTF_V, "0", null);
         stepper("深色加深", Panel.DARKEN_DESC, "KFB_DARKEN", new String[] { "关", "开" }, new String[] { "0", "1" }, "0", null);

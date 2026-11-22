@@ -365,6 +365,7 @@ static int skip_cfa = 0;      /* --skip-cfa 1: experimental, off by default. On 
    - coll_dirty: queues one quiet cleanup pass when EPDC hardware collisions happen on non-picture (text/popup) regions */
 static int g_has_eclipse = 0;
 static int g_eclipse_en = 1;
+static int g_heavy_flash_en = 1;
 static int g_dark_page = 0;
 static int g_dark_known = 0;
 static int g_dark_crush = 36;
@@ -891,7 +892,8 @@ static int open_fb(void)
         g_has_eclipse = 1;
     }
     build_dark_lut();
-    fprintf(stderr, "epd: kobo eclipse=%d (en=%d) dark_crush=%d\n", g_has_eclipse, g_eclipse_en, g_dark_crush);
+    fprintf(stderr, "epd: kobo eclipse=%d (en=%d) dark_crush=%d heavy_flash=%d\n",
+            g_has_eclipse, g_eclipse_en, g_dark_crush, g_heavy_flash_en);
 #else
     g_is_mtk = st.is_mtk;
     /* Oasis 2 / Oasis 3 (FBInk platform "Zelda", i.MX7D EPDC + PxP): any HW dithering request (ordered, quant 7 for
@@ -1436,7 +1438,7 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
     /* KOReader-style heavy-image/dark-block leave cleanup: when leaving a page with a large illustration or heavy
        dark block (and the user did not disable flashing via KFB_FLASH=0), upgrade the next page turn to a quiet
        full flash (GC16 in light mode, GCK16 in dark mode) to wipe persistent grayscale ghosting. */
-    if (flash_every > 0 && mode == M_AUTO && !g_scroll && prev_has_heavy &&
+    if (g_heavy_flash_en && flash_every > 0 && mode == M_AUTO && !g_scroll && prev_has_heavy &&
         (flipped || flip_total * 100 >= (long)W * H * 50) && now_ms() - last_heavy_flash >= 1500) {
         last_heavy_flash = now_ms();
         flip_count = 0; gc_count = 0; g_burst = 0; n_heavy_flash++;
@@ -2166,6 +2168,7 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
 #ifdef FBINK_FOR_KOBO
             else if (!strncmp(line, "ECLIPSE", 7)) { int v; if (sscanf(line + 7, "%d", &v) == 1) { g_eclipse_en = v != 0; fprintf(stderr, "epd: eclipse_en=%d (hw=%d)\n", g_eclipse_en, g_has_eclipse); } }
             else if (!strncmp(line, "DARKCRUSH", 9)) { int v; if (sscanf(line + 9, "%d", &v) == 1 && v >= 0 && v <= 80) { g_dark_crush = v; build_dark_lut(); if (g_dark_page) redraw = 1; fprintf(stderr, "epd: dark_crush=%d\n", g_dark_crush); } }
+            else if (!strncmp(line, "HEAVYFLASH", 10)) { int v; if (sscanf(line + 10, "%d", &v) == 1) { g_heavy_flash_en = v != 0; fprintf(stderr, "epd: heavy_flash_en=%d\n", g_heavy_flash_en); } }
 #endif
             else if (!strncmp(line, "NOFLIP", 6)) { int v; if (sscanf(line + 6, "%d", &v) == 1 && v >= 0 && v <= 5000) noflip_until = now_ms() + v; }
             else if (!strncmp(line, "HINT", 4)) {
@@ -2382,6 +2385,11 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--scroll-wfm") && i + 1 < argc) { i++; scroll_a2 = strcmp(argv[i], "du") != 0 && strcmp(argv[i], "0") != 0; }
         else if (!strcmp(argv[i], "--mono") && i + 1 < argc) mono_level = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--gcn") && i + 1 < argc) gc_every = atoi(argv[++i]);
+#ifdef FBINK_FOR_KOBO
+        else if (!strcmp(argv[i], "--eclipse") && i + 1 < argc) g_eclipse_en = atoi(argv[++i]) != 0;
+        else if (!strcmp(argv[i], "--dark-crush") && i + 1 < argc) { int v = atoi(argv[++i]); if (v >= 0 && v <= 80) g_dark_crush = v; }
+        else if (!strcmp(argv[i], "--heavy-flash") && i + 1 < argc) g_heavy_flash_en = atoi(argv[++i]) != 0;
+#endif
         else if (!strcmp(argv[i], "--max-defer") && i + 1 < argc) max_defer_ms = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--flip-input") && i + 1 < argc) flip_input_ms = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--reagl-min") && i + 1 < argc) { reagl_min = atoi(argv[++i]); if (reagl_min < 1 || reagl_min > 100) reagl_min = 35; }

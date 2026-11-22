@@ -133,7 +133,7 @@ cmd_listen() {
             apkg=${a%%|*}; aspec=${a#*|}
             rm -f "$SYS/settings.app"
             if [ "$apkg" != home ] && [ -n "$aspec" ] && [ "$aspec" != "$a" ]; then
-                printf '%s\n' "$aspec" | tr ';' '\n' | grep -E '^KFB_(CONTRAST|DITHER|FLASH|INVERT|LIGHTF|DARKEN|MODE|SETTLE|HOLD|SMOOTH|PACE|CLEAN|REAGL_MIN|SCROLLDU|IMG|SCROLLDELAY|SCROLLSTYLE|GCN|NEWWIN|MONO|MAXDEFER|FLIPINPUT|ANIM_MODE|ANIM_DIR|ANIM_STEPS|ANIM_MIN)=[0-9.]{1,6}$' > "$SYS/settings.app.tmp"
+                printf '%s\n' "$aspec" | tr ';' '\n' | grep -E '^KFB_(CONTRAST|DITHER|FLASH|INVERT|LIGHTF|DARKEN|MODE|SETTLE|HOLD|SMOOTH|PACE|CLEAN|REAGL_MIN|SCROLLDU|IMG|SCROLLDELAY|SCROLLSTYLE|GCN|NEWWIN|MONO|MAXDEFER|FLIPINPUT|ECLIPSE|DARKCRUSH|HEAVY_FLASH|ANIM_MODE|ANIM_DIR|ANIM_STEPS|ANIM_MIN)=[0-9.]{1,6}$' > "$SYS/settings.app.tmp"
                 [ -s "$SYS/settings.app.tmp" ] && mv -f "$SYS/settings.app.tmp" "$SYS/settings.app" || rm -f "$SYS/settings.app.tmp"
             fi
             settings_load 2>/dev/null || true

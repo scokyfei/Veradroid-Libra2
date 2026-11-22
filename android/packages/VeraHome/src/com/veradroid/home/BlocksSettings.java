@@ -35,8 +35,12 @@ final class BlocksSettings {
     static final String[] RETURN_V = { "freeze", "off" };
     static final String[] TIME_L = { "跟随 Kobo", "24 小时", "12 小时" };
     static final String[] TIME_V = { "auto", "24", "12" };
-    static final String[] MODE_L = { "均衡", "灰度最准", "最快" };
-    static final String[] MODE_V = { "0", "1", "2" };
+    static final String[] MODE_L = { "均衡", "灰度最准", "最快", "自动" };
+    static final String[] MODE_V = { "0", "1", "2", "3" };
+    static final String[] DARKCRUSH_L = { "关", "轻", "标准", "强" };
+    static final String[] DARKCRUSH_V = { "0", "24", "36", "48" };
+    static final String[] GCN_L = { "关", "20 次", "30 次", "50 次" };
+    static final String[] GCN_V = { "0", "20", "30", "50" };
     static final String[] FONT_L = { "小", "标准", "大", "特大" };
     static final float[] FONT_S = { 0.85f, 1.0f, 1.15f, 1.3f };
 
@@ -172,7 +176,7 @@ final class BlocksSettings {
         add(g, smRow);
         add(g, Blocks.row(a, "刷新方式", "Partial update", new Blocks.Stepper(a, MODE_L, idx(MODE_V, cfg.get("KFB_MODE"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_MODE=" + MODE_V[i]); } })));
-        add(g, Blocks.row(a, "全刷周期", "Full refresh period", new Blocks.Stepper(a, FLASH_L, idx(FLASH_V, cfg.get("KFB_FLASH"), 4), new Blocks.Stepper.Listener() {
+        add(g, Blocks.row(a, "全刷周期", "Full refresh period", new Blocks.Stepper(a, FLASH_L, idx(FLASH_V, cfg.get("KFB_FLASH"), 3), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_FLASH=" + FLASH_V[i]); } })));
         add(g, Blocks.row(a, "对比度", "Contrast", new Blocks.Stepper(a, CONTRAST_L, idx(CONTRAST_V, cfg.get("KFB_CONTRAST"), 1), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_CONTRAST=" + CONTRAST_V[i]); } })));
@@ -184,10 +188,23 @@ final class BlocksSettings {
             @Override public void onToggle(boolean on) { host("KFB_INVERT=" + (on ? 1 : 0)); } })));
         add(g, Blocks.row(a, "立即整屏刷新", "Clear ghosting", Blocks.button(a, "刷新", false, new View.OnClickListener() {
             @Override public void onClick(View v) { HostLink.cmd("clear"); } })));
-        int am = HostLink.num(cfg, "KFB_ANIM_MODE", 1);
+        int am = HostLink.num(cfg, "KFB_ANIM_MODE", 0);
         final int[] animLast = { am > 0 ? am : 1 };
         add(g, Blocks.row(a, "翻页动画", "Page-turn swipe", toggle(am > 0, new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { host("KFB_ANIM_MODE=" + (on ? animLast[0] : 0)); } })));
+        if (HostLink.isKobo()) {
+            LinearLayout ng = group(c, "夜间与残影");
+            add(ng, Blocks.row(a, "夜间原生波形", "Eclipse GLKW16 / GCK16", toggle(!"0".equals(cfg.get("KFB_ECLIPSE")), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("KFB_ECLIPSE=" + (on ? 1 : 0)); } })));
+            add(ng, Blocks.row(a, "暗底压纯黑", "Dark background crush", new Blocks.Stepper(a, DARKCRUSH_L, idx(DARKCRUSH_V, cfg.get("KFB_DARKCRUSH"), 2), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("KFB_DARKCRUSH=" + DARKCRUSH_V[i]); } })));
+            add(ng, Blocks.row(a, "大图后自动清残影", "Auto flash after images", toggle(!"0".equals(cfg.get("KFB_HEAVY_FLASH")), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("KFB_HEAVY_FLASH=" + (on ? 1 : 0)); } })));
+            add(ng, Blocks.row(a, "非翻页定时全刷", "UI ghosting cleanup", new Blocks.Stepper(a, GCN_L, idx(GCN_V, cfg.get("KFB_GCN"), 1), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("KFB_GCN=" + GCN_V[i]); } })));
+            add(ng, Blocks.row(a, "切换应用首屏全刷", "Full refresh on app switch", toggle(!"0".equals(cfg.get("KFB_NEWWIN")), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("KFB_NEWWIN=" + (on ? 1 : 0)); } })));
+        }
         if (HostLink.isKobo()) {
             LinearLayout kr = group(c, "方向与实体按键");
             add(kr, Blocks.row(a, "重力感应自动旋转", "Auto rotate (0° / 180°, keys follow)", toggle("1".equals(cfg.get("KFB_AUTO_ROTATE")), new Icons.Toggle.Listener() {

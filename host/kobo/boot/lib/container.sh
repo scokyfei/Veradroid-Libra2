@@ -90,6 +90,7 @@ display_start() {
         --scroll-delay "${KFB_SCROLLDELAY:-500}" \
         --scroll-style "${KFB_SCROLLSTYLE:-1}" --scroll-wfm "${KFB_SCROLLWFM:-a2}" \
         --gcn "${KFB_GCN:-20}" \
+        --eclipse "${KFB_ECLIPSE:-1}" --dark-crush "${KFB_DARKCRUSH:-36}" --heavy-flash "${KFB_HEAVY_FLASH:-1}" \
         --nice "${KFB_EPD_NICE:--8}" $(rot_args) >>"$W/epd.log" 2>&1 &
     echo $! > "$W/epd.pid"
     rot_deg > "$W/rotate"

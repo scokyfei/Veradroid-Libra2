@@ -98,6 +98,11 @@ final class AppProf {
         if (m.containsKey("KFB_LIGHTF")) l.add("浅色过滤");
         if (m.containsKey("KFB_DARKEN")) l.add("深色加深");
         if (m.containsKey("KFB_ANIM_MODE")) l.add("0".equals(m.get("KFB_ANIM_MODE")) ? "无翻页动画" : "翻页动画");
+        if (m.containsKey("KFB_ECLIPSE")) l.add("0".equals(m.get("KFB_ECLIPSE")) ? "夜间波形关" : "夜间波形");
+        if (m.containsKey("KFB_DARKCRUSH")) l.add("0".equals(m.get("KFB_DARKCRUSH")) ? "暗底压黑关" : "暗底压黑 " + m.get("KFB_DARKCRUSH"));
+        if (m.containsKey("KFB_HEAVY_FLASH")) l.add("0".equals(m.get("KFB_HEAVY_FLASH")) ? "大图全刷关" : "大图全刷");
+        if (m.containsKey("KFB_GCN") && !"0".equals(m.get("KFB_GCN"))) l.add("每 " + m.get("KFB_GCN") + " 次局刷清屏");
+        if ("1".equals(m.get("KFB_NEWWIN"))) l.add("切窗清屏");
         if (l.isEmpty()) return "跟随全局";
         StringBuilder b = new StringBuilder();
         for (String x : l) { if (b.length() > 0) b.append(" · "); b.append(x); }

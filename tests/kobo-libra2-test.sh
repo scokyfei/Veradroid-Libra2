@@ -177,7 +177,12 @@ grep -q 'WFM_GLKW16' "$TOP/display/legacy/epd.c" \
     && grep -q 'coll_dirty' "$TOP/display/legacy/epd.c" \
     && grep -q '^KFB_GCN=20' "$TOP/host/kobo/models/libra2.conf" \
     && grep -q '^KFB_NEWWIN=1' "$TOP/host/kobo/models/libra2.conf" \
-    && ok "Kobo Libra 2 Eclipse nightmode (GLKW16/GCK16 + dark crush) and KOReader-style ghosting control wired" \
+    && grep -q '^KFB_ECLIPSE=1' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q 'KFB_DARKCRUSH' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q 'KFB_HEAVY_FLASH' "$TOP/host/kobo/boot/lib/appprof.sh" \
+    && grep -q 'KFB_ECLIPSE' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && grep -q 'KFB_ECLIPSE' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HostSettingsActivity.java" \
+    && ok "Kobo Libra 2 Eclipse nightmode (GLKW16/GCK16 + dark crush) and KOReader-style ghosting control wired end-to-end" \
     || fail "missing Kobo Eclipse nightmode or ghosting control wiring"
 
 [ "$FAIL" -eq 0 ] || exit 1
