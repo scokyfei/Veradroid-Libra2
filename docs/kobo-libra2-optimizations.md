@@ -1,11 +1,46 @@
-# Kobo Libra 2 (N418) 系统与微信读书优化清单及作用范围
+# Kobo Libra 2 (N418) 功能变更、优化清单与基准记录
 
-本文档汇总 `kobo-libra2` 分支在 **Kobo Libra 2（单核 i.MX6SL Cortex-A9 1 GHz + 512 MB RAM）** 上的全部性能优化措施，并按作用范围明确区分：
-1. **全局系统、内核与墨水屏显示层优化（对所有程序均生效）**
-2. **跨应用「分档隔离」的运行时策略（微信读书与其他 App 按不同配额生效）**
-3. **仅针对微信读书的专属优化（按进程名 `com.tencent.weread.eink` / `:seg` 严格隔离，对其他程序零影响）**
+本文档完整汇总 `kobo-libra2` 分支自项目启动（`5dc32b2`）至今在 **Kobo Libra 2（单核 i.MX6SL Cortex-A9 1 GHz + 512 MB RAM，Linux 4.1.15）** 上完成的**全部功能新增、精简/移除项、底层硬件修复、性能优化措施**及实机基准测试记录，并按作用范围明确区分：
+1. **项目功能增删与硬件适配全景（新增功能 / 精简移除 / 关键硬件修复）**
+2. **全局系统、内核与墨水屏显示层优化（对所有程序均生效）**
+3. **跨应用「分档隔离」的运行时策略（微信读书与其他 App 按不同配额生效）**
+4. **仅针对微信读书的专属优化（按进程名 `com.tencent.weread.eink` / `:seg` 严格隔离，对其他程序零影响）**
 
-> 每次新增或调整优化措施后，请同步更新本清单与末尾的实机基准测试记录。
+> 每次新增功能或调整优化措施后，请同步更新本清单与末尾的实机基准测试记录。
+
+---
+
+## 零、项目全景：功能增删与底层硬件适配汇总
+
+### （一）新增功能清单
+
+| 类别 | 新增功能 | 核心说明 | 主要代码位置 |
+| :--- | :--- | :--- | :--- |
+| **系统移植与启动** | **Kobo Libra 2 容器底座与双入口启动** | 基于 `busybox unshare -m` + 静态 `pivot_init` + `HOSTNS=1` 共用 `wlan0`，集成 `binder_linux`/`kobo_zsmalloc`/`kobo_zram` 内核模块与 `madvise` 兼容垫片；支持从 **KOReader 插件** 与 **NickelMenu** 一键启动，自动暂停/恢复 Nickel 或 KOReader 与 `/dev/fb0`，退出后完全卸载 ext4 镜像不影响 USB 传书。 | `host/kobo/boot/`、`host/kobo/koplugin/`、`tools/kobo/build-kobo-bin.sh`、`deploy-kobo.sh` |
+| **操控与手势** | **重力感应自动旋转 (`KFB_AUTO_ROTATE`)** | 读取 Kobo `kx122` 加速度计，支持 `0° ↔ 180°`（竖屏）与 `90° ↔ 270°`（横屏）实时无重启旋转，触摸坐标、手势与实体翻页键全部自动随动。 | `input/legacy/vinput.c`、`host/kobo/boot/lib/settings.sh` |
+| | **实体翻页键互换 & 14 种可定制长按功能** | 支持 `PAGE_KEYS_SWAP` 上下键互换（跟随旋转），并可为上一页/下一页键分别配置 **14 种长按快捷动作**（`关` / `全刷消残影` / `返回` / `快捷面板` / `回桌面` / `切换应用` / `夜间反色` / `开关前光` / `前光调亮` / `前光调暗` / `截屏` / `开关Wi-Fi` / `立即休眠` / `返回Kobo`）与长按阈值（`0.35s–1.0s`）。 | `input/legacy/vinput.c`、`host/kobo/boot/action.sh`、`BlocksSettings.java`、`HostSettingsActivity.java` |
+| | **左右边缘上下滑动无级调光 / 色温（含互换开关）** | 参考 `Koboweread` `edge-light.h`，支持总开关 `G_EDGE_LIGHT` 与左右功能互换 `G_EDGE_LIGHT_SWAP`：默认靠近实体翻页键一侧调亮度、另一侧调色温，旋转后自动保持与按键同侧且上滑调高/下滑调低，50 ms 直写 sysfs 平滑无闪屏，松手弹出百分比角标，不干扰边缘轻点与横滑翻页。 | `input/legacy/vinput.c`、`settings.sh`、`BlocksSettings.java`、`HostSettingsActivity.java`、`HomeActivity.java` |
+| | **底边三段手势与全局手势体系** | 适配 Elan 触摸屏并完整打通底边三段上划（左/中/右/停住）、顶边下拉快捷面板、双指轻点/长按/滑动、四角长按（默认左下角长按 2 秒返回 Kobo）。 | `input/legacy/vinput.c`、`host/kobo/boot/lib/input.sh` |
+| **显示与阅读画质** | **阅读专属翻页动画 (`KFB_ANIM_MODE`)** | 实现 Kobo 硬件分段条带滑动动画，并通过 `HostService` `READER 0|1` + `vinput` `DIR` 门控**严格限定仅在阅读页翻页时生效**（桌面、书架、设置、弹窗、开/关书等过渡均不触发）。 | `display/legacy/epd.c`、`input/legacy/vinput.c`、`HostService.java` |
+| | **Eclipse 硬件夜间波形 + KOReader 风格残影控制** | 支持夜间原生 `GLKW16`/`GCK16` 波形（`KFB_ECLIPSE`）、暗底压纯黑（`KFB_DARKCRUSH`）、大图后自动清残影（`KFB_HEAVY_FLASH`）、非翻页定时全刷（`KFB_GCN`）、切应用首屏全刷（`KFB_NEWWIN`）以及流畅/均衡/画质三档显示预设与单应用独立配置。 | `display/legacy/epd.c`、`host/kobo/boot/lib/appprof.sh`、`BlocksSettings.java`、`HostSettingsActivity.java` |
+| | **4 档实时 E-Ink 文字笔锋加黑 (`KFB_FONT_GAMMA`)** | 在 Skia NEON 字形混合层对文字抗锯齿边缘做可调 Gamma 曲线加黑（`关 / 轻度 / 适中 / 浓郁`），翻页实时生效且对封面、插图灰阶零影响。 | `tools/kobo/libkobo_madvise.c`、`settings.sh`、`BlocksSettings.java` |
+| **电源与系统服务** | **真 `mem` 深度休眠 & 即时电量/充电广播** | 锁屏后等待 EPDC 9s VEE 稳压即进入硬件 `mem` 深度休眠；按下电源键/插入充电器即时同步电量与充电状态至下拉面板与「我的」页；补齐屏保（`fbink-img`）、WebAdmin 网页传书、Wi-Fi 扫描与真开关、`ethernet-service-wifi.jar` Wi-Fi 状态上报、系统字体、原生 PNG 截屏与阅读器命名。 | `host/kobo/boot/lib/sleep.sh`、`watchdog.sh`、`kobo.sh`、`cmd.sh`、`tools/kobo/patch-ethernet-wifi.py` |
+
+### （二）精简、移除与屏蔽项
+
+| 移除 / 屏蔽项 | 具体变更与收益 | 涉及位置 |
+| :--- | :--- | :--- |
+| **移除全部 Kindle 专属接口与界面品牌字样** | 彻底移除 `lipc`、`initctl`、`/dev/shm`、`/mnt/base-us` 等 Kindle 宿主调用，并将 VeraHome APK、WebAdmin 及宿主脚本全面 Kobo 品牌化（静态测试确保零用户可见 Kindle 残留）。 | `host/kobo/boot/`、`android/packages/VeraHome/`、`tests/kobo-libra2-test.sh` |
+| **隐藏 Kobo 不支持的设置项并移除常驻返回模式** | 隐藏不支持的 `ADB Wi-Fi`、Kindle 专属 `WIFI_PS` 选项；锁定 `RETURN_MODE=off`，退出 VeraDroid 时完整清理所有挂载与 loop 设备，确保 Kobo USB 传书永远可用。 | `host/kobo/boot/lib/settings.sh`、`BlocksSettings.java`、`HostSettingsActivity.java` |
+| **移除 Android 原生 FUSE `sdcard` 守护进程** | 用极简 C 绑定挂载进程 `kobo-sdcard` 直接覆盖 `/system/bin/sdcard`，消除 `/sdcard` 读写全部 FUSE 上下文切换开销并常驻节省 ~4 MB RAM。 | `tools/kobo/kobo-sdcard.c`、`host/kobo/boot/lib/container.sh` |
+| **屏蔽微信读书更新弹窗、遥测上报与多余悬浮栏** | 在**不修改微信读书 APK** 的前提下，屏蔽强制升级弹窗与 APK 自动下载（`SSL_write` + DNS 拦截 + `tinker`/`update` 只读空目录）、停用 `RMonitor` 监控线程、自动隐藏阅读页底部「↑ 上滑显示工具栏」悬浮药丸；微信读书前台时自动隐藏 VeraHome 悬浮顶栏，消除双顶栏重叠与每分钟时钟重绘唤醒。 | `tools/kobo/libkobo_madvise.c`、`KoboWeReadOpt.java`、`StatusBarService.java`、`HostService.java` |
+
+### （三）关键实机硬件 Bug 修复
+
+- **Elan 触摸屏重复 `ABS_MT_TRACKING_ID` 与唤醒幽灵触摸死锁**：修复 Elan 驱动每帧重复上报相同 `TRACKING_ID` 导致手势起点被重置的问题，以及深度休眠唤醒后内核残留槽位触发幽灵触摸锁死与 10 分钟无效 RTC 唤醒。
+- **EPDC v2 局部刷新边缘裁切与切页全黑闪帧**：修复 Kobo EPDC v2 局刷边界裁切错位，并过滤 Activity 切换瞬间的 >85% 纯黑未就绪过渡帧。
+- **单核 Cortex-A9 MS GC 优先级反转**：修复后台低优先级线程持锁执行 Stop-The-World GC 被 `:seg` 抢占导致数秒卡顿与 ANR 的根因。
+- **大书跨章热门想法风暴卡顿**：按书籍维度限流 `LoadBookChapterReviewList` 并关闭 30s 连续分页拉取窗口，彻底消除大书跨章返回书架卡在「加载中...」的问题。
 
 ---
 
