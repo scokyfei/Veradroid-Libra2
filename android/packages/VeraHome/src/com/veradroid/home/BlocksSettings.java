@@ -227,6 +227,8 @@ final class BlocksSettings {
                 @Override public void onStep(int i) { host("KEY_PREV_LONG=" + KEYLONG_V[i]); } })));
             add(kr, Blocks.row(a, "翻页键长按时长", "Long-press hold threshold", new Blocks.Stepper(a, KEYLONG_MS_L, idx(KEYLONG_MS_V, cfg.get("KEY_LONG_MS"), 1), new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { host("KEY_LONG_MS=" + KEYLONG_MS_V[i]); } })));
+            add(kr, Blocks.row(a, "左右边缘滑动调光 / 色温", "Left edge brightness, right edge warmth (follows rotation)", toggle(!"0".equals(cfg.get("G_EDGE_LIGHT")), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("G_EDGE_LIGHT=" + (on ? 1 : 0)); } })));
         }
         LinearLayout fg = group(c, "文字");
         float fs = AppFont.user(a);

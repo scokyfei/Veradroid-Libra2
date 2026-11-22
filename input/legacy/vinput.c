@@ -116,7 +116,7 @@
 static int W = 1272, H = 1696, EDGE = 60, EDGE_TOP = -1, TOUCH_DEBUG = 0, WINDOW_MS = 80, CORNER = 160, CORNER_MS = 2000, GESTURES = 1, EDGE_BACK = 1;
 static const char *LOGF = "/dev/null", *ACT = "", *FLAGF = NULL, *INJECT = NULL, *GCONF = NULL, *FGF = NULL;
 /* per-gesture switches (--gconf) */
-static int G_EDGE_BACK = 1, G_EDGE_PANEL = 1, G_TWO_TAP = 1, G_TWO_LONG = 1, G_TWO_BACK = 1, G_TWO_SLIDE = 1;
+static int G_EDGE_BACK = 1, G_EDGE_PANEL = 1, G_EDGE_LIGHT = 1, G_TWO_TAP = 1, G_TWO_LONG = 1, G_TWO_BACK = 1, G_TWO_SLIDE = 1;
 static int G_TAP = 1, G_TAP_KEY = KEY_VOLUMEDOWN;   /* bezel double tap (gesture_tap) -> this key, see the header */
 static int tapfd = -1;
 static int BOOST_MS = 150, BOOST_KHZ = 0, SCROLL_PX = 20;   /* touch boost / scroll hints, see the header */
@@ -201,7 +201,7 @@ static void gconf_load(void)
     long long sig = !ok ? -1 : (long long)st.st_mtim.tv_sec * 1000 + st.st_mtim.tv_nsec / 1000000 + (long long)st.st_size * 7919;
     if (sig == gconf_sig) return;
     gconf_sig = sig;
-    G_EDGE_BACK = G_EDGE_PANEL = G_TWO_TAP = G_TWO_LONG = G_TWO_BACK = G_TWO_SLIDE = 1; G_BACK_EXCLUDE[0] = 0; G_EDGE_SENS = 1;
+    G_EDGE_BACK = G_EDGE_PANEL = G_EDGE_LIGHT = G_TWO_TAP = G_TWO_LONG = G_TWO_BACK = G_TWO_SLIDE = 1; G_BACK_EXCLUDE[0] = 0; G_EDGE_SENS = 1;
     G_TAP = 1; G_TAP_KEY = KEY_VOLUMEDOWN; snprintf(G_CORNERS, sizeof(G_CORNERS), "all");
     BOOST_MS = 150; BOOST_KHZ = 0; SCROLL_PX = 20; FAST_DRAG = 1;
     G_EDGE_THIRDS = 0; G_EB_HOLD_MS = 500;
@@ -219,6 +219,7 @@ static void gconf_load(void)
             int b = atoi(v) != 0;
             if (!strcmp(line, "G_EDGE_BACK")) G_EDGE_BACK = b;
             else if (!strcmp(line, "G_EDGE_PANEL")) G_EDGE_PANEL = b;
+            else if (!strcmp(line, "G_EDGE_LIGHT")) G_EDGE_LIGHT = b;
             else if (!strcmp(line, "G_TWO_TAP")) G_TWO_TAP = b;
             else if (!strcmp(line, "G_TWO_LONG")) G_TWO_LONG = b;
             else if (!strcmp(line, "G_TWO_BACK")) G_TWO_BACK = b;
@@ -276,8 +277,8 @@ static void gconf_load(void)
     }
     logf_("gconf: edge_sens=%d (strip %d/%d px, swipe %d px) boost=%dms/%dkHz scroll_px=%d auto_rot=%d key_swap=%d",
           G_EDGE_SENS, EDGE, EDGE_TOP, EDGE_SWIPE, BOOST_MS, BOOST_KHZ, SCROLL_PX, G_AUTO_ROTATE, KEY_SWAP);
-    logf_("gconf: edge_back=%d edge_panel=%d two_tap=%d two_long=%d two_back=%d two_slide=%d exclude=%s",
-          G_EDGE_BACK, G_EDGE_PANEL, G_TWO_TAP, G_TWO_LONG, G_TWO_BACK, G_TWO_SLIDE, G_BACK_EXCLUDE[0] ? G_BACK_EXCLUDE : "-");
+    logf_("gconf: edge_back=%d edge_panel=%d edge_light=%d two_tap=%d two_long=%d two_back=%d two_slide=%d exclude=%s",
+          G_EDGE_BACK, G_EDGE_PANEL, G_EDGE_LIGHT, G_TWO_TAP, G_TWO_LONG, G_TWO_BACK, G_TWO_SLIDE, G_BACK_EXCLUDE[0] ? G_BACK_EXCLUDE : "-");
     if (G_EDGE_THIRDS) logf_("gconf: bottom edge thirds: left=%s middle=%s right=%s hold=%s (%d ms)", G_EB[0], G_EB[1], G_EB[2], G_EB[3], G_EB_HOLD_MS);
 }
 /* is the foreground app (VeraHome writes it to --fg) in G_BACK_EXCLUDE? */
@@ -509,7 +510,7 @@ static int new_touch_over_active(const struct input_event *fr, int n)
     return 0;
 }
 
-enum mode { IDLE, PENDING, PASS, EDGE_B, EDGE_T, TWO, SWALLOW, EDGE_FWD, EDGE_ARM };
+enum mode { IDLE, PENDING, PASS, EDGE_B, EDGE_T, EDGE_L, TWO, SWALLOW, EDGE_FWD, EDGE_ARM };
 static enum mode md = IDLE;
 static enum mode edge_kind = IDLE;     /* which edge strip (EDGE_B / EDGE_T) an EDGE_FWD touch started in */
 static int EDGE_HOLD_MS = 60;          /* how long a touch in the edge strip is held before Android gets it (a back swipe fits inside) */
@@ -707,6 +708,131 @@ static void eb_armed(int active, int frame)
     if (now_ms() - arm_t >= G_EB_HOLD_MS) { eb_fire(3); md = SWALLOW; }
 }
 
+/* ---- left/right edge vertical swipe for brightness (left) and warmth (right) ----
+ * Modeled on Koboweread's edge-light.h, operating in logical upright coordinates (0..W-1 x 0..H-1)
+ * after rot_frame(), so left=brightness, right=warmth, up=increase, down=decrease automatically
+ * follows all screen rotations (0 / 90 / 180 / 270 and live gyro auto-rotate).
+ * Direct sysfs writes keep adjustment smooth every 50 ms without spawning shell processes; a single
+ * E-Ink BADGE is sent on release to show the final percentage without flickering during the drag. */
+#define EL_SLOP     40
+#define EL_HOLD_MS  350
+#define EL_WRITE_MS 50
+static int el_probed = 0;
+static char el_path[2][96];
+static int el_max[2] = { 100, 10 };
+static int el_inv[2] = { 0, 1 };
+static int el_side = 0, el_active = 0;
+static int el_x0 = 0, el_y0 = 0;
+static int el_start_val = 0, el_last_val = 0;
+static long el_t0 = 0, el_last_write = 0;
+
+static void el_init(void)
+{
+    if (el_probed) return;
+    el_probed = 1;
+    el_path[0][0] = el_path[1][0] = 0;
+    static const char *const br_paths[] = {
+        "/sys/class/backlight/mxc_msp430.0/brightness",
+        "/sys/class/backlight/mxc_msp430_fl.0/brightness",
+        NULL
+    };
+    static const char *const wm_paths[] = {
+        "/sys/class/backlight/lm3630a_led/color",
+        "/sys/class/leds/aw99703-bl_FL1/color",
+        "/sys/class/backlight/tlc5947_bl/color",
+        NULL
+    };
+    for (int i = 0; br_paths[i]; i++) {
+        if (access(br_paths[i], W_OK) == 0) {
+            snprintf(el_path[0], sizeof(el_path[0]), "%s", br_paths[i]);
+            el_max[0] = 100; el_inv[0] = 0;
+            break;
+        }
+    }
+    for (int i = 0; wm_paths[i]; i++) {
+        if (access(wm_paths[i], W_OK) == 0) {
+            snprintf(el_path[1], sizeof(el_path[1]), "%s", wm_paths[i]);
+            el_max[1] = 10; el_inv[1] = 1;
+            break;
+        }
+    }
+    logf_("edge light: bright=%s warm=%s",
+          el_path[0][0] ? el_path[0] : "none",
+          el_path[1][0] ? el_path[1] : "none");
+}
+static int el_strip_w(void)
+{
+    int w = 76 * (PW ? PW : W) / 1264;
+    return w < 48 ? 48 : w;
+}
+static int el_read(int side)
+{
+    char buf[32];
+    if (!el_path[side][0] || sysfs_read(el_path[side], buf, sizeof(buf)) < 0) return 0;
+    int hw = atoi(buf);
+    int v = el_inv[side] ? (el_max[side] - hw) : hw;
+    if (v < 0) v = 0;
+    if (v > el_max[side]) v = el_max[side];
+    return v;
+}
+static void el_write(int side, int v)
+{
+    if (!el_path[side][0]) return;
+    if (v < 0) v = 0;
+    if (v > el_max[side]) v = el_max[side];
+    int hw = el_inv[side] ? (el_max[side] - v) : v;
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", hw);
+    sysfs_write(el_path[side], buf);
+}
+static int el_begin(int sx, int sy)
+{
+    el_init();
+    int top = EDGE_TOP >= 0 ? EDGE_TOP : EDGE;
+    if (sy < top || sy > H - EDGE) return 0;
+    int sw = el_strip_w();
+    if (sx < sw && el_path[0][0]) el_side = 0;
+    else if (sx >= W - sw && el_path[1][0]) el_side = 1;
+    else return 0;
+    el_active = 0;
+    el_x0 = sx; el_y0 = sy;
+    el_t0 = now_ms();
+    el_last_write = 0;
+    return 1;
+}
+static void el_apply(int y, int force)
+{
+    long now = now_ms();
+    if (!force && now - el_last_write < EL_WRITE_MS) return;
+    int span = H * 72 / 100;
+    if (span < 300) span = 300;
+    int dy = el_y0 - y; /* logical up = positive = brighter / warmer */
+    int delta = (dy * el_max[el_side]) / span;
+    int v = el_start_val + delta;
+    if (v < 0) v = 0;
+    if (v > el_max[el_side]) v = el_max[el_side];
+    if (v != el_last_val || (force && el_last_write == 0)) {
+        el_write(el_side, v);
+        el_last_val = v;
+        el_last_write = now;
+    }
+}
+static void el_finish(int y)
+{
+    if (!el_active) return;
+    el_apply(y, 1);
+    char b[96];
+    if (el_side == 0) {
+        snprintf(b, sizeof(b), "BADGE 800 t light LIGHT|亮度 %d%%\n", el_last_val);
+    } else {
+        int pct = el_max[1] > 0 ? (el_last_val * 100 + el_max[1] / 2) / el_max[1] : 0;
+        snprintf(b, sizeof(b), "BADGE 800 t warm WARMTH|暖光 %d%%\n", pct);
+    }
+    epd_cmd(b);
+    logf_("edge light: %s %d -> %d (rot=%d)", el_side ? "warmth" : "brightness", el_start_val, el_last_val, ROT);
+    el_active = 0;
+}
+
 static void two_finger_end(void)
 {
     /* classify by the movement of the first two fingers */
@@ -901,6 +1027,7 @@ static void handle_frame(struct input_event *fr, int n)
                 two_begin();
             } else if (eb) md = EDGE_B;
             else if (gest && G_EDGE_PANEL && sy < (EDGE_TOP >= 0 ? EDGE_TOP : EDGE)) md = EDGE_T;
+            else if (gest && G_EDGE_LIGHT && el_begin(sx, sy)) md = EDGE_L;
             else md = PENDING;
             (void)sx;
         } else {
@@ -984,6 +1111,51 @@ static void handle_frame(struct input_event *fr, int n)
                 flush_held();              /* not a gesture (yet): Android gets the press, the rest of the touch is forwarded */
                 edge_kind = md;
                 md = EDGE_FWD;
+            }
+        }
+        break;
+    }
+    case EDGE_L: {
+        int x = sl[cur_slot].x, y = sl[cur_slot].y;
+        if (active >= 2) {
+            if (el_active) {
+                el_finish(y);
+                nheld = 0; md = SWALLOW;
+            } else if (!two_any()) {
+                for (int i = 0; i < n && nheld < MAXEV; i++) held[nheld++] = fr[i];
+                flush_held(); md = PASS;
+            } else {
+                nheld = 0; md = TWO; two_t0 = now_ms();
+                two_begin();
+            }
+        } else if (active == 0) {
+            if (el_active) {
+                el_finish(y);
+                nheld = 0;
+            } else {
+                for (int i = 0; i < n && nheld < MAXEV; i++) held[nheld++] = fr[i];
+                flush_held();
+            }
+            md = IDLE;
+        } else {
+            int adx = abs(x - el_x0), ady = abs(y - el_y0);
+            if (!el_active) {
+                if (ady >= EL_SLOP && ady >= 2 * adx) {
+                    el_active = 1;
+                    nheld = 0;
+                    el_start_val = el_read(el_side);
+                    el_last_val = el_start_val;
+                    el_last_write = 0;
+                    el_apply(y, 1);
+                } else if (adx >= EL_SLOP || now_ms() - el_t0 >= EL_HOLD_MS || nheld >= MAXEV - 8) {
+                    for (int i = 0; i < n && nheld < MAXEV; i++) held[nheld++] = fr[i];
+                    flush_held();
+                    md = PASS;
+                } else {
+                    for (int i = 0; i < n && nheld < MAXEV; i++) held[nheld++] = fr[i];
+                }
+            } else {
+                el_apply(y, 0);
             }
         }
         break;
@@ -1242,6 +1414,7 @@ static void touch_reset(const char *why)
     n_reset++;
     int n = release_android(1, why);
     nheld = 0;
+    el_active = 0;
     if (why && (!strcmp(why, "thaw") || !strcmp(why, "freeze"))) {
         slots_reset();
         memset(as_, 0, sizeof(as_));
@@ -1694,6 +1867,10 @@ int main(int argc, char **argv)
                 flush_held();                    /* held still in the edge strip (long press there): let Android have it now */
                 edge_kind = md;
                 md = EDGE_FWD;
+            }
+            if (md == EDGE_L && !el_active && count_active() == 1 && now_ms() - el_t0 >= EL_HOLD_MS) {
+                flush_held();                    /* held still on left/right edge: pass through to Android */
+                md = PASS;
             }
             if (md == EDGE_ARM) eb_armed(count_active(), 0);   /* swipe up and hold: a still finger sends nothing */
             if (md == TWO && !two_done && G_TWO_LONG && now_ms() - two_t0 >= 2000 && abs(sl[two_i[0]].x - two_sx[0]) < 60 && abs(sl[two_i[0]].y - two_sy[0]) < 60) {

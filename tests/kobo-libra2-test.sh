@@ -213,6 +213,15 @@ grep -q 'WFM_GLKW16' "$TOP/display/legacy/epd.c" \
     && grep -q 'KFB_ECLIPSE' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HostSettingsActivity.java" \
     && ok "Kobo Libra 2 Eclipse nightmode (GLKW16/GCK16 + dark crush) and KOReader-style ghosting control wired end-to-end" \
     || fail "missing Kobo Eclipse nightmode or ghosting control wiring"
+grep -q 'G_EDGE_LIGHT' "$TOP/input/legacy/vinput.c" \
+    && grep -q 'el_begin' "$TOP/input/legacy/vinput.c" \
+    && grep -q 'G_EDGE_LIGHT' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q '^G_EDGE_LIGHT=1' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q 'G_EDGE_LIGHT' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && grep -q 'G_EDGE_LIGHT' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HostSettingsActivity.java" \
+    && grep -q 'G_EDGE_LIGHT' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HomeActivity.java" \
+    && ok "Left/right edge swipe brightness & warmth (G_EDGE_LIGHT, rotation-aware) wired end-to-end" \
+    || fail "missing G_EDGE_LIGHT wiring"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"
