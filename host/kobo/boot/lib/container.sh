@@ -280,7 +280,7 @@ container_start() {
                 if [ "${wr_wal_sz:-0}" -ge 2097152 ] 2>/dev/null || [ $((wr_now - wr_last)) -ge 604800 ] 2>/dev/null; then
                     wr_own=$(stat -c '%u:%g' "$wr_db" 2>/dev/null || echo "10010:10010")
                     wr_mod=$(stat -c '%a' "$wr_db" 2>/dev/null || echo "600")
-                    LD_LIBRARY_PATH=/mnt/onboard/.adds/koreader/libs /mnt/onboard/.adds/koreader/luajit -e '
+                    WR_DB="$wr_db" LD_LIBRARY_PATH=/mnt/onboard/.adds/koreader/libs /mnt/onboard/.adds/koreader/luajit -e '
 local ffi = require("ffi")
 ffi.cdef[[
 typedef struct sqlite3 sqlite3;
@@ -290,11 +290,11 @@ int sqlite3_busy_timeout(sqlite3 *, int); int sqlite3_close(sqlite3 *);
 ]]
 local lib = ffi.load("/mnt/onboard/.adds/koreader/libs/libsqlite3.so.0")
 local pdb = ffi.new("sqlite3 *[1]")
-if lib.sqlite3_open_v2(arg[1], pdb, 2, nil) ~= 0 then os.exit(1) end
+if lib.sqlite3_open_v2(os.getenv("WR_DB"), pdb, 2, nil) ~= 0 then os.exit(1) end
 local db = pdb[0]; lib.sqlite3_busy_timeout(db, 5000)
 lib.sqlite3_exec(db, "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA optimize;", nil, nil, nil)
 lib.sqlite3_close(db)
-' "$wr_db" 2>/dev/null && {
+' 2>/dev/null && {
                         chown "$wr_own" "$wr_db" "${wr_db}-wal" "${wr_db}-shm" 2>/dev/null || true
                         chmod "$wr_mod" "$wr_db" 2>/dev/null || true
                         mkdir -p "$SYS/data/local/tmp" 2>/dev/null || true
@@ -311,7 +311,7 @@ lib.sqlite3_close(db)
                 mkdir -p "$SYS/data/local/tmp/wal-backup" 2>/dev/null || true
                 cp "$wr_db" "$wr_bk.tmp" 2>/dev/null && mv -f "$wr_bk.tmp" "$wr_bk" || true
             fi
-            wr_res=$(LD_LIBRARY_PATH=/mnt/onboard/.adds/koreader/libs /mnt/onboard/.adds/koreader/luajit -e '
+            wr_res=$(WR_DB="$wr_db" LD_LIBRARY_PATH=/mnt/onboard/.adds/koreader/libs /mnt/onboard/.adds/koreader/luajit -e '
 local ffi = require("ffi")
 ffi.cdef[[
 typedef struct sqlite3 sqlite3; typedef struct sqlite3_stmt sqlite3_stmt;
@@ -323,7 +323,7 @@ int sqlite3_busy_timeout(sqlite3 *, int);
 ]]
 local lib = ffi.load("/mnt/onboard/.adds/koreader/libs/libsqlite3.so.0")
 local pdb = ffi.new("sqlite3 *[1]")
-if lib.sqlite3_open_v2(arg[1], pdb, 2, nil) ~= 0 then os.exit(1) end
+if lib.sqlite3_open_v2(os.getenv("WR_DB"), pdb, 2, nil) ~= 0 then os.exit(1) end
 local db = pdb[0]; lib.sqlite3_busy_timeout(db, 5000)
 local function one(sql)
   local st = ffi.new("sqlite3_stmt *[1]")
@@ -337,7 +337,7 @@ one("PRAGMA journal_mode=wal")
 local m = one("PRAGMA journal_mode")
 lib.sqlite3_close(db)
 io.write(m)
-' "$wr_db" 2>/dev/null || true)
+' 2>/dev/null || true)
             chown "$wr_own" "$wr_db" 2>/dev/null || true
             chmod "$wr_mod" "$wr_db" 2>/dev/null || true
             rm -f "${wr_db}-wal" "${wr_db}-shm" 2>/dev/null || true
