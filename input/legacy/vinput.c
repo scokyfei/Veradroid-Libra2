@@ -569,6 +569,21 @@ static void epd_dir(int dir)
     snprintf(b, sizeof(b), "DIR %d\n", dir);
     epd_cmd(b);
 }
+static void epd_dir_release(void)
+{
+    if (corner_fired || sl[cur_slot].sx < 0 || now_ms() - t_down >= 800) return;
+    int dx = sl[cur_slot].x - sl[cur_slot].sx;
+    int dy = sl[cur_slot].y - sl[cur_slot].sy;
+    if (abs(dx) > 80 && abs(dx) > abs(dy)) epd_dir(dx < 0 ? 2 : 3);
+    else if (abs(dy) > 80 && abs(dy) > abs(dx)) epd_dir(dy < 0 ? 1 : 0);
+    else if (abs(dx) < 40 && abs(dy) < 40) {
+        /* Dead-center tap opens the reader menu/toolbar rather than turning a page */
+        int in_center = sl[cur_slot].sx >= W * 35 / 100 && sl[cur_slot].sx <= W * 65 / 100
+                     && sl[cur_slot].sy >= H * 28 / 100 && sl[cur_slot].sy <= H * 72 / 100;
+        if (in_center) epd_dir(-1);
+        else epd_dir(sl[cur_slot].sx > W / 2 ? 2 : 3);
+    }
+}
 
 /* ---- touch boost (see the header) ---- */
 static long boost_until = 0;          /* 0 = not boosted */
@@ -1057,7 +1072,9 @@ static void handle_frame(struct input_event *fr, int n)
             two_begin();
         } else if (active == 0) {
             for (int i = 0; i < n && nheld < MAXEV; i++) held[nheld++] = fr[i];
-            flush_held(); md = IDLE;
+            flush_held();
+            epd_dir_release();
+            md = IDLE;
         } else if (now_ms() - t_down >= WINDOW_MS || pending_moved()) {
             /* the two-finger window is over - or the finger already moved past the slop: a drag, not the first finger of a
                two-finger tap, so Android gets it now instead of after the window (the drag starts following at once) */
@@ -1075,19 +1092,7 @@ static void handle_frame(struct input_event *fr, int n)
         if (active == 0) {
             /* remember the gesture direction for the next page change: horizontal swipe -> left/right,
                vertical swipe -> up/down, short tap -> which half of the screen */
-            if (!corner_fired && sl[cur_slot].sx >= 0 && now_ms() - t_down < 800) {
-                int dx = sl[cur_slot].x - sl[cur_slot].sx;
-                int dy = sl[cur_slot].y - sl[cur_slot].sy;
-                if (abs(dx) > 80 && abs(dx) > abs(dy)) epd_dir(dx < 0 ? 2 : 3);
-                else if (abs(dy) > 80 && abs(dy) > abs(dx)) epd_dir(dy < 0 ? 1 : 0);
-                else if (abs(dx) < 40 && abs(dy) < 40) {
-                    /* Dead-center tap opens the reader menu/toolbar rather than turning a page */
-                    int in_center = sl[cur_slot].sx >= W * 35 / 100 && sl[cur_slot].sx <= W * 65 / 100
-                                 && sl[cur_slot].sy >= H * 28 / 100 && sl[cur_slot].sy <= H * 72 / 100;
-                    if (in_center) epd_dir(-1);
-                    else epd_dir(sl[cur_slot].sx > W / 2 ? 2 : 3);
-                }
-            }
+            epd_dir_release();
             md = IDLE;
             break;
         }
@@ -1154,6 +1159,7 @@ static void handle_frame(struct input_event *fr, int n)
             } else {
                 for (int i = 0; i < n && nheld < MAXEV; i++) held[nheld++] = fr[i];
                 flush_held();
+                epd_dir_release();
             }
             md = IDLE;
         } else {
