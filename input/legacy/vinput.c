@@ -1224,12 +1224,28 @@ static int setup_uinput_keys(void)
 
 
 /* "reset [why]" (--inject FIFO, the host around freezing / thawing the container) and SIGUSR1 / SIGUSR2: Android gets
-   every contact lifted; a touch still on the panel is swallowed to its end (Android never saw it go down) */
+   every contact lifted. On sleep/thaw ("freeze" / "thaw"), the panel may have been powered down across mem suspend
+   or had lift events dropped while sleeping, so clear all cached slot state too so no phantom finger can trap
+   later single taps in TWO/SWALLOW mode. */
 static void touch_reset(const char *why)
 {
     n_reset++;
     int n = release_android(1, why);
     nheld = 0;
+    if (why && (!strcmp(why, "thaw") || !strcmp(why, "freeze"))) {
+        slots_reset();
+        memset(as_, 0, sizeof(as_));
+        st_btn = 0;
+        md = IDLE;
+        struct input_absinfo ai;
+        if (src_proto == PROTO_B && tfd >= 0 && ioctl(tfd, EVIOCGABS(ABS_MT_SLOT), &ai) == 0
+                && ai.value >= 0 && ai.value < MAXSLOT)
+            hw_slot = cur_slot = ai.value;
+        else
+            hw_slot = cur_slot = 0;
+        logf_("reset (%s): full slot reset, %d contact(s) lifted in Android", why, n);
+        return;
+    }
     md = count_active() ? SWALLOW : IDLE;
     logf_("reset (%s): %d contact(s) lifted in Android, %d finger(s) on the panel%s", why, n, count_active(), md == SWALLOW ? " (swallowed to the lift)" : "");
 }
@@ -1639,7 +1655,17 @@ int main(int argc, char **argv)
         ssize_t n = read(tfd, rb, sizeof(rb));
         if (n < (ssize_t)sizeof(rb[0])) { if (n < 0 && (errno == EINTR || errno == EAGAIN)) continue; break; }
         last_hw_ms = now_ms();
-        if (paused || is_sleeping()) { nf = 0; dropping = 0; continue; }
+        if (paused || is_sleeping()) {
+            if (count_active() || out_any()) {
+                release_android(1, "sleeping");
+                slots_reset();
+                memset(as_, 0, sizeof(as_));
+                st_btn = 0;
+                nheld = 0;
+                md = IDLE;
+            }
+            nf = 0; dropping = 0; continue;
+        }
         for (int k = 0; k < (int)(n / (ssize_t)sizeof(rb[0])); k++) {
             struct input_event e = rb[k];
             if (e.type == EV_SYN && e.code == SYN_DROPPED) {

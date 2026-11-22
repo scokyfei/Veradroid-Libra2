@@ -92,6 +92,15 @@ cpu_gov_restore() {
         [ -f "$g" ] && echo "$prev" > "$g" 2>/dev/null || true
     done
     rm -f "$W/cpu_gov.state"
+    # Switching back to interactive resets kernel tunables to defaults; re-apply our balanced profile.
+    if [ "$prev" = interactive ] && [ -d /sys/devices/system/cpu/cpufreq/interactive ]; then
+        ig=/sys/devices/system/cpu/cpufreq/interactive
+        [ -w "$ig/go_hispeed_load" ] && echo 85 > "$ig/go_hispeed_load" 2>/dev/null || true
+        [ -w "$ig/target_loads" ] && echo "75 396000:80 792000:85" > "$ig/target_loads" 2>/dev/null || true
+        [ -w "$ig/io_is_busy" ] && echo 0 > "$ig/io_is_busy" 2>/dev/null || true
+        [ -w "$ig/min_sample_time" ] && echo 20000 > "$ig/min_sample_time" 2>/dev/null || true
+        [ -w "$ig/above_hispeed_delay" ] && echo 20000 > "$ig/above_hispeed_delay" 2>/dev/null || true
+    fi
 }
 
 # READAHEAD_KB: eMMC; LOOP_READAHEAD_KB: loop over veradroid-sys.img (set exactly, may lower).

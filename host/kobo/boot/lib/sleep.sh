@@ -61,6 +61,17 @@ screensaver_show() {
     splash "已休眠 · 按电源键唤醒" 40 || true
 }
 
+kobo_rtc_wakeup_set() { # $1 = enabled|disabled
+    want=$1
+    if [ "$want" = disabled ]; then
+        [ -w /sys/class/rtc/rtc0/wakealarm ] && echo 0 > /sys/class/rtc/rtc0/wakealarm 2>/dev/null || true
+    fi
+    for f in /sys/devices/platform/soc/2100000.aips-bus/21a8000.i2c/i2c-2/2-0032/rtc_ricoh619/power/wakeup \
+             /sys/devices/platform/soc/2000000.aips-bus/20cc000.snvs/20cc000.snvs:snvs-rtc-lp/power/wakeup; do
+        [ -w "$f" ] && echo "$want" > "$f" 2>/dev/null || true
+    done
+}
+
 sleep_wait_1s() {
     # Interruptible 1s wait: wakes immediately if user presses power/wake while waiting for EPDC VEE stable.
     if [ "${SLEEP_FIFO_READY:-0}" = 1 ]; then
@@ -128,6 +139,9 @@ kobo_deep_suspend() {
     rc=1
     i=0
     rm -f "$W/suspend.err"
+    # Disable hardware RTC wakeups across mem suspend so Android AlarmManagerService cannot
+    # spuriously wake the SoC every 10 minutes; physical power key / sleepcover / USB still wake.
+    kobo_rtc_wakeup_set disabled
     while [ $i -lt 8 ]; do
         kobo_is_charging && break
         i=$((i + 1))
@@ -137,6 +151,7 @@ kobo_deep_suspend() {
         fi
         sleep_wait_1s
         if [ $? -eq 2 ]; then
+            kobo_rtc_wakeup_set enabled
             [ -w /sys/power/state-extended ] && echo 0 > /sys/power/state-extended 2>/dev/null || true
             t "sleep: deep suspend cancelled by user wakeup (after $i tries)"
             return 2
@@ -144,8 +159,9 @@ kobo_deep_suspend() {
     done
 
     # Resume subsystems immediately on hardware wakeup (KEY_POWER / sleepcover / USB plug-in).
+    kobo_rtc_wakeup_set enabled
     [ -w /sys/power/state-extended ] && echo 0 > /sys/power/state-extended 2>/dev/null || true
-    usleep 100000
+    usleep 250000
     if [ "$rc" -eq 0 ]; then
         t "sleep: returned from mem suspend (rc=0 tries=$i)"
     else
@@ -199,6 +215,8 @@ kobo_exit_sleep() {
     fi
     touch "$W/lastinput" 2>/dev/null || true
     rm -f "$X/ctl/sleep"
+    # Reset vinput slot state again after opening the sleep gate so any stale Elan resume event is cleared.
+    type vinput_reset >/dev/null 2>&1 && vinput_reset thaw
     epd_send REDRAW
     type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
     if [ -f "$W/sleep.wifi" ]; then
