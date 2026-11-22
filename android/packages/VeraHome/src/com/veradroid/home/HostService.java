@@ -67,6 +67,25 @@ public class HostService extends Service {
     /** 显示设置按哪个应用算（"home" = 桌面 / 我们自己的页面）；桌面刚替哪个应用发过 LAUNCH（任务栈通知到了就不再发一次） */
     static volatile String profPkg = null, launchedPkg = null;
     static volatile String fgAct;   // 现在前台的 activity（不算 PanelActivity），Panel 打开时记下
+    private static int lastReaderMode = -1;
+
+    static boolean isReaderActivity(String pkg, String cls) {
+        if (pkg == null || cls == null || pkg.length() == 0 || cls.length() == 0) return false;
+        if ("com.veradroid.home.PanelActivity".equals(cls)) return false;
+        if ("org.koreader.launcher".equals(pkg) || pkg.startsWith("org.koreader.")) return true;
+        if ("com.veradroid.home.ReaderActivity".equals(cls)) return true;
+        int dot = cls.lastIndexOf('.');
+        String simple = dot >= 0 ? cls.substring(dot + 1) : cls;
+        String low = simple.toLowerCase(java.util.Locale.ROOT);
+        if (low.contains("setting") || low.contains("shelf") || low.contains("store")
+                || low.contains("search") || low.contains("login") || low.contains("home")
+                || low.contains("main") || low.contains("catalog") || low.contains("toc")
+                || low.contains("detail") || low.contains("wereadfragment")) return false;
+        return low.contains("reader") || low.contains("readbook") || low.contains("reading")
+                || low.contains("readactivity") || low.contains("activityread")
+                || low.contains("bookview") || low.contains("pdfview") || low.contains("epubview")
+                || low.contains("comicview") || low.contains("viewer");
+    }
     // HOME 键（系统发 CLOSE_SYSTEM_DIALOGS，reason=homekey / recentapps）和屏幕关掉：收起下拉面板
     private final android.content.BroadcastReceiver panelCloser = new android.content.BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) {
@@ -112,6 +131,10 @@ public class HostService extends Service {
     }
     /** 桌面（HomeActivity）到了前台：和任务栈通知看到桌面时一样发 "fg home"，只是不用等通知（见 HomeActivity.onResume）。 */
     static void foregroundHome() {
+        if (lastReaderMode != 0) {
+            lastReaderMode = 0;
+            HostLink.epd("READER 0");
+        }
         if ("home".equals(profPkg)) return;
         launchedPkg = null;
         profPkg = "home";
@@ -131,6 +154,11 @@ public class HostService extends Service {
         if (!(pkg + "/" + cls).equals(lastFgAct)) {
             lastFgAct = pkg + "/" + cls; AppFont.forForeground(this, pkg, cls);
             if (!cls.equals("com.veradroid.home.PanelActivity")) fgAct = lastFgAct;
+            int rm = isReaderActivity(pkg, cls) ? 1 : 0;
+            if (rm != lastReaderMode) {
+                lastReaderMode = rm;
+                HostLink.epd("READER " + rm);
+            }
             Panel.onForeground(lastFgAct);   // 下拉面板：前台换了 activity 就收起
         }
         // 每个应用的显示设置（宿主 appprof.sh）：前台应用变了告诉宿主。我们自己盖在应用上面的页面（面板、设置、显示设置……）

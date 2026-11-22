@@ -222,6 +222,11 @@ grep -q 'G_EDGE_LIGHT' "$TOP/input/legacy/vinput.c" \
     && grep -q 'G_EDGE_LIGHT' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HomeActivity.java" \
     && ok "Left/right edge swipe brightness & warmth (G_EDGE_LIGHT, rotation-aware) wired end-to-end" \
     || fail "missing G_EDGE_LIGHT wiring"
+grep -q 'g_reader_mode' "$TOP/display/legacy/epd.c" \
+    && grep -q 'READER' "$TOP/display/legacy/epd.c" \
+    && grep -q 'isReaderActivity' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HostService.java" \
+    && ok "Page-turn animation gated strictly to reading-page turns (READER + fresh DIR)" \
+    || fail "missing reader-only page-turn animation gate"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"

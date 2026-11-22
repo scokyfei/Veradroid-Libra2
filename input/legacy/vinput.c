@@ -388,9 +388,13 @@ static void key_tap(int code)
     emit(kfd, EV_KEY, code, 0); emit(kfd, EV_SYN, SYN_REPORT, 0);
 }
 
+static void epd_dir(int dir);
 static void action(const char *name, const char *arg)
 {
     logf_("action %s %s", name, arg ? arg : "");
+    if (!strcmp(name, "home") || !strcmp(name, "panel") || !strcmp(name, "switch")
+        || !strcmp(name, "back") || !strcmp(name, "kindle") || !strcmp(name, "return"))
+        epd_dir(-1);
     if (!ACT[0]) return;
     pid_t p = fork();
     if (p == 0) {
@@ -404,6 +408,7 @@ static void action(const char *name, const char *arg)
 /* back gesture: the key for Android, and "hint back" so the host shows its on-screen badge (action.sh, GESTURE_HINT) */
 static void back_key(void)
 {
+    epd_dir(-1);
     key_tap(KEY_BACK);
     action("hint", "back");
 }
@@ -1075,7 +1080,13 @@ static void handle_frame(struct input_event *fr, int n)
                 int dy = sl[cur_slot].y - sl[cur_slot].sy;
                 if (abs(dx) > 80 && abs(dx) > abs(dy)) epd_dir(dx < 0 ? 2 : 3);
                 else if (abs(dy) > 80 && abs(dy) > abs(dx)) epd_dir(dy < 0 ? 1 : 0);
-                else if (abs(dx) < 40 && abs(dy) < 40) epd_dir(sl[cur_slot].sx > W / 2 ? 2 : 3);
+                else if (abs(dx) < 40 && abs(dy) < 40) {
+                    /* Dead-center tap opens the reader menu/toolbar rather than turning a page */
+                    int in_center = sl[cur_slot].sx >= W * 35 / 100 && sl[cur_slot].sx <= W * 65 / 100
+                                 && sl[cur_slot].sy >= H * 28 / 100 && sl[cur_slot].sy <= H * 72 / 100;
+                    if (in_center) epd_dir(-1);
+                    else epd_dir(sl[cur_slot].sx > W / 2 ? 2 : 3);
+                }
             }
             md = IDLE;
             break;

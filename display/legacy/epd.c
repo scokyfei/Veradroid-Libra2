@@ -215,6 +215,13 @@ static int anim_dir = 2;       /* MTK_SWIPE_DIR_LEFT */
 static int anim_steps = 12;
 static int anim_min_pct = 60;
 static int anim_next = 0;
+/* Reading-page-only gate for KFB_ANIM_MODE (page-turn animation):
+   HostService sends "READER 1" while a reading Activity is in front, and "READER 0" for all other screens
+   (home, settings, bookshelf, panel, app switch). We also require a fresh page-turn DIR (0..3) received AFTER
+   entering the reader (within 2500 ms) so opening/closing a book or dismissing an overlay never animates. */
+static int g_reader_mode = 0;
+static long g_reader_enter_ms = 0;
+static long g_last_dir_ms = 0;
 /* SWIPE <dir> <steps> (VeraHome 方块风格的换页 / 设置单动画): one shot, its own direction and step count. It does not touch
    anim_dir / anim_steps (the user's ANIM settings for normal page turns) and it works even when ANIM is off. */
 static int once_dir = -1, once_steps = 0;
@@ -1508,27 +1515,46 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
             fprintf(stderr, "[%ld] epd: hint reagl-min %d%% (changed %ld%%)\n", now_ms(), rm, total * 100 / ((long)W * H));
     }
 #ifdef FBINK_FOR_KOBO
-    if (mode != M_FULL && !g_scroll && !g_burst && (anim_next || (anim_mode && flip_total > (long)W * H * anim_min_pct / 100))) {
-        /* Kobo strip-wipe page turn: reveal across disjoint 16px-aligned strips (see kobo_wipe_y8).
-           Preserve the REAGL page-turn waveform choice for 均衡 (when >= reagl_min) and 灰度最准 / 自动. */
-        anim_next = 1;
+    {
+        long now_a = now_ms();
         int wy0 = cy0[0], wy1 = cy1[nc - 1];
         if (wy1 - wy0 >= H * 80 / 100) { wy0 = 0; wy1 = H; }
-        int wm = M_AUTO;
-        if (mode == M_AUTO && ui_mode != 2 && (frame_big || ((ui_mode == 1 || ui_mode == 3) && flip_total * 100 >= (long)W * H * page_pct)))
-            wm = M_REAGL;
-        push_region(0, wy0, W, wy1, wm);
-        prev_has_heavy = cur_has_heavy;
-        frame_big = 0; g_burst = 0;
-        return 0;
+        int reader_anim_ok = anim_mode && g_reader_mode &&
+                             g_last_dir_ms > g_reader_enter_ms &&
+                             (now_a - g_last_dir_ms) < 2500 &&
+                             flip_total > (long)W * H * anim_min_pct / 100 &&
+                             page_like(vbx0, vby0, vbx1, vby1, vrows) &&
+                             !kobo_is_overlay_dismiss(0, wy0, W, wy1);
+        if (mode != M_FULL && !g_scroll && !g_burst && (anim_next || reader_anim_ok)) {
+            /* Kobo strip-wipe page turn: reveal across disjoint 16px-aligned strips (see kobo_wipe_y8).
+               Gated strictly to active reading-page turns so non-reader UI transitions never animate. */
+            if (reader_anim_ok) g_last_dir_ms = 0;
+            anim_next = 1;
+            int wm = M_AUTO;
+            if (mode == M_AUTO && ui_mode != 2 && (frame_big || ((ui_mode == 1 || ui_mode == 3) && flip_total * 100 >= (long)W * H * page_pct)))
+                wm = M_REAGL;
+            push_region(0, wy0, W, wy1, wm);
+            prev_has_heavy = cur_has_heavy;
+            frame_big = 0; g_burst = 0;
+            return 0;
+        }
     }
 #else
-    if (g_is_mtk && mode != M_FULL && !g_scroll && (anim_next || (anim_mode && flip_total > (long)W * H * anim_min_pct / 100))) {
-        /* 整页变化交给硬件滑动动画；到 KFB_FLASH 页数时上面已经改成停下来以后整屏闪刷 */
-        anim_next = 1;
-        push_region(0, 0, W, H, M_AUTO);
-        frame_big = 0; g_burst = 0;
-        return 0;
+    {
+        long now_a = now_ms();
+        int reader_anim_ok = anim_mode && g_reader_mode &&
+                             g_last_dir_ms > g_reader_enter_ms &&
+                             (now_a - g_last_dir_ms) < 2500 &&
+                             flip_total > (long)W * H * anim_min_pct / 100 &&
+                             page_like(vbx0, vby0, vbx1, vby1, vrows);
+        if (g_is_mtk && mode != M_FULL && !g_scroll && (anim_next || reader_anim_ok)) {
+            if (reader_anim_ok) g_last_dir_ms = 0;
+            /* 整页变化交给硬件滑动动画；到 KFB_FLASH 页数时上面已经改成停下来以后整屏闪刷 */
+            anim_next = 1;
+            push_region(0, 0, W, H, M_AUTO);
+            frame_big = 0; g_burst = 0;
+            return 0;
+        }
     }
 #endif
     /* A page turn is one refresh of the page, not a stack of text bands. With wide line spacing (多看: ~95 px between
@@ -2167,11 +2193,26 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
             else if (!strncmp(line, "FLIPINPUT", 9)) { int v; if (sscanf(line + 9, "%d", &v) == 1 && v >= 0 && v <= 10000) flip_input_ms = v; }
             else if (!strncmp(line, "FLIPCOUNT", 9)) { int v; if (sscanf(line + 9, "%d", &v) == 1) { flip_count_on = v != 0; if (!flip_count_on) flip_count = 0; } }
             else if (!strncmp(line, "DIR", 3)) {
-                last_input_ms = now_ms();     /* a swipe / tap (veradroid-input) or a page key (vdbtkeys) */
-                /* DIR <dir>: only the direction; the step count comes from ANIM/--anim-steps.
-                   Older vinput binaries sent "DIR x 12" and silently overrode the 6-step setting. */
+                /* DIR <dir>: 0..3 = page-turn direction; -1 = clear pending page-turn direction (back/home/panel/menu). */
                 int d = anim_dir;
-                if (sscanf(line + 3, "%d", &d) >= 1 && d >= 0 && d <= 3) anim_dir = d;
+                if (sscanf(line + 3, "%d", &d) >= 1) {
+                    if (d < 0) {
+                        g_last_dir_ms = 0;
+                    } else if (d <= 3) {
+                        anim_dir = d;
+                        g_last_dir_ms = now_ms();
+                        last_input_ms = g_last_dir_ms;
+                    }
+                }
+            }
+            else if (!strncmp(line, "READER", 6)) {
+                int r = atoi(line + 6) != 0;
+                if (r != g_reader_mode) {
+                    g_reader_mode = r;
+                    g_last_dir_ms = 0;   /* entering or leaving a reader must not animate the transition frame */
+                    if (r) g_reader_enter_ms = now_ms();
+                    fprintf(stderr, "[%ld] epd: reader_mode=%d\n", now_ms(), g_reader_mode);
+                }
             }
             else if (!strncmp(line, "ANIM", 4)) {
                 /* ANIM <0|1> [dir] [steps] [min_pct]: enable/disable the MTK hardware page-turn animation */

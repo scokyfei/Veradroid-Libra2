@@ -196,7 +196,7 @@ final class BlocksSettings {
             @Override public void onClick(View v) { HostLink.cmd("clear"); } })));
         int am = HostLink.num(cfg, "KFB_ANIM_MODE", 0);
         final int[] animLast = { am > 0 ? am : 1 };
-        add(g, Blocks.row(a, "翻页动画", "Page-turn swipe", toggle(am > 0, new Icons.Toggle.Listener() {
+        add(g, Blocks.row(a, "翻页动画", "Reading page turns only", toggle(am > 0, new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { host("KFB_ANIM_MODE=" + (on ? animLast[0] : 0)); } })));
         if (HostLink.isKobo()) {
             LinearLayout ng = group(c, "夜间与残影");

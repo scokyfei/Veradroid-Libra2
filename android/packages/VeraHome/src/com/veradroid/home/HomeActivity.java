@@ -2139,7 +2139,7 @@ public class HomeActivity extends Activity {
                 @Override public void onClick(View v) { HostLink.cmd("clear"); }
             });
             section(list, "动画");
-            hostChoice(list, host, "翻页动画", "整页变化时用墨水屏控制器的硬件滑动，和 Kobo 原生翻页同一套。跟随手势：按你滑动或点击的方向；也可以固定方向或关闭。",
+            hostChoice(list, host, "翻页动画", "仅限阅读页翻页生效（桌面、书架、设置、弹窗与切应用等界面过渡均不触发）。跟随手势：按滑动、点按或翻页键方向；也可固定方向或关闭。",
                 "KFB_ANIM_MODE", ANIM_L, ANIM_V, "1");
             hostChoice(list, host, "动画速度", "步数越多越慢越细腻；觉得不跟手就选快。", "KFB_ANIM_STEPS", ANIM_STEP_L, ANIM_STEP_V, "12");
             section(list, "画面");
