@@ -629,7 +629,10 @@ static void idle_cap_init(void)
     if (idle_cap_probed || !CPUFREQ_MAX[0]) return;
     idle_cap_probed = 1;
     idle_cap_orig[0] = idle_cap_target[0] = 0;
-    if (sysfs_read(CPUFREQ_MAX, idle_cap_orig, sizeof(idle_cap_orig)) < 0) return;
+    if (sysfs_read(CPUFREQ_MAX, idle_cap_orig, sizeof(idle_cap_orig)) < 0) {
+        logf_("idle cap: cannot read %s: %s", CPUFREQ_MAX, strerror(errno));
+        return;
+    }
     long orig = atol(idle_cap_orig);
     if (orig <= 0) return;
     long best = 0;
@@ -639,13 +642,19 @@ static void idle_cap_init(void)
         while (*p) {
             while (*p == ' ' || *p == '\t') p++;
             if (!*p) break;
-            long f = strtol(p, &p, 10);
+            char *end = p;
+            long f = strtol(p, &end, 10);
+            if (end == p) break;
+            p = end;
             if (f > 0 && f < orig && f <= IDLE_CAP_KHZ && f > best) best = f;
         }
     }
+    if (best <= 0 && IDLE_CAP_KHZ > 0 && IDLE_CAP_KHZ < orig) best = IDLE_CAP_KHZ;
     if (best > 0) {
         snprintf(idle_cap_target, sizeof(idle_cap_target), "%ld", best);
         logf_("idle cap: orig=%ld kHz -> cap=%ld kHz after %d ms", orig, best, IDLE_CAP_MS);
+    } else {
+        logf_("idle cap: disabled (orig=%ld target=%d)", orig, IDLE_CAP_KHZ);
     }
 }
 static void idle_cap_end(void)
@@ -1952,7 +1961,7 @@ int main(int argc, char **argv)
         if (boost_until) { long left = boost_until - now_ms(); if (left < 1) left = 1; if (pto < 0 || left < pto) pto = (int)left; }
         if (!paused && !is_sleeping() && !count_active()) {
             long idle_ms = now_ms() - last_activity_ms;
-            if (!idle_cap_on && IDLE_CAP_MS > 0 && CPUFREQ_MAX[0]) {
+            if (!idle_cap_on && IDLE_CAP_MS > 0 && CPUFREQ_MAX[0] && (!idle_cap_probed || idle_cap_target[0])) {
                 long left = IDLE_CAP_MS - idle_ms;
                 if (left < 10) left = 10;
                 if (pto < 0 || left < pto) pto = (int)left;
