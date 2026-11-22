@@ -708,10 +708,11 @@ static void eb_armed(int active, int frame)
     if (now_ms() - arm_t >= G_EB_HOLD_MS) { eb_fire(3); md = SWALLOW; }
 }
 
-/* ---- left/right edge vertical swipe for brightness (left) and warmth (right) ----
+/* ---- left/right edge vertical swipe for brightness (button side) and warmth (opposite side) ----
  * Modeled on Koboweread's edge-light.h, operating in logical upright coordinates (0..W-1 x 0..H-1)
- * after rot_frame(), so left=brightness, right=warmth, up=increase, down=decrease automatically
- * follows all screen rotations (0 / 90 / 180 / 270 and live gyro auto-rotate).
+ * after rot_frame(): the edge closest to the physical page-turn buttons always adjusts brightness
+ * (right edge at ROT=0, left edge at ROT=180), and the opposite edge always adjusts warmth, while
+ * logical swipe-up always increases and swipe-down always decreases in every rotation.
  * Direct sysfs writes keep adjustment smooth every 50 ms without spawning shell processes; a single
  * E-Ink BADGE is sent on release to show the final percentage without flickering during the drag. */
 #define EL_SLOP     40
@@ -791,9 +792,16 @@ static int el_begin(int sx, int sy)
     int top = EDGE_TOP >= 0 ? EDGE_TOP : EDGE;
     if (sy < top || sy > H - EDGE) return 0;
     int sw = el_strip_w();
-    if (sx < sw && el_path[0][0]) el_side = 0;
-    else if (sx >= W - sw && el_path[1][0]) el_side = 1;
-    else return 0;
+    int left = sx < sw, right = sx >= W - sw;
+    if (!left && !right) return 0;
+    /* Hardware-bound sides (matching Koboweread edge-light.h):
+     * On Kobo Libra 2, the physical page-turn buttons are on the right at ROT=0
+     * and on the left at ROT=180. The button-side edge always adjusts brightness (0),
+     * and the opposite edge always adjusts warmth (1), while swipe-up always increases. */
+    int keys_left = (ROT == 180);
+    int side = (left == keys_left) ? 0 : 1;
+    if (!el_path[side][0]) return 0;
+    el_side = side;
     el_active = 0;
     el_x0 = sx; el_y0 = sy;
     el_t0 = now_ms();

@@ -2171,7 +2171,7 @@ public class HomeActivity extends Activity {
             hostChoice(list, host, "　上划后停住", "往上划，手指停住不动一会儿再松开。默认：切换应用（最近任务）。选“不做操作”时三段一划到就生效，不用等松手。", "G_EB_HOLD", ACT_L, ACT_V, "switch");
             hostChoice(list, host, "　停住多久", "停住不动这么久算“上划停住”。", "G_EB_HOLD_MS", HOLD_MS_L, HOLD_MS_V, "500");
             hostChoice(list, host, "从最上边往下划：打开面板", "亮度、色温、通知、关机。", "G_EDGE_PANEL", ONOFF_L, ONOFF_V, "1");
-            hostChoice(list, host, "左右边缘上下滑：亮度 / 色温", "左边缘上下滑调亮度，右边缘上下滑调色温（自动跟随屏幕旋转，轻点边缘仍可正常翻页）。", "G_EDGE_LIGHT", ONOFF_L, ONOFF_V, "1");
+            hostChoice(list, host, "左右边缘上下滑：亮度 / 色温", "靠近实体翻页键一侧调亮度，另一侧调色温（旋转后上下方向自动随动，轻点边缘仍可正常翻页）。", "G_EDGE_LIGHT", ONOFF_L, ONOFF_V, "1");
             hostChoice(list, host, "两根手指轻点：清除残影", "整屏刷新一次。", "G_TWO_TAP", ONOFF_L, ONOFF_V, "1");
             hostChoice(list, host, "两根手指长按 2 秒：反色", "白字黑底 / 黑字白底切换。", "G_TWO_LONG", ONOFF_L, ONOFF_V, "1");
             hostChoice(list, host, "两根手指左右滑：返回", "相当于返回键。", "G_TWO_BACK", ONOFF_L, ONOFF_V, "1");

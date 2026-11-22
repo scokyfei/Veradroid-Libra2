@@ -165,7 +165,7 @@ public class HostSettingsActivity extends Activity {
                 "KEY_PREV_LONG", BlocksSettings.KEYLONG_L, BlocksSettings.KEYLONG_V, "back", null);
             stepper("翻页键长按时长", "按住实体翻页键超过此时长即触发长按功能，短于此时长松开则正常翻页。",
                 "KEY_LONG_MS", BlocksSettings.KEYLONG_MS_L, BlocksSettings.KEYLONG_MS_V, "500", null);
-            stepper("左右边缘滑动调光 / 色温", "沿屏幕左边缘上下滑调节亮度，右边缘上下滑调节色温（自动跟随 0°/90°/180°/270° 旋转，边缘轻点与横滑翻页不受影响）。",
+            stepper("左右边缘滑动调光 / 色温", "靠近实体翻页键一侧边缘上下滑调亮度，另一侧边缘上下滑调色温（旋转后上下方向自动随动，边缘轻点与横滑翻页不受影响）。",
                 "G_EDGE_LIGHT", new String[] { "关", "开（默认）" }, new String[] { "0", "1" }, "1", null);
         }
         section("档位");
