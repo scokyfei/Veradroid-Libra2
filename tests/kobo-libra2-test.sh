@@ -214,13 +214,15 @@ grep -q 'WFM_GLKW16' "$TOP/display/legacy/epd.c" \
     && ok "Kobo Libra 2 Eclipse nightmode (GLKW16/GCK16 + dark crush) and KOReader-style ghosting control wired end-to-end" \
     || fail "missing Kobo Eclipse nightmode or ghosting control wiring"
 grep -q 'G_EDGE_LIGHT' "$TOP/input/legacy/vinput.c" \
+    && grep -q 'G_EDGE_LIGHT_SWAP' "$TOP/input/legacy/vinput.c" \
     && grep -q 'el_begin' "$TOP/input/legacy/vinput.c" \
-    && grep -q 'G_EDGE_LIGHT' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q 'G_EDGE_LIGHT_SWAP' "$TOP/host/kobo/boot/lib/settings.sh" \
     && grep -q '^G_EDGE_LIGHT=1' "$TOP/host/kobo/models/libra2.conf" \
-    && grep -q 'G_EDGE_LIGHT' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
-    && grep -q 'G_EDGE_LIGHT' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HostSettingsActivity.java" \
-    && grep -q 'G_EDGE_LIGHT' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HomeActivity.java" \
-    && ok "Left/right edge swipe brightness & warmth (G_EDGE_LIGHT, rotation-aware) wired end-to-end" \
+    && grep -q '^G_EDGE_LIGHT_SWAP=0' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q 'G_EDGE_LIGHT_SWAP' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && grep -q 'G_EDGE_LIGHT_SWAP' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HostSettingsActivity.java" \
+    && grep -q 'G_EDGE_LIGHT_SWAP' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HomeActivity.java" \
+    && ok "Left/right edge swipe brightness & warmth (G_EDGE_LIGHT + G_EDGE_LIGHT_SWAP, rotation-aware) wired end-to-end" \
     || fail "missing G_EDGE_LIGHT wiring"
 grep -q 'g_reader_mode' "$TOP/display/legacy/epd.c" \
     && grep -q 'READER' "$TOP/display/legacy/epd.c" \

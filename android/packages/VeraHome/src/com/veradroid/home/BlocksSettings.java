@@ -229,6 +229,8 @@ final class BlocksSettings {
                 @Override public void onStep(int i) { host("KEY_LONG_MS=" + KEYLONG_MS_V[i]); } })));
             add(kr, Blocks.row(a, "左右边缘滑动调光 / 色温", "Button-side edge brightness, opposite edge warmth", toggle(!"0".equals(cfg.get("G_EDGE_LIGHT")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("G_EDGE_LIGHT=" + (on ? 1 : 0)); } })));
+            add(kr, Blocks.row(a, "边缘调光 / 色温互换", "Swap brightness & warmth edges", toggle("1".equals(cfg.get("G_EDGE_LIGHT_SWAP")), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("G_EDGE_LIGHT_SWAP=" + (on ? 1 : 0)); } })));
         }
         LinearLayout fg = group(c, "文字");
         float fs = AppFont.user(a);

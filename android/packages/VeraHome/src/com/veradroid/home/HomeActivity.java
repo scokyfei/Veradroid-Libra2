@@ -59,7 +59,7 @@ public class HomeActivity extends Activity {
     static final String[] RESET_KEYS = { "KFB_SETTLE", "KFB_MODE", "KFB_FLASH", "KFB_CONTRAST", "KFB_DITHER", "KFB_INVERT", "KFB_LIGHTF", "KFB_DARKEN", "KFB_GESTURES",
         "KFB_AUTO_ROTATE", "PAGE_KEYS_SWAP",
         "RETURN_MODE", "KFB_ANIM_MODE", "KFB_ANIM_STEPS", "KFB_ANIM_DIR", "KFB_ANIM_MIN", "KFB_SMOOTH", "KFB_PACE", "KFB_HOLD", "KFB_CLEAN", "KFB_REAGL_MIN",
-        "G_TL", "G_TR", "G_BL", "G_BR", "G_EDGE_BACK", "G_EDGE_PANEL", "G_EDGE_LIGHT", "G_TWO_TAP", "G_TWO_LONG", "G_TWO_BACK", "G_TWO_SLIDE", "G_BACK_EXCLUDE",
+        "G_TL", "G_TR", "G_BL", "G_BR", "G_EDGE_BACK", "G_EDGE_PANEL", "G_EDGE_LIGHT", "G_EDGE_LIGHT_SWAP", "G_TWO_TAP", "G_TWO_LONG", "G_TWO_BACK", "G_TWO_SLIDE", "G_BACK_EXCLUDE",
         "G_EDGE_THIRDS", "G_EB_L", "G_EB_M", "G_EB_R", "G_EB_HOLD", "G_EB_HOLD_MS" };
 
     private final Handler handler = new Handler();
@@ -2172,6 +2172,7 @@ public class HomeActivity extends Activity {
             hostChoice(list, host, "　停住多久", "停住不动这么久算“上划停住”。", "G_EB_HOLD_MS", HOLD_MS_L, HOLD_MS_V, "500");
             hostChoice(list, host, "从最上边往下划：打开面板", "亮度、色温、通知、关机。", "G_EDGE_PANEL", ONOFF_L, ONOFF_V, "1");
             hostChoice(list, host, "左右边缘上下滑：亮度 / 色温", "靠近实体翻页键一侧调亮度，另一侧调色温（旋转后上下方向自动随动，轻点边缘仍可正常翻页）。", "G_EDGE_LIGHT", ONOFF_L, ONOFF_V, "1");
+            hostChoice(list, host, "　边缘调光 / 色温互换", "关闭：按键侧调亮度、另一侧调色温；开启：按键侧调色温、另一侧调亮度。", "G_EDGE_LIGHT_SWAP", ONOFF_L, ONOFF_V, "0");
             hostChoice(list, host, "两根手指轻点：清除残影", "整屏刷新一次。", "G_TWO_TAP", ONOFF_L, ONOFF_V, "1");
             hostChoice(list, host, "两根手指长按 2 秒：反色", "白字黑底 / 黑字白底切换。", "G_TWO_LONG", ONOFF_L, ONOFF_V, "1");
             hostChoice(list, host, "两根手指左右滑：返回", "相当于返回键。", "G_TWO_BACK", ONOFF_L, ONOFF_V, "1");

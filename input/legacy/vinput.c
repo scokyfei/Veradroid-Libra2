@@ -116,7 +116,7 @@
 static int W = 1272, H = 1696, EDGE = 60, EDGE_TOP = -1, TOUCH_DEBUG = 0, WINDOW_MS = 80, CORNER = 160, CORNER_MS = 2000, GESTURES = 1, EDGE_BACK = 1;
 static const char *LOGF = "/dev/null", *ACT = "", *FLAGF = NULL, *INJECT = NULL, *GCONF = NULL, *FGF = NULL;
 /* per-gesture switches (--gconf) */
-static int G_EDGE_BACK = 1, G_EDGE_PANEL = 1, G_EDGE_LIGHT = 1, G_TWO_TAP = 1, G_TWO_LONG = 1, G_TWO_BACK = 1, G_TWO_SLIDE = 1;
+static int G_EDGE_BACK = 1, G_EDGE_PANEL = 1, G_EDGE_LIGHT = 1, G_EDGE_LIGHT_SWAP = 0, G_TWO_TAP = 1, G_TWO_LONG = 1, G_TWO_BACK = 1, G_TWO_SLIDE = 1;
 static int G_TAP = 1, G_TAP_KEY = KEY_VOLUMEDOWN;   /* bezel double tap (gesture_tap) -> this key, see the header */
 static int tapfd = -1;
 static int BOOST_MS = 150, BOOST_KHZ = 0, SCROLL_PX = 20;   /* touch boost / scroll hints, see the header */
@@ -201,7 +201,7 @@ static void gconf_load(void)
     long long sig = !ok ? -1 : (long long)st.st_mtim.tv_sec * 1000 + st.st_mtim.tv_nsec / 1000000 + (long long)st.st_size * 7919;
     if (sig == gconf_sig) return;
     gconf_sig = sig;
-    G_EDGE_BACK = G_EDGE_PANEL = G_EDGE_LIGHT = G_TWO_TAP = G_TWO_LONG = G_TWO_BACK = G_TWO_SLIDE = 1; G_BACK_EXCLUDE[0] = 0; G_EDGE_SENS = 1;
+    G_EDGE_BACK = G_EDGE_PANEL = G_EDGE_LIGHT = G_TWO_TAP = G_TWO_LONG = G_TWO_BACK = G_TWO_SLIDE = 1; G_EDGE_LIGHT_SWAP = 0; G_BACK_EXCLUDE[0] = 0; G_EDGE_SENS = 1;
     G_TAP = 1; G_TAP_KEY = KEY_VOLUMEDOWN; snprintf(G_CORNERS, sizeof(G_CORNERS), "all");
     BOOST_MS = 150; BOOST_KHZ = 0; SCROLL_PX = 20; FAST_DRAG = 1;
     G_EDGE_THIRDS = 0; G_EB_HOLD_MS = 500;
@@ -220,6 +220,7 @@ static void gconf_load(void)
             if (!strcmp(line, "G_EDGE_BACK")) G_EDGE_BACK = b;
             else if (!strcmp(line, "G_EDGE_PANEL")) G_EDGE_PANEL = b;
             else if (!strcmp(line, "G_EDGE_LIGHT")) G_EDGE_LIGHT = b;
+            else if (!strcmp(line, "G_EDGE_LIGHT_SWAP")) G_EDGE_LIGHT_SWAP = b;
             else if (!strcmp(line, "G_TWO_TAP")) G_TWO_TAP = b;
             else if (!strcmp(line, "G_TWO_LONG")) G_TWO_LONG = b;
             else if (!strcmp(line, "G_TWO_BACK")) G_TWO_BACK = b;
@@ -277,8 +278,8 @@ static void gconf_load(void)
     }
     logf_("gconf: edge_sens=%d (strip %d/%d px, swipe %d px) boost=%dms/%dkHz scroll_px=%d auto_rot=%d key_swap=%d",
           G_EDGE_SENS, EDGE, EDGE_TOP, EDGE_SWIPE, BOOST_MS, BOOST_KHZ, SCROLL_PX, G_AUTO_ROTATE, KEY_SWAP);
-    logf_("gconf: edge_back=%d edge_panel=%d edge_light=%d two_tap=%d two_long=%d two_back=%d two_slide=%d exclude=%s",
-          G_EDGE_BACK, G_EDGE_PANEL, G_EDGE_LIGHT, G_TWO_TAP, G_TWO_LONG, G_TWO_BACK, G_TWO_SLIDE, G_BACK_EXCLUDE[0] ? G_BACK_EXCLUDE : "-");
+    logf_("gconf: edge_back=%d edge_panel=%d edge_light=%d/%d two_tap=%d two_long=%d two_back=%d two_slide=%d exclude=%s",
+          G_EDGE_BACK, G_EDGE_PANEL, G_EDGE_LIGHT, G_EDGE_LIGHT_SWAP, G_TWO_TAP, G_TWO_LONG, G_TWO_BACK, G_TWO_SLIDE, G_BACK_EXCLUDE[0] ? G_BACK_EXCLUDE : "-");
     if (G_EDGE_THIRDS) logf_("gconf: bottom edge thirds: left=%s middle=%s right=%s hold=%s (%d ms)", G_EB[0], G_EB[1], G_EB[2], G_EB[3], G_EB_HOLD_MS);
 }
 /* is the foreground app (VeraHome writes it to --fg) in G_BACK_EXCLUDE? */
@@ -820,6 +821,7 @@ static int el_begin(int sx, int sy)
      * and the opposite edge always adjusts warmth (1), while swipe-up always increases. */
     int keys_left = (ROT == 180);
     int side = (left == keys_left) ? 0 : 1;
+    if (G_EDGE_LIGHT_SWAP) side ^= 1;
     if (!el_path[side][0]) return 0;
     el_side = side;
     el_active = 0;

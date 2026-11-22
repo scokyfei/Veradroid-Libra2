@@ -167,6 +167,8 @@ public class HostSettingsActivity extends Activity {
                 "KEY_LONG_MS", BlocksSettings.KEYLONG_MS_L, BlocksSettings.KEYLONG_MS_V, "500", null);
             stepper("左右边缘滑动调光 / 色温", "靠近实体翻页键一侧边缘上下滑调亮度，另一侧边缘上下滑调色温（旋转后上下方向自动随动，边缘轻点与横滑翻页不受影响）。",
                 "G_EDGE_LIGHT", new String[] { "关", "开（默认）" }, new String[] { "0", "1" }, "1", null);
+            stepper("边缘调光 / 色温互换", "互换左右边缘的亮度与色温调节功能：关闭时靠近实体翻页键一侧调亮度、另一侧调色温；开启后靠近按键一侧调色温、另一侧调亮度（立即生效）。",
+                "G_EDGE_LIGHT_SWAP", new String[] { "关（按键侧亮度）", "开（按键侧色温）" }, new String[] { "0", "1" }, "0", null);
         }
         section("档位");
         stepper("显示档位", "一次定好下面的刷新方式：流畅（先快刷、停下再补灰度）、均衡、画质（驱动自动选波形，合并中间帧）。选“自定义”时按下面几项单独设。",
