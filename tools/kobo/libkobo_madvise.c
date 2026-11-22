@@ -383,14 +383,20 @@ static void tune_weread_threads(void)
         if (str_starts(comm, "WRCommonPool") ||
             str_starts(comm, "WRNetworkPool") ||
             str_starts(comm, "WRLowPriorityPo") ||
-            str_starts(comm, "BUGLY_ASYNC") ||
-            str_starts(comm, "Bugly") ||
-            str_starts(comm, "RMonitor_") ||
-            str_starts(comm, "OssLog") ||
             str_starts(comm, "RxIoScheduler") ||
             str_starts(comm, "RxComputationSc") ||
             str_starts(comm, "glide-")) {
-            setpriority(PRIO_PROCESS, tid, 19);
+            /* Use mild nice 6 (not 19!): on single-core Cortex-A9, nice 19 starves
+               threads holding SQLiteConnectionPool locks or reaching ART GC safepoints
+               (observed 11s SQLite contention & 240ms GC suspend stalls). */
+            setpriority(PRIO_PROCESS, tid, 6);
+        } else if (str_starts(comm, "BUGLY_ASYNC") ||
+                   str_starts(comm, "Bugly") ||
+                   str_starts(comm, "RMonitor_") ||
+                   str_starts(comm, "OssLog")) {
+            /* Keep Bugly/telemetry threads below normal (nice 8) without nice 19 starvation
+               (Bugly-ThreadMonitor0 grabs main Looper MessageQueue lock: nice 19 caused 933ms UI freeze). */
+            setpriority(PRIO_PROCESS, tid, 8);
         } else if (str_starts(comm, "TypeSetting")) {
             setpriority(PRIO_PROCESS, tid, -2);
         }

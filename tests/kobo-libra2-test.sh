@@ -125,7 +125,7 @@ grep -q 'SYSTEM_FONT=' "$TOP/host/kobo/boot/lib/settings.sh" \
     && ok "kobo-sdcard zero-FUSE vold helper present and bind-mounted over /system/bin/sdcard" \
     || fail "kobo-sdcard missing or not wired in container.sh"
 grep -q '^HEAP_TARGET_UTIL=' "$TOP/host/kobo/models/libra2.conf" \
-    && grep -q '^HEAP_MINFREE=8m' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q '^HEAP_MINFREE=16m' "$TOP/host/kobo/models/libra2.conf" \
     && grep -q 'heaptargetutilization' "$TOP/host/kobo/boot/lib/memory.sh" \
     && ok "ART heap tuning (minfree/maxfree/targetutil) wired" || fail "ART heap tuning missing"
 grep -q 'cpufreq.interactive.state' "$TOP/host/kobo/boot/lib/memory.sh" \

@@ -95,9 +95,9 @@ cpu_gov_restore() {
     # Switching back to interactive resets kernel tunables to defaults; re-apply our balanced profile.
     if [ "$prev" = interactive ] && [ -d /sys/devices/system/cpu/cpufreq/interactive ]; then
         ig=/sys/devices/system/cpu/cpufreq/interactive
-        [ -w "$ig/go_hispeed_load" ] && echo 85 > "$ig/go_hispeed_load" 2>/dev/null || true
-        [ -w "$ig/target_loads" ] && echo "75 396000:80 792000:85" > "$ig/target_loads" 2>/dev/null || true
-        [ -w "$ig/io_is_busy" ] && echo 0 > "$ig/io_is_busy" 2>/dev/null || true
+        [ -w "$ig/go_hispeed_load" ] && echo 75 > "$ig/go_hispeed_load" 2>/dev/null || true
+        [ -w "$ig/target_loads" ] && echo "65 396000:75 792000:80" > "$ig/target_loads" 2>/dev/null || true
+        [ -w "$ig/io_is_busy" ] && echo 1 > "$ig/io_is_busy" 2>/dev/null || true
         [ -w "$ig/min_sample_time" ] && echo 20000 > "$ig/min_sample_time" 2>/dev/null || true
         [ -w "$ig/above_hispeed_delay" ] && echo 20000 > "$ig/above_hispeed_delay" 2>/dev/null || true
     fi
@@ -161,12 +161,12 @@ tune_apply() {
                 [ -r "$ig/$k" ] && echo "$k $(cat "$ig/$k")"
             done > "$W/cpufreq.interactive.state"
         }
-        [ -w "$ig/go_hispeed_load" ] && echo 85 > "$ig/go_hispeed_load" 2>/dev/null || true
-        [ -w "$ig/target_loads" ] && echo "75 396000:80 792000:85" > "$ig/target_loads" 2>/dev/null || true
-        [ -w "$ig/io_is_busy" ] && echo 0 > "$ig/io_is_busy" 2>/dev/null || true
+        [ -w "$ig/go_hispeed_load" ] && echo 75 > "$ig/go_hispeed_load" 2>/dev/null || true
+        [ -w "$ig/target_loads" ] && echo "65 396000:75 792000:80" > "$ig/target_loads" 2>/dev/null || true
+        [ -w "$ig/io_is_busy" ] && echo 1 > "$ig/io_is_busy" 2>/dev/null || true
         [ -w "$ig/min_sample_time" ] && echo 20000 > "$ig/min_sample_time" 2>/dev/null || true
         [ -w "$ig/above_hispeed_delay" ] && echo 20000 > "$ig/above_hispeed_delay" 2>/dev/null || true
-        t "cpufreq: interactive tuned (go_hispeed=85 target=75/80/85 io_is_busy=0 min_sample=20ms)"
+        t "cpufreq: interactive tuned (go_hispeed=75 target=65/75/80 io_is_busy=1 min_sample=20ms)"
     fi
     # Switch flash eMMC scheduler from cfq to deadline (matches Koboweread io-tune; avoids rotational time-slices)
     sf=/sys/block/mmcblk0/queue/scheduler
