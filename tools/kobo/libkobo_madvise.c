@@ -398,7 +398,9 @@ static void tune_weread_threads(void)
                (Bugly-ThreadMonitor0 grabs main Looper MessageQueue lock: nice 19 caused 933ms UI freeze). */
             setpriority(PRIO_PROCESS, tid, 8);
         } else if (str_starts(comm, "TypeSetting")) {
-            setpriority(PRIO_PROCESS, tid, -2);
+            /* Give chapter typesetting near-UI priority (-6) so TOC chapter jumps
+               win the single Cortex-A9 core over background pools (nice 6) and :seg (nice 8). */
+            setpriority(PRIO_PROCESS, tid, -6);
         }
     }
     closedir(d);
@@ -468,7 +470,7 @@ static int read_self_rss_kb(void)
     return -1;
 }
 
-static void lower_all_threads_nice19(void)
+static void lower_all_threads_nice8(void)
 {
     void *d = opendir("/proc/self/task");
     if (!d) return;
@@ -477,7 +479,9 @@ static void lower_all_threads_nice19(void)
         if (ent->d_name[0] < '1' || ent->d_name[0] > '9')
             continue;
         unsigned int tid = (unsigned int)parse_uint(ent->d_name);
-        if (tid > 0) setpriority(PRIO_PROCESS, tid, 19);
+        /* Mild nice 8 (not 19): keeps :seg out of the way of main (-10) and TypeSetting (-6)
+           without starving :seg GC safepoints (was 499ms pause) or Binder calls. */
+        if (tid > 0) setpriority(PRIO_PROCESS, tid, 8);
     }
     closedir(d);
 }
@@ -605,13 +609,15 @@ static void *weread_seg_opt_thread(void *unused)
     int ticks = 0;
     int last_trim = -90;
     for (;;) {
-        lower_all_threads_nice19();
+        lower_all_threads_nice8();
         int step = (ticks < 20) ? 2 : 10;
         usleep((unsigned int)step * 1000000u);
         ticks += step;
         if (env && (ticks - last_trim) >= 90 && (ticks % 30) < step) {
             int avail = read_mem_available_kb();
-            if (avail < 160000) {
+            /* Only force blocking GC+trimHeap when RAM is actually tight (<80 MB);
+               normal reading with :seg sits around 120-145 MB and should not stutter. */
+            if (avail < 80000) {
                 int before = read_self_rss_kb();
                 jni_trim_heap(env);
                 last_trim = ticks;
@@ -685,12 +691,13 @@ static void *weread_opt_thread(void *unused)
     int last_trim = -90;
     for (;;) {
         tune_weread_threads();
-        int step = (ticks < 30) ? 2 : 15;
+        /* Scan every 3s so freshly spawned TypeSetting threads on TOC chapter jumps get boosted promptly. */
+        int step = (ticks < 30) ? 2 : 3;
         usleep((unsigned int)step * 1000000u);
         ticks += step;
         if (env && (ticks - last_trim) >= 90 && (ticks % 30) < step) {
             int avail = read_mem_available_kb();
-            if (avail < 160000) {
+            if (avail < 80000) {
                 int before = read_self_rss_kb();
                 jni_trim_heap(env);
                 last_trim = ticks;
