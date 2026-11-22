@@ -417,9 +417,11 @@ run_in_ns() {
             bt="$R/system/framework/arm/${bf##*/}"
             [ -f "$bt" ] && mount --bind "$bf" "$bt" 2>/dev/null || true
         done
-        if [ -s "$SYS/data/local/tmp/boot-nodebug/services.odex" ] && [ -f "$R/system/framework/oat/arm/services.odex" ]; then
-            mount --bind "$SYS/data/local/tmp/boot-nodebug/services.odex" "$R/system/framework/oat/arm/services.odex" 2>/dev/null || true
-        fi
+        for of in "$SYS"/data/local/tmp/boot-nodebug/*.odex; do
+            [ -s "$of" ] || continue
+            ot="$R/system/framework/oat/arm/${of##*/}"
+            [ -f "$ot" ] && mount --bind "$of" "$ot" 2>/dev/null || true
+        done
     fi
 
     # Kobo 4.1.15 kernel lacks CONFIG_FUSE_FS (/dev/fuse); bind-mount zero-FUSE kobo-sdcard

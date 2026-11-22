@@ -417,6 +417,35 @@ static void kobo_polish_dark_y8(uint8_t *y8, size_t n)
 {
     for (size_t i = 0; i < n; i++) y8[i] = dark_lut[y8[i]];
 }
+
+/* Detect toolbar / TOC drawer / popup dismiss returning to a clean reading background:
+   samples cur_y8 vs prev_y8 on a 4x4 (or 8x8 for large areas) grid (<0.08 ms). Returns 1 when >=88%
+   of the region is now clean page background and >=2% more of the previous region was non-background
+   UI/icons/borders/scrim (catches minimalist thin-line e-ink toolbars as well as full drawers). */
+static int kobo_is_overlay_dismiss(int x0, int y0, int x1, int y1)
+{
+    long area = (long)(x1 - x0) * (y1 - y0);
+    if (area < (long)W * H * 2 / 100 || area >= (long)W * H * 85 / 100) return 0;
+    int step = (area < (long)W * H * 20 / 100) ? 4 : 8;
+    long n = 0, cur_bg = 0, prev_nonbg = 0, cur_nonbg = 0;
+    for (int y = y0 + step / 2; y < y1; y += step) {
+        const uint8_t *cr = cur_y8 + (size_t)y * W;
+        const uint8_t *pr = prev_y8 + (size_t)y * W;
+        for (int x = x0 + step / 2; x < x1; x += step) {
+            uint8_t cv = cr[x], pv = pr[x];
+            n++;
+            if (g_dark_page) {
+                if (cv <= 24) cur_bg++; else cur_nonbg++;
+                if (pv > 24) prev_nonbg++;
+            } else {
+                if (cv >= 236) cur_bg++; else cur_nonbg++;
+                if (pv < 236) prev_nonbg++;
+            }
+        }
+    }
+    if (n < 64) return 0;
+    return (cur_bg * 100 >= n * 88) && ((prev_nonbg - cur_nonbg) * 100 >= n * 2);
+}
 #endif
 static int refresh_cfa(int x, int y, int w, int h, const FBInkConfig *c);
 
@@ -1412,11 +1441,11 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
     if (may_hold && hold_ms > 0 && mode == M_AUTO && !g_scroll && total < (long)W * H * hold_pct / 100) return 1;
 #ifdef FBINK_FOR_KOBO
     /* Coalesce status-bar-only micro-ticks (clock/battery within top/bottom 56px strip, <=360px wide) during active
-       reading (<25s since last page turn): leaving prev_y8 untouched lets the next page turn flush the status bar
+       reading (<180s since last page turn): leaving prev_y8 untouched lets the next page turn flush the status bar
        together in a single EPDC update instead of waking the controller mid-page. */
     if (mode == M_AUTO && !force_full && !g_scroll && nc == 1 &&
         (cy1[0] <= 56 || cy0[0] >= H - 56) && (cx1[0] - cx0[0]) <= 360 &&
-        last_big_ms > 0 && now_ms() - last_big_ms < 25000) {
+        last_big_ms > 0 && now_ms() - last_big_ms < 180000) {
         return 0;
     }
 #endif
@@ -1540,7 +1569,16 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
         scroll_frames++; n_scroll_frames++; scroll_last = now_ms(); scroll_dirty = 1;
         if (timing_flag && access(timing_flag, F_OK) == 0) fprintf(stderr, "[%ld] epd: scroll frame %d%s\n", now_ms(), scroll_frames, scroll_on ? "" : " (fling)");
     }
-    for (int i = 0; i < nc; i++) push_region(cx0[i], cy0[i], cx1[i], cy1[i], mode);
+    for (int i = 0; i < nc; i++) {
+        int rm = mode;
+#ifdef FBINK_FOR_KOBO
+        if (rm == M_AUTO && !g_scroll && !g_burst && ui_mode != 2 &&
+            kobo_is_overlay_dismiss(cx0[i], cy0[i], cx1[i], cy1[i])) {
+            rm = M_REAGL;
+        }
+#endif
+        push_region(cx0[i], cy0[i], cx1[i], cy1[i], rm);
+    }
 #ifdef FBINK_FOR_KOBO
     if (!g_scroll && (mode == M_FULL || flip_total * 100 >= (long)W * H * page_pct))
         prev_has_heavy = cur_has_heavy;

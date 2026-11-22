@@ -31,12 +31,14 @@ import java.util.Locale;
 public class StatusBarService extends Service {
     private static final String TAG = "VeraStatusBar";
     private static boolean suppressed = false;   // Home / Panel 在前台时为 true
+    private static boolean appSuppressed = false; // 自带顶栏的应用（如微信读书）在前台时为 true
     private WindowManager wm;
     private View bar;
     private TextView clock, batt;
     private final Handler handler = new Handler();
     private final Runnable tick = new Runnable() {
         @Override public void run() {
+            if (suppressed || appSuppressed) { hide(); return; }
             refreshNow();
             handler.postDelayed(this, toNextMinute());
         }
@@ -45,6 +47,7 @@ public class StatusBarService extends Service {
     /** 系统的分钟广播 / 改时间 / 改时区 / 电量与充电变化：马上刷新。 */
     private final BroadcastReceiver timeReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) {
+            if (suppressed || appSuppressed) return;
             String act = i != null ? i.getAction() : null;
             if (Intent.ACTION_BATTERY_CHANGED.equals(act)
                     || Intent.ACTION_POWER_CONNECTED.equals(act)
@@ -64,14 +67,23 @@ public class StatusBarService extends Service {
     public static void start(Context c) { c.startService(new Intent(c, StatusBarService.class)); }
     public static void stop(Context c) { c.stopService(new Intent(c, StatusBarService.class)); }
     public static void setSuppressed(boolean v) { suppressed = v; }
+    public static void setAppSuppressed(Context c, boolean v) {
+        if (appSuppressed == v) return;
+        appSuppressed = v;
+        refresh(c);
+    }
     public static void refresh(Context c) { c.startService(new Intent(c, StatusBarService.class)); }
 
     @Override public IBinder onBind(Intent i) { return null; }
     @Override public int onStartCommand(Intent i, int flags, int startId) {
         boolean on = Store.prefs(this, "home").getBoolean("statusbar", true);
         if (!on) { hide(); stopSelf(); return START_NOT_STICKY; }
-        refreshNow();
         handler.removeCallbacks(tick);
+        if (suppressed || appSuppressed) {
+            hide();
+            return START_STICKY;
+        }
+        refreshNow();
         handler.postDelayed(tick, toNextMinute());
         if (!timeReceiverOn) {
             IntentFilter tf = new IntentFilter(Intent.ACTION_TIME_TICK);
@@ -88,7 +100,7 @@ public class StatusBarService extends Service {
     }
 
     private void refreshNow() {
-        if (!enabled() || suppressed) { hide(); return; }
+        if (!enabled() || suppressed || appSuppressed) { hide(); return; }
         if (bar != null && builtBlocks != Blocks.on(this)) hide();   // 界面风格换了：按新风格重搭这一条
         show();
         // 主题：statusbar.json 可以关掉时间/电量、改时间格式、在左边加一段文字

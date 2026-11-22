@@ -63,16 +63,20 @@ wifi_ps_tick() {
     esac
     [ -f "$W/sleeping" ] || [ -f "$W/saver_frozen" ] && return 0
     # Adaptive Wi-Fi power saving on RTL8723DS:
-    # Keep LPS=2 (saves ~70-80 mA while reading); drop to LPS=0 only during active downloads (>64 KB/tick).
+    # Keep LPS=0 during active interaction (<15s since last touch/key) or downloads (>64 KB/tick);
+    # drop to LPS=2 (saves ~70-80 mA) during idle reading pauses (>=15s since last input).
     d=$(wifi_dev)
     rx=$(cat "/sys/class/net/$d/statistics/rx_bytes" 2>/dev/null || echo 0)
     prev=$(cat "$W/wifi.rx" 2>/dev/null || echo "$rx")
     echo "$rx" > "$W/wifi.rx"
     delta=$((rx - prev))
-    if [ "$delta" -gt 65536 ]; then
+    now_s=$(date +%s 2>/dev/null || echo 0)
+    last_s=$(stat -c %Y "$W/lastinput" 2>/dev/null || echo 0)
+    idle_s=$((now_s - last_s))
+    if [ "$delta" -gt 65536 ] || { [ "$last_s" -gt 0 ] && [ "$idle_s" -lt 15 ]; }; then
         wifi_ps_off
     else
-        [ -f "$W/wifi.ps" ] && rm -f "$W/wifi.ps" && wifi_ps_set on && t "wifi: idle -> power saving on"
+        [ -f "$W/wifi.ps" ] && rm -f "$W/wifi.ps" && wifi_ps_set on && t "wifi: idle (${idle_s}s) -> power saving on"
     fi
     return 0
 }

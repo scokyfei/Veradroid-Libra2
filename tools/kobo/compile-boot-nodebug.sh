@@ -33,13 +33,27 @@ rm -rf "$OUT_NEW"
 mkdir -p "$OUT_NEW"
 
 # Extract dex2oat command-line base address from existing boot.oat (default 0x30000000 on VeraDroid)
-BASE_ADDR=$(head -c 8192 "$R/system/framework/arm/boot.oat" | tr '\0' '\n' | grep -a '^--base=' | head -n 1 || true)
+BASE_ADDR=$(dd if="$R/system/framework/arm/boot.oat" bs=8192 count=1 2>/dev/null | tr '\0' '\n' | grep -a '^--base=' | head -n 1 || true)
 [ -n "$BASE_ADDR" ] || BASE_ADDR="--base=0x30000000"
+
+SRC_DIR=${SRC_DIR:-/system/framework}
+if [ -d "$SYS/data/local/tmp/boot-src" ] && [ -s "$SYS/data/local/tmp/boot-src/framework.jar" ]; then
+    SRC_DIR=/data/local/tmp/boot-src
+fi
+
+# Guard against dex-stripped ROMs (e.g. 304-byte framework.jar with no classes.dex):
+# Android 7.1.1 OAT embeds quickened DEX which cannot be fed directly back to dex2oat.
+FW_SIZE=$(wc -c < "$R$SRC_DIR/framework.jar" 2>/dev/null || echo 0)
+if [ "$FW_SIZE" -lt 100000 ]; then
+    echo "compile-boot-nodebug: $SRC_DIR/framework.jar is dex-stripped (${FW_SIZE} bytes)." >&2
+    echo "compile-boot-nodebug: provide unstripped AOSP javalib.jar files in \$SYS/data/local/tmp/boot-src/ (or rebuild AOSP without --debuggable)." >&2
+    exit 5
+fi
 
 DEX_ARGS=
 LOC_ARGS=
 for j in $JARS; do
-    DEX_ARGS="$DEX_ARGS --dex-file=/system/framework/$j.jar"
+    DEX_ARGS="$DEX_ARGS --dex-file=$SRC_DIR/$j.jar"
     LOC_ARGS="$LOC_ARGS --dex-location=/system/framework/$j.jar"
 done
 
@@ -48,7 +62,7 @@ PRELOAD_ARG=
 COMPILED_ARG=
 [ -f "$R/system/etc/compiled-classes" ] && COMPILED_ARG="--compiled-classes=/system/etc/compiled-classes"
 
-echo "compile-boot-nodebug: building non-debuggable boot image ($BASE_ADDR, cortex-a9) ..."
+echo "compile-boot-nodebug: building non-debuggable boot image ($BASE_ADDR, cortex-a9, src=$SRC_DIR) ..."
 sh "$VD/boot/ashell.sh" "nice -n 10 /system/bin/dex2oat \
     --runtime-arg -Xms64m --runtime-arg -Xmx64m \
     $PRELOAD_ARG $COMPILED_ARG \
@@ -64,7 +78,23 @@ sh "$VD/boot/ashell.sh" "nice -n 10 /system/bin/dex2oat \
 
 rm -f "$OUT_NEW/dex2oat.swap"
 [ -s "$OUT_NEW/boot.oat" ] && [ -s "$OUT_NEW/boot.art" ] || { echo "compile-boot-nodebug: boot.oat build failed" >&2; exit 4; }
-chmod 644 "$OUT_NEW"/boot*.art "$OUT_NEW"/boot*.oat
+
+for sj in services wifi-service; do
+    if [ -s "$SYS$SRC_DIR/$sj.jar" ]; then
+        echo "compile-boot-nodebug: compiling $sj.odex against new boot.art ..."
+        sh "$VD/boot/ashell.sh" "nice -n 10 /system/bin/dex2oat \
+            --runtime-arg -Xms32m --runtime-arg -Xmx64m \
+            --boot-image=/data/local/tmp/boot-nodebug.new/boot.art \
+            --dex-file=$SRC_DIR/$sj.jar --dex-location=/system/framework/$sj.jar \
+            --oat-file=/data/local/tmp/boot-nodebug.new/$sj.odex \
+            --instruction-set=arm --instruction-set-variant=cortex-a9 \
+            --android-root=/system --no-generate-debug-info \
+            --compiler-filter=speed --swap-file=/data/local/tmp/boot-nodebug.new/dex2oat.swap -j1"
+        rm -f "$OUT_NEW/dex2oat.swap"
+    fi
+done
+
+chmod 644 "$OUT_NEW"/boot*.art "$OUT_NEW"/boot*.oat "$OUT_NEW"/*.odex 2>/dev/null || true
 rm -rf "$OUT"
 mv "$OUT_NEW" "$OUT"
 echo "compile-boot-nodebug: ready in $OUT (will be bind-mounted on next VeraDroid restart)"

@@ -79,9 +79,8 @@ public class HostService extends Service {
     // 后台保留应用就一直看不到它到了前台（0.91 门禁：连开三个应用，一次清理都没触发）。再在 5 秒、15 秒各看一次。
     private final Runnable fgCheck5 = new Runnable() { @Override public void run() { writeForeground(); } };
     private final Runnable fgCheck15 = new Runnable() { @Override public void run() { writeForeground(); } };
-    // 兜底：任务栈通知在模拟器上会漏（连开三个应用，有的那次一次通知都没收到，后台保留应用就没动作）。
-    // 每 10 秒看一眼栈顶（一次 getRunningTasks(1)，没变就什么都不做）。
-    private final Runnable fgPoll = new Runnable() { @Override public void run() { writeForeground(); handler.postDelayed(this, 10000); } };
+    // 兜底：TaskStackListener 已经按事件驱动，仅每 120 秒看一眼栈顶防止后台每 10 秒跨进程 Binder 唤醒和周期 GC。
+    private final Runnable fgPoll = new Runnable() { @Override public void run() { writeForeground(); handler.postDelayed(this, 120000); } };
     private void watchForeground() {
         try {
             ActivityManagerNative.getDefault().registerTaskStackListener(new ITaskStackListener.Stub() {
@@ -100,7 +99,7 @@ public class HostService extends Service {
             });
         } catch (Throwable t) { android.util.Log.w("VeraHome", "foreground listener: " + t); }
         handler.post(fgCheck);
-        handler.postDelayed(fgPoll, 10000);
+        handler.postDelayed(fgPoll, 120000);
     }
     /** 现在真正在前台的 activity（包名/类名）；拿不到就是 null。fgAct 要等下一次前台检查才更新，可能还是上一个页面。 */
     static String topActivity(Context c) {
@@ -146,6 +145,10 @@ public class HostService extends Service {
             profPkg = prof;
         }
         if (pkg.equals(lastFg)) return;
+        // 微信读书自带完整时间/电量顶栏：自动隐藏 VeraHome 悬浮顶栏，避免双顶栏重叠并消除每分钟重绘唤醒
+        if (pkg.length() > 0 && !pkg.equals(getPackageName())) {
+            StatusBarService.setAppSuppressed(this, "com.tencent.weread.eink".equals(pkg));
+        }
         Cleaner.onForeground(this, pkg);   // 后台保留应用：用户应用到了前台，3 秒后按设置清掉多出来的
         try {
             File tmp = new File(HostLink.KFB + "fg.tmp");

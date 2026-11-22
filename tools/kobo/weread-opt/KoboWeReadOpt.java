@@ -15,12 +15,14 @@
  *                         (moai.ik.dic.Dictionary.singleton) in :seg when idle and
  *                         returns heap pages via concurrentGC() + trimHeap().
  */
+import android.app.Activity;
 import android.app.Application;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.database.DataSetObservable;
 import android.database.DataSetObserver;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
@@ -72,6 +74,7 @@ public final class KoboWeReadOpt {
             MemoryTrim.start(true);
             RMonitorStopper.start(app);
             SegPrestart.start(app);
+            OpenBoost.start(app);
         } else if ("com.tencent.weread.eink:seg".equals(procName)) {
             Log.i(TAG, "OPT_INIT proc=seg");
             SegDictRelease.start(app);
@@ -114,6 +117,63 @@ public final class KoboWeReadOpt {
                 Log.w(TAG, "SEG_PRESTART err=" + t);
             }
         }
+    }
+
+    /* ========================================================================
+     * 0b. OpenBoost — yield background pools (nice 16, still above :seg's 19)
+     *     for 2.5s when ReaderFragmentActivity is created so main (-10) and
+     *     TypeSetting (-6) own the single Cortex-A9 core during initial layout.
+     * ======================================================================== */
+    static final class OpenBoost implements Application.ActivityLifecycleCallbacks {
+        private static final long BOOST_MS = 2500;
+        private final Handler handler = new Handler(Looper.getMainLooper());
+        private final Runnable restore = new Runnable() {
+            @Override public void run() { applyPoolNice(10, 0); }
+        };
+
+        static void start(Application app) {
+            app.registerActivityLifecycleCallbacks(new OpenBoost());
+            Log.i(TAG, "OPEN_BOOST ready ms=" + BOOST_MS);
+        }
+
+        private static void applyPoolNice(int poolNice, int rxNice) {
+            File taskDir = new File("/proc/self/task");
+            String[] tids = taskDir.list();
+            if (tids == null) return;
+            for (String s : tids) {
+                int tid;
+                try { tid = Integer.parseInt(s); } catch (NumberFormatException e) { continue; }
+                BufferedReader br = null;
+                try {
+                    br = new BufferedReader(new FileReader("/proc/self/task/" + s + "/comm"));
+                    String comm = br.readLine();
+                    if (comm == null) continue;
+                    if (comm.startsWith("WRCommonPool") || comm.startsWith("WRNetworkPool") ||
+                        comm.startsWith("MPool") || comm.startsWith("OkHttp")) {
+                        Process.setThreadPriority(tid, poolNice);
+                    } else if (comm.startsWith("RxComputation") || comm.startsWith("RxIoScheduler")) {
+                        Process.setThreadPriority(tid, rxNice);
+                    }
+                } catch (Throwable ignored) {
+                } finally {
+                    try { if (br != null) br.close(); } catch (Throwable ignored) {}
+                }
+            }
+        }
+
+        @Override public void onActivityCreated(Activity a, Bundle b) {
+            if (a != null && "com.tencent.weread.ReaderFragmentActivity".equals(a.getClass().getName())) {
+                applyPoolNice(16, 16);
+                handler.removeCallbacks(restore);
+                handler.postDelayed(restore, BOOST_MS);
+            }
+        }
+        @Override public void onActivityStarted(Activity a) {}
+        @Override public void onActivityResumed(Activity a) {}
+        @Override public void onActivityPaused(Activity a) {}
+        @Override public void onActivityStopped(Activity a) {}
+        @Override public void onActivitySaveInstanceState(Activity a, Bundle b) {}
+        @Override public void onActivityDestroyed(Activity a) {}
     }
 
     static Method findMethod(Class<?> c, String name, Class<?>... types) throws NoSuchMethodException {
