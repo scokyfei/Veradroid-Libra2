@@ -408,6 +408,20 @@ run_in_ns() {
 
     sysfont_mount
 
+    # Optional rebuilt non-debuggable boot image (tools/kobo/compile-boot-nodebug.sh):
+    # bind-mount over /system/framework/arm/boot*.{art,oat} unless disabled.
+    if [ -s "$SYS/data/local/tmp/boot-nodebug/boot.oat" ] && [ -s "$SYS/data/local/tmp/boot-nodebug/boot.art" ] \
+        && [ ! -e "$SYS/data/local/tmp/kobo-bootnodebug-disabled" ]; then
+        for bf in "$SYS"/data/local/tmp/boot-nodebug/boot*.art "$SYS"/data/local/tmp/boot-nodebug/boot*.oat; do
+            [ -f "$bf" ] || continue
+            bt="$R/system/framework/arm/${bf##*/}"
+            [ -f "$bt" ] && mount --bind "$bf" "$bt" 2>/dev/null || true
+        done
+        if [ -s "$SYS/data/local/tmp/boot-nodebug/services.odex" ] && [ -f "$R/system/framework/oat/arm/services.odex" ]; then
+            mount --bind "$SYS/data/local/tmp/boot-nodebug/services.odex" "$R/system/framework/oat/arm/services.odex" 2>/dev/null || true
+        fi
+    fi
+
     # Kobo 4.1.15 kernel lacks CONFIG_FUSE_FS (/dev/fuse); bind-mount zero-FUSE kobo-sdcard
     # over /system/bin/sdcard so vold completes EmulatedVolume::doMount() cleanly without
     # spinning forever on FUSE or stalling apps' getExternalFilesDir() for 60s timeouts.

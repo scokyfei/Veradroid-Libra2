@@ -11,8 +11,18 @@ VD=${VD:-/mnt/onboard/.adds/veradroid-libra2}
 SYS=$VD/sys
 PKG=com.tencent.weread.eink
 PROF=$SYS/data/misc/profiles/cur/0/$PKG/primary.prof
+REF_PROF=$SYS/data/misc/profiles/ref/$PKG/primary.prof
+
+# Flush any live in-memory ART JIT hot-method profile via SIGUSR1 before checking $PROF
+for wpid in $(ps | grep "com\.tencent\.weread\.eink" | grep -v grep | awk '{print $1}'); do
+    kill -USR1 "$wpid" 2>/dev/null || true
+done
+sleep 1
 
 [ -s "$PROF" ] || { echo "weread-speed-profile: no non-empty profile at $PROF" >&2; exit 2; }
+mkdir -p "$(dirname "$REF_PROF")" 2>/dev/null || true
+cp -f "$PROF" "$REF_PROF" 2>/dev/null || true
+chmod 644 "$PROF" "$REF_PROF" 2>/dev/null || true
 
 ODEX=
 for o in "$SYS"/data/app/"$PKG"-*/oat/arm/base.odex; do

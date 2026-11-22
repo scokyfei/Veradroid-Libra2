@@ -69,6 +69,10 @@ zram_on() {
     [ -f "$W/zram.state" ] || echo "$(cat /proc/sys/vm/swappiness) $(cat /proc/sys/vm/page-cluster)" > "$W/zram.state"
     echo "${VM_SWAPPINESS:-100}" > /proc/sys/vm/swappiness
     echo 0 > /proc/sys/vm/page-cluster
+    if [ "${SQUEEZE_MB:-0}" -gt 0 ] && [ -x "$VD/bin/vdsqueeze" ]; then
+        sq_out=$("$VD/bin/vdsqueeze" "$SQUEEZE_MB" 2>/dev/null || true)
+        [ -n "$sq_out" ] && t "$sq_out"
+    fi
 }
 
 zram_restore() {

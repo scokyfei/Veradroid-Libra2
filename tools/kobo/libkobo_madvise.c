@@ -822,7 +822,9 @@ static int skip_weread_log_sync(int fd)
     l[n] = 0;
     const char *base = l;
     for (const char *c = l; *c; c++) if (*c == '/') base = c + 1;
-    return str_has(l, "/log/") || str_has(l, "/logs/") || str_has(l, "/BusReport/") ||
+    int is_wal = (n >= 4 && l[n - 4] == '-' && l[n - 3] == 'w' && l[n - 2] == 'a' && l[n - 1] == 'l');
+    return is_wal || str_has(l, "/log/") || str_has(l, "/logs/") || str_has(l, "/BusReport/") ||
+           str_starts(base, "bugly_db") || str_starts(base, "WaitReport") || str_starts(base, "beacon") ||
            (base[0] == 'w' && base[1] == 'r' && (base[2] == '-' || str_has(base, "wr.log.")));
 }
 

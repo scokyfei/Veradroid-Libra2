@@ -362,6 +362,17 @@ public final class KoboWeReadOpt {
                 }
                 return;
             }
+            if (v instanceof TextView) {
+                CharSequence cs = ((TextView) v).getText();
+                if (cs != null && cs.length() >= 7 && cs.length() <= 14 && cs.toString().contains("上滑显示工具栏")) {
+                    if (v.getVisibility() != View.GONE) v.setVisibility(View.GONE);
+                    if (v.getParent() instanceof ViewGroup) {
+                        ViewGroup p = (ViewGroup) v.getParent();
+                        if (p.getChildCount() <= 2 && p.getVisibility() != View.GONE) p.setVisibility(View.GONE);
+                    }
+                    return;
+                }
+            }
             if (!(v instanceof TextView) && !qqFaceView.isInstance(v)) return;
             Object logic = v.getTag(tagLogic);
             Object cur = v.getTag(tagCurrent);
@@ -796,11 +807,10 @@ public final class KoboWeReadOpt {
     /* ---------------------------------------------------------------------- */
     private static final class SyncThrottle implements Runnable, InvocationHandler {
         private static final long WINDOW_MS = 12L * 3600 * 1000;
-        private static final long PAGING_MS = 30 * 1000;
         private static final String[][] TARGETS = {
             { "holder:getBookDetailService", "com.tencent.weread.bookdetailservice.model.BaseBookDetailService", "LoadBookLightRead", "0" },
             { "of:com.tencent.weread.bestmarkcontentservice.model.BestMarkContentService", "com.tencent.weread.bestmarkcontentservice.model.BaseBestMarkContentService", "LoadBestBookMarks", "0" },
-            { "holder:getBookReviewListService", "com.tencent.weread.bookreviewlistservice.model.BaseBookReviewListService", "LoadBookChapterReviewList", "0,1,2" },
+            { "holder:getBookReviewListService", "com.tencent.weread.bookreviewlistservice.model.BaseBookReviewListService", "LoadBookChapterReviewList", "0,1" },
         };
         private final Application app;
         private final Handler handler;
@@ -887,12 +897,14 @@ public final class KoboWeReadOpt {
                 boolean pass;
                 synchronized (this) {
                     Long t = last.get(k);
-                    pass = t == null || now - t >= WINDOW_MS || now < t || now - t < PAGING_MS;
-                    if (pass && (t == null || now - t >= PAGING_MS || now < t)) {
+                    pass = t == null || now - t >= WINDOW_MS || now < t;
+                    if (pass) {
                         last.put(k, now);
                         save(now);
+                        passed++;
+                    } else {
+                        skipped++;
                     }
-                    if (pass) passed++; else skipped++;
                 }
                 Log.i(TAG, "SYNC_THROTTLE " + (pass ? "pass " : "skip ") + k + " passed=" + passed + " skipped=" + skipped);
                 if (!pass) return emptyMethod.invoke(null);
@@ -913,8 +925,15 @@ public final class KoboWeReadOpt {
                 for (String line : new String(b, "UTF-8").split("\n")) {
                     int tab = line.indexOf('\t');
                     if (tab > 0) {
-                        try { last.put(line.substring(tab + 1), Long.parseLong(line.substring(0, tab))); }
-                        catch (NumberFormatException ignored) {}
+                        try {
+                            String k = line.substring(tab + 1);
+                            if (k.startsWith("LoadBookChapterReviewList/")) {
+                                int s1 = k.indexOf('/', 26);
+                                int s2 = s1 > 0 ? k.indexOf('/', s1 + 1) : -1;
+                                if (s2 > 0) k = k.substring(0, s2);
+                            }
+                            last.put(k, Long.parseLong(line.substring(0, tab)));
+                        } catch (NumberFormatException ignored) {}
                     }
                 }
             } catch (Throwable ignored) {}

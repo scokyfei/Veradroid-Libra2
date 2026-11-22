@@ -1410,6 +1410,16 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
     /* a small change: let the caller wait a moment for the frame that usually follows (prev_y8 is untouched, so the next
        call diffs against what is really on the panel) */
     if (may_hold && hold_ms > 0 && mode == M_AUTO && !g_scroll && total < (long)W * H * hold_pct / 100) return 1;
+#ifdef FBINK_FOR_KOBO
+    /* Coalesce status-bar-only micro-ticks (clock/battery within top/bottom 56px strip, <=360px wide) during active
+       reading (<25s since last page turn): leaving prev_y8 untouched lets the next page turn flush the status bar
+       together in a single EPDC update instead of waking the controller mid-page. */
+    if (mode == M_AUTO && !force_full && !g_scroll && nc == 1 &&
+        (cy1[0] <= 56 || cy0[0] >= H - 56) && (cx1[0] - cx0[0]) <= 360 &&
+        last_big_ms > 0 && now_ms() - last_big_ms < 25000) {
+        return 0;
+    }
+#endif
     /* 整页变化：交给 MTK 控制器做硬件滑动动画（和 Kindle 原生翻页同一套 P2SW/REAGL），
        而不是拆成几块硬刷。SWIPE 命令可以强制下一次整页变化动画。 */
     if (once_dir >= 0 && now_ms() > once_until) { once_dir = -1; anim_next = 0; }

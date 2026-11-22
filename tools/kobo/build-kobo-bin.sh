@@ -35,8 +35,8 @@ $CC -pthread \
 echo "[2/5] veradroid-input"
 $CC "$TOP/input/legacy/vinput.c" -lm -o "$OUT/veradroid-input"
 
-echo "[3/5] pivot_init, vdlmk, vdloopdio, vdmkswap"
-for p in pivot_init vdlmk vdloopdio vdmkswap; do
+echo "[3/5] pivot_init, vdlmk, vdloopdio, vdmkswap, vdsqueeze"
+for p in pivot_init vdlmk vdloopdio vdmkswap vdsqueeze; do
     $CC "$TOP/tools/src/$p.c" -o "$OUT/$p"
 done
 

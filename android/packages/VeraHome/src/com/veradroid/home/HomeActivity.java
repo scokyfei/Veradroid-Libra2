@@ -297,6 +297,11 @@ public class HomeActivity extends Activity {
         // coming back (back gesture out of an app) should show the app grid, not whatever page we were on last
         if (inSettings) { tab = -1; showHome(); }
         else if (libPage != null && libPage.searching()) libPage.endSearch();
+        try {
+            Class<?> vm = Class.forName("dalvik.system.VMRuntime");
+            Object rt = vm.getMethod("getRuntime").invoke(null);
+            vm.getMethod("trimHeap").invoke(rt);
+        } catch (Throwable ignored) { }
     }
 
     @Override protected void onDestroy() {
