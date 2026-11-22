@@ -81,6 +81,8 @@ run_action() {
         frontlight|lighton|lightoff)
             frontlight "$1"
             [ "$(kobo_light_get)" = 0 ] && hint light "LIGHT|前光 关" || hint light "LIGHT|前光 开" ;;
+        light+) step_light "+" ;;
+        light-) step_light "-" ;;
         sleep) power_send sleep ;;
         wake)  power_send wake ;;
         power) power_send toggle ;;
@@ -104,6 +106,7 @@ case "$1" in
     bl) POS=bl; run_action "${G_BL:-kindle}" ;;
     br) POS=br; run_action "${G_BR:-none}" ;;
     eb) POS=b; run_action "$2" ;;
+    keylong) POS=r; run_action "$2" ;;
     rotate) echo "$2" > "$W/rotate"; send "autorot $2" ;;
     power)  power_send toggle ;;
     sleep)  power_send sleep ;;

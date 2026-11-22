@@ -159,6 +159,12 @@ public class HostSettingsActivity extends Activity {
                 "KFB_AUTO_ROTATE", new String[] { "关（默认）", "开" }, new String[] { "0", "1" }, "0", null);
             stepper("翻页键功能互换", "交换上下实体翻页键的上一页 / 下一页功能，立即生效，且自动跟随屏幕旋转。",
                 "PAGE_KEYS_SWAP", new String[] { "关（默认）", "开" }, new String[] { "0", "1" }, "0", null);
+            stepper("下一页键长按", "长按实体下一页键触发快捷功能（选“关”时按下瞬间即翻页；自动跟随旋转与互换设置）。",
+                "KEY_NEXT_LONG", BlocksSettings.KEYLONG_L, BlocksSettings.KEYLONG_V, "clear", null);
+            stepper("上一页键长按", "长按实体上一页键触发快捷功能（默认“返回”，单手看书即可一键返回书架或关闭目录）。",
+                "KEY_PREV_LONG", BlocksSettings.KEYLONG_L, BlocksSettings.KEYLONG_V, "back", null);
+            stepper("翻页键长按时长", "按住实体翻页键超过此时长即触发长按功能，短于此时长松开则正常翻页。",
+                "KEY_LONG_MS", BlocksSettings.KEYLONG_MS_L, BlocksSettings.KEYLONG_MS_V, "500", null);
         }
         section("档位");
         stepper("显示档位", "一次定好下面的刷新方式：流畅（先快刷、停下再补灰度）、均衡、画质（驱动自动选波形，合并中间帧）。选“自定义”时按下面几项单独设。",

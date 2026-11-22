@@ -68,7 +68,11 @@ grep -q 'MSC_RAW_PORTRAIT_DOWN' "$TOP/input/legacy/vinput.c" \
     && grep -qE '^[[:space:]]*autorot\)' "$TOP/host/kobo/boot/lib/cmd.sh" \
     && grep -q 'KFB_AUTO_ROTATE' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
     && grep -q 'PAGE_KEYS_SWAP' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
-    && ok "gyro auto-rotate (with page-key follow) & page-key swap toggles wired end-to-end" \
+    && grep -q 'KEY_NEXT_LONG' "$TOP/input/legacy/vinput.c" \
+    && grep -q 'KEY_PREV_LONG' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q 'KEY_NEXT_LONG' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && grep -qE '^[[:space:]]*keylong\)' "$TOP/host/kobo/boot/action.sh" \
+    && ok "gyro auto-rotate (with page-key follow), page-key swap & customizable long-press wired end-to-end" \
     || fail "missing gyro auto-rotate or page-key swap wiring"
 
 # 5. Kobo Libra 2 model profile, slimming/memory optimizations & launcher files

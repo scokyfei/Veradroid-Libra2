@@ -161,6 +161,10 @@ static long gyro_since = 0;                               /* monotonic ms when g
 static int SWAP_XY = 0, FLIP_X = 0, FLIP_Y = 0;          /* raw touchscreen axis transform (e.g. Kobo Libra 2 Elan: --swap-xy) */
 static const char *KEYDEV = NULL, *SLEEP_FLAG = NULL;    /* optional hardware key device (Kobo gpio-keys) + sleep gate */
 static int keyfd = -1, KEY_SWAP = 0, KEY_SWAP_CLI = 0, KEY_MAP_PAGE = 0;   /* KEY_MAP_PAGE: 0 = volume keys (default), 1 = page keys */
+static char KEY_NEXT_LONG[32] = "clear", KEY_PREV_LONG[32] = "back";       /* physical page-key long-press actions */
+static int KEY_LONG_MS = 500;
+struct pk_state { int active; int code; long t0; int fired; };
+static struct pk_state pk_down[2];                                         /* 0 = logical prev, 1 = logical next */
 static volatile sig_atomic_t quit = 0, want_release = 0, want_grab = 0;
 static int paused = 0;
 static int hw_slot = 0;          /* protocol B: the slot the panel's next events refer to (it only sends ABS_MT_SLOT on change) */
@@ -202,6 +206,9 @@ static void gconf_load(void)
     BOOST_MS = 150; BOOST_KHZ = 0; SCROLL_PX = 20; FAST_DRAG = 1;
     G_EDGE_THIRDS = 0; G_EB_HOLD_MS = 500;
     G_AUTO_ROTATE = 0; KEY_SWAP = KEY_SWAP_CLI;
+    snprintf(KEY_NEXT_LONG, sizeof(KEY_NEXT_LONG), "clear");
+    snprintf(KEY_PREV_LONG, sizeof(KEY_PREV_LONG), "back");
+    KEY_LONG_MS = 500;
     for (int i = 0; i < 4; i++) snprintf(G_EB[i], sizeof(G_EB[i]), "%s", EB_DEF[i]);
     FILE *f = !ok ? NULL : fopen(GCONF, "r");
     if (f) {
@@ -242,6 +249,9 @@ static void gconf_load(void)
             else if (!strcmp(line, "G_BACK_EXCLUDE")) { snprintf(G_BACK_EXCLUDE, sizeof(G_BACK_EXCLUDE), "%s", strcmp(v, "none") ? v : ""); }
             else if (!strcmp(line, "AUTO_ROTATE")) { G_AUTO_ROTATE = b; if (!G_AUTO_ROTATE) gyro_want = -1; }
             else if (!strcmp(line, "KEY_SWAP")) { KEY_SWAP = b; }
+            else if (!strcmp(line, "KEY_NEXT_LONG")) { snprintf(KEY_NEXT_LONG, sizeof(KEY_NEXT_LONG), "%.31s", v); }
+            else if (!strcmp(line, "KEY_PREV_LONG")) { snprintf(KEY_PREV_LONG, sizeof(KEY_PREV_LONG), "%.31s", v); }
+            else if (!strcmp(line, "KEY_LONG_MS")) { KEY_LONG_MS = atoi(v); if (KEY_LONG_MS < 200 || KEY_LONG_MS > 2000) KEY_LONG_MS = 500; }
             else if (!strcmp(line, "ROTATE")) {
                 /* live only within the same logical size: the virtual touch screen's ranges are fixed at start.
                    Track gconf_rot so reloading gestures for an unrelated toggle does not undo a gyro auto-rotate. */
@@ -1313,6 +1323,12 @@ static void inject_cmd(int fd)
         } else if (sscanf(line, "hwkey %d", &x1) == 1) {
             logf_("inject hwkey %d", x1);
             handle_page_key(x1);
+        } else if (sscanf(line, "hwkeylong %d", &x1) == 1) {
+            gconf_load();
+            int is_next = x1 != 0;
+            const char *act = is_next ? KEY_NEXT_LONG : KEY_PREV_LONG;
+            logf_("inject hwkeylong %d -> %s", is_next, act);
+            if (act[0] && strcmp(act, "none")) action("keylong", act);
         } else if (sscanf(line, "down %d %d", &x1, &y1) == 2) {
             logf_("inject down %d,%d", x1, y1);
             inj_frame(77, x1, y1);          /* returns at once: the poll tick decides when the press is handed to Android */
@@ -1404,13 +1420,19 @@ static void gyro_check(void)
     action("rotate", rarg);
 }
 
+static int pk_is_next(int code)
+{
+    int is_next = (code == 193 || code == KEY_PAGEDOWN);
+    if (ROT == 180 || ROT == 270) is_next = !is_next;
+    if (KEY_SWAP) is_next = !is_next;
+    return is_next;
+}
+
 static void handle_page_key(int code)
 {
     if (is_sleeping()) return;
     gconf_load();
-    int is_next = (code == 193 || code == KEY_PAGEDOWN);
-    if (ROT == 180 || ROT == 270) is_next = !is_next;
-    if (KEY_SWAP) is_next = !is_next;
+    int is_next = pk_is_next(code);
     int out_key = KEY_MAP_PAGE ? (is_next ? KEY_PAGEDOWN : KEY_PAGEUP)
                                : (is_next ? KEY_VOLUMEDOWN : KEY_VOLUMEUP);
     logf_("hw key %d -> key %d (rot=%d swap=%d)", code, out_key, ROT, KEY_SWAP);
@@ -1424,6 +1446,27 @@ static void handle_page_key(int code)
         static long last_key_poke = 0;
         long t = now_ms();
         if (t - last_key_poke > 20000) { last_key_poke = t; action("poke", NULL); }
+    }
+}
+
+static void pk_check(void)
+{
+    if (paused || is_sleeping()) { pk_down[0].active = pk_down[1].active = 0; return; }
+    long now = now_ms();
+    for (int i = 0; i < 2; i++) {
+        if (!pk_down[i].active || pk_down[i].fired) continue;
+        if (now - pk_down[i].t0 >= KEY_LONG_MS) {
+            pk_down[i].fired = 1;
+            gconf_load();
+            const char *act = i ? KEY_NEXT_LONG : KEY_PREV_LONG;
+            logf_("hw key %d (%s) long-press %dms -> %s", pk_down[i].code, i ? "next" : "prev", KEY_LONG_MS, act);
+            if (act[0] && strcmp(act, "none")) {
+                idle_thaw();
+                boost_begin();
+                if (boost_on) boost_until = now + BOOST_MS;
+                action("keylong", act);
+            }
+        }
     }
 }
 
@@ -1452,8 +1495,28 @@ static void keydev_read(void)
                 continue;
             }
             if (ev.type == EV_KEY && (ev.code == 193 || ev.code == 194 || ev.code == KEY_PAGEUP || ev.code == KEY_PAGEDOWN)) {
-                if (ev.value != 1) continue;   /* press triggers page turn */
-                handle_page_key(ev.code);
+                if (is_sleeping()) { pk_down[0].active = pk_down[1].active = 0; continue; }
+                gconf_load();
+                int is_next = pk_is_next(ev.code);
+                const char *act = is_next ? KEY_NEXT_LONG : KEY_PREV_LONG;
+                int has_long = act[0] && strcmp(act, "none") != 0;
+                if (ev.value == 1) {
+                    if (!has_long) {
+                        pk_down[is_next].active = 0;
+                        handle_page_key(ev.code);      /* no long-press bound: fire immediately on press */
+                    } else {
+                        pk_down[is_next].active = 1;
+                        pk_down[is_next].code = ev.code;
+                        pk_down[is_next].t0 = now_ms();
+                        pk_down[is_next].fired = 0;
+                    }
+                } else if (ev.value == 0) {
+                    if (pk_down[is_next].active) {
+                        int was_fired = pk_down[is_next].fired;
+                        pk_down[is_next].active = 0;
+                        if (!was_fired) handle_page_key(ev.code);
+                    }
+                }
                 continue;
             }
             continue;
@@ -1592,6 +1655,7 @@ int main(int argc, char **argv)
         }
         if (boost_until && now_ms() >= boost_until) boost_end();
         gyro_check();
+        pk_check();
         struct pollfd pf[4] = { { tfd, POLLIN, 0 }, { ifd, POLLIN, 0 }, { tapfd, POLLIN, 0 }, { keyfd, POLLIN, 0 } };
         int pto = md == IDLE ? -1 : 10;
         if (STUCK_MS > 0 && (out_any() || count_active())) { int w = STUCK_MS / 4 > 10 ? STUCK_MS / 4 : 10; if (pto < 0 || w < pto) pto = w; }
@@ -1600,6 +1664,13 @@ int main(int argc, char **argv)
             long left = GYRO_SETTLE_MS - (now_ms() - gyro_since);
             if (left < 1) left = 1;
             if (pto < 0 || left < pto) pto = (int)left;
+        }
+        for (int i = 0; i < 2; i++) {
+            if (pk_down[i].active && !pk_down[i].fired) {
+                long left = KEY_LONG_MS - (now_ms() - pk_down[i].t0);
+                if (left < 1) left = 1;
+                if (pto < 0 || left < pto) pto = (int)left;
+            }
         }
         int pr = poll(pf, 4, pto);   /* a negative fd is skipped by poll */
         if (pr > 0 && keyfd >= 0 && (pf[3].revents & (POLLIN | POLLERR | POLLHUP))) {

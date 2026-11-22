@@ -41,6 +41,10 @@ final class BlocksSettings {
     static final String[] DARKCRUSH_V = { "0", "24", "36", "48" };
     static final String[] FONTGAMMA_L = { "关", "轻度", "适中", "浓郁" };
     static final String[] FONTGAMMA_V = { "0", "1", "2", "3" };
+    static final String[] KEYLONG_L = { "关", "全刷消残影", "返回", "快捷面板", "回桌面", "切换应用", "夜间反色", "开关前光", "前光调亮", "前光调暗", "截屏", "开关Wi-Fi", "立即休眠", "返回Kobo" };
+    static final String[] KEYLONG_V = { "none", "clear", "back", "panel", "home", "switch", "invert", "frontlight", "light+", "light-", "screenshot", "wifi", "sleep", "kindle" };
+    static final String[] KEYLONG_MS_L = { "0.35 秒", "0.5 秒", "0.7 秒", "1.0 秒" };
+    static final String[] KEYLONG_MS_V = { "350", "500", "700", "1000" };
     static final String[] GCN_L = { "关", "20 次", "30 次", "50 次" };
     static final String[] GCN_V = { "0", "20", "30", "50" };
     static final String[] FONT_L = { "小", "标准", "大", "特大" };
@@ -217,6 +221,12 @@ final class BlocksSettings {
                 @Override public void onToggle(boolean on) { host("KFB_AUTO_ROTATE=" + (on ? 1 : 0)); } })));
             add(kr, Blocks.row(a, "翻页键功能互换", "Swap page-turn buttons", toggle("1".equals(cfg.get("PAGE_KEYS_SWAP")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("PAGE_KEYS_SWAP=" + (on ? 1 : 0)); } })));
+            add(kr, Blocks.row(a, "下一页键长按", "Next-page button long press", new Blocks.Stepper(a, KEYLONG_L, idx(KEYLONG_V, cfg.get("KEY_NEXT_LONG"), 1), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("KEY_NEXT_LONG=" + KEYLONG_V[i]); } })));
+            add(kr, Blocks.row(a, "上一页键长按", "Prev-page button long press", new Blocks.Stepper(a, KEYLONG_L, idx(KEYLONG_V, cfg.get("KEY_PREV_LONG"), 2), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("KEY_PREV_LONG=" + KEYLONG_V[i]); } })));
+            add(kr, Blocks.row(a, "翻页键长按时长", "Long-press hold threshold", new Blocks.Stepper(a, KEYLONG_MS_L, idx(KEYLONG_MS_V, cfg.get("KEY_LONG_MS"), 1), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("KEY_LONG_MS=" + KEYLONG_MS_V[i]); } })));
         }
         LinearLayout fg = group(c, "文字");
         float fs = AppFont.user(a);
