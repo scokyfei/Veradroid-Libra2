@@ -45,6 +45,10 @@ final class BlocksSettings {
     static final String[] KEYLONG_V = { "none", "clear", "back", "panel", "home", "switch", "invert", "frontlight", "light+", "light-", "screenshot", "wifi", "sleep", "kindle" };
     static final String[] KEYLONG_MS_L = { "0.35 秒", "0.5 秒", "0.7 秒", "1.0 秒" };
     static final String[] KEYLONG_MS_V = { "350", "500", "700", "1000" };
+    static final String[] FLTO_L = { "关", "1 分钟", "2 分钟", "3 分钟", "5 分钟", "10 分钟" };
+    static final String[] FLTO_V = { "0", "60", "120", "180", "300", "600" };
+    static final String[] IDLECAP_L = { "关", "10 秒（默认）", "20 秒", "30 秒" };
+    static final String[] IDLECAP_V = { "0", "10000", "20000", "30000" };
     static final String[] GCN_L = { "关", "20 次", "30 次", "50 次" };
     static final String[] GCN_V = { "0", "20", "30", "50" };
     static final String[] FONT_L = { "小", "标准", "大", "特大" };
@@ -214,6 +218,8 @@ final class BlocksSettings {
                 @Override public void onToggle(boolean on) { host("KFB_SKIA_OPT=" + (on ? 1 : 0)); } })));
             add(ng, Blocks.row(a, "文字笔锋加黑", "E-Ink glyph-edge Gamma (images untouched)", new Blocks.Stepper(a, FONTGAMMA_L, idx(FONTGAMMA_V, cfg.get("KFB_FONT_GAMMA"), 2), new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { host("KFB_FONT_GAMMA=" + FONTGAMMA_V[i]); } })));
+            add(ng, Blocks.row(a, "插图智能抖动", "Bayer dither for grayscale images only (text untouched)", toggle(!"0".equals(cfg.get("KFB_IMG_DITHER")), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("KFB_IMG_DITHER=" + (on ? 1 : 0)); } })));
         }
         if (HostLink.isKobo()) {
             LinearLayout kr = group(c, "方向与实体按键");
@@ -276,6 +282,12 @@ final class BlocksSettings {
             for (int i = 0; i < SLEEP_S.length; i++) if (Math.abs(SLEEP_S[i] - sl) < Math.abs(SLEEP_S[bi] - sl)) bi = i;
             add(g, Blocks.row(a, "自动休眠", "Auto lock", new Blocks.Stepper(a, SLEEP_L, bi, new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { HostLink.cmd("sleeptime " + SLEEP_S[i]); } })));
+        }
+        if (HostLink.isKobo()) {
+            add(g, Blocks.row(a, "无操作自动息灯", "Frontlight idle timeout (wakes on touch)", new Blocks.Stepper(a, FLTO_L, idx(FLTO_V, cfg.get("FL_TIMEOUT"), 0), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("FL_TIMEOUT=" + FLTO_V[i]); } })));
+            add(g, Blocks.row(a, "阅读静止期 CPU 限频", "Cap CPU to 792 MHz while reading idle", new Blocks.Stepper(a, IDLECAP_L, idx(IDLECAP_V, cfg.get("IDLE_CAP_MS"), 1), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("IDLE_CAP_MS=" + IDLECAP_V[i]); } })));
         }
         if (!HostLink.isKobo()) {
             add(g, Blocks.row(a, "回到 Kobo", "Return mode", new Blocks.Stepper(a, RETURN_L, idx(RETURN_V, cfg.get("RETURN_MODE"), 0), new Blocks.Stepper.Listener() {
@@ -471,6 +483,10 @@ final class BlocksSettings {
         c.addView(new TaskCards.Update(a, false), Blocks.gap(a, 14));
         LinearLayout m = group(c, "维护");
         boolean kobo = HostLink.isKobo();
+        if (kobo) {
+            add(m, Blocks.navRow(a, "微信读书维护与状态看板", "查看内存 / 热点包 / WAL，一键清理日志与刷新加速编译", new View.OnClickListener() {
+                @Override public void onClick(View v) { wrMaintDialog(); } }));
+        }
         String[][] rows = {
             { "系统与性能", kobo ? "低内存 · 应用编译" : "Wi-Fi 省电 · 低内存 · Kobo 界面 · 应用编译" },
             { "检查系统更新", "有新版本优先下载增量补丁" }, { "使用统计", "电量和阅读时长，只在本机" }, { "问题反馈", "连同系统日志一起上传" },
@@ -494,6 +510,60 @@ final class BlocksSettings {
             } }));
         }
         return shell("Device / about", "设备与关于", c);
+    }
+
+    private void wrMaintDialog() {
+        HostLink.cmd("wrmaint status");
+        final android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(a);
+        b.setTitle("微信读书维护与状态看板");
+        LinearLayout box = new LinearLayout(a);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(12), dp(18), dp(8));
+        final TextView info = Ui.text(a, "正在读取系统与微信读书运行状态…", 15, false);
+        box.addView(info);
+        LinearLayout row = new LinearLayout(a);
+        row.setPadding(0, dp(14), 0, 0);
+        final android.os.Handler hd = new android.os.Handler(android.os.Looper.getMainLooper());
+        final Runnable readStatus = new Runnable() {
+            @Override public void run() {
+                try {
+                    java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(HostLink.KFB + "wrmaint.txt"));
+                    StringBuilder sb = new StringBuilder();
+                    String ln;
+                    while ((ln = r.readLine()) != null) { if (sb.length() > 0) sb.append('\n'); sb.append(ln); }
+                    r.close();
+                    if (sb.length() > 0) info.setText(sb.toString());
+                } catch (Throwable ignored) { }
+            }
+        };
+        row.addView(Blocks.button(a, "清理日志 / 压库", false, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                info.setText("正在清理微信读书日志并压缩数据库 WAL…");
+                HostLink.cmd("wrmaint wal");
+                hd.postDelayed(readStatus, 1800);
+                hd.postDelayed(readStatus, 4000);
+            }
+        }), Blocks.weight(1));
+        row.addView(new View(a), Blocks.lp(dp(8), 1));
+        row.addView(Blocks.button(a, "刷新热点编译", false, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                info.setText("已提交后台热点编译任务（约 1–2 分钟，完成后弹出提示）…");
+                HostLink.cmd("wrmaint profile");
+                hd.postDelayed(readStatus, 1500);
+            }
+        }), Blocks.weight(1));
+        box.addView(row);
+        b.setView(box);
+        b.setNeutralButton("刷新状态", null);
+        b.setPositiveButton("关闭", null);
+        final android.app.AlertDialog d = b.create();
+        d.show();
+        android.widget.Button nb = d.getButton(android.app.AlertDialog.BUTTON_NEUTRAL);
+        if (nb != null) nb.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { HostLink.cmd("wrmaint status"); hd.postDelayed(readStatus, 600); }
+        });
+        hd.postDelayed(readStatus, 500);
+        hd.postDelayed(readStatus, 1500);
     }
 
     // ------------------------------------------------------------------ 首页卡片

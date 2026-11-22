@@ -206,6 +206,8 @@ public class HostSettingsActivity extends Activity {
                 "KFB_SKIA_OPT", new String[] { "仅微信读书", "所有应用（默认）" }, new String[] { "0", "1" }, "1", null);
             stepper("文字笔锋加黑", "在 Skia 字形混合层对文字抗锯齿边缘做 E-Ink Gamma 加黑，让宋体细横画与笔锋更饱满锐利，且完全不影响封面与插图灰阶（翻页即时生效）。",
                 "KFB_FONT_GAMMA", new String[] { "关", "轻度", "适中（默认）", "浓郁" }, new String[] { "0", "1", "2", "3" }, "2", null);
+            stepper("插图智能抖动", "关闭全局抖动时，仅对页面中的灰度插图/书架封面块自动做 4×4 Bayer 有序抖动，正文文字区保持零抖动锐利边缘。",
+                "KFB_IMG_DITHER", new String[] { "关", "开（默认）" }, new String[] { "0", "1" }, "1", null);
         }
         section("画面");
         stepper("浅色过滤", Panel.LIGHTF_DESC, "KFB_LIGHTF", Panel.LIGHTF_L, Panel.LIGHTF_V, "0", null);
@@ -242,6 +244,12 @@ public class HostSettingsActivity extends Activity {
         if (!kobo) {
             stepper("Android 运行时 Kobo 界面", "只暂停：回 Kobo 最快；冻结：再把 Kobo 的后台程序冻住；停掉：腾出最多内存，回 Kobo 约一分钟。自动：小内存模式用“停掉”，否则“冻结”。下次启动 Android 生效。",
                 "KINDLE_UI", new String[] { "自动", "只暂停", "冻结", "停掉" }, new String[] { "auto", "keep", "freeze", "stop" }, "auto", null);
+        } else {
+            section("省电与息灯（Libra 2）");
+            stepper("阅读静止期 CPU 限频", "无触摸/按键超过设定时间后，自动将 CPU 最高频率柔和限制在 792 MHz 压低后台毛刺功耗；下次触屏或按翻页键瞬间立即恢复 1 GHz 满频。",
+                "IDLE_CAP_MS", BlocksSettings.IDLECAP_L, BlocksSettings.IDLECAP_V, "10000", null);
+            stepper("无操作自动息灯", "独立于整机休眠的前光超时：长时间未操作先熄灭前光省电，触摸或按翻页键瞬间自动恢复原亮度。",
+                "FL_TIMEOUT", BlocksSettings.FLTO_L, BlocksSettings.FLTO_V, "0", null);
         }
         section("应用预编译");
         stepper("自动优化新装的应用", "装好后在后台把应用编译成机器码，打开更快（微信读书冷启动约快一倍）。自动优化等你 5 分钟不碰屏幕才开始；"

@@ -120,6 +120,8 @@ static int G_EDGE_BACK = 1, G_EDGE_PANEL = 1, G_EDGE_LIGHT = 1, G_EDGE_LIGHT_SWA
 static int G_TAP = 1, G_TAP_KEY = KEY_VOLUMEDOWN;   /* bezel double tap (gesture_tap) -> this key, see the header */
 static int tapfd = -1;
 static int BOOST_MS = 150, BOOST_KHZ = 0, SCROLL_PX = 20;   /* touch boost / scroll hints, see the header */
+static int IDLE_CAP_MS = 10000, IDLE_CAP_KHZ = 792000;       /* reading idle CPU max freq cap (ms, kHz; 0 = off) */
+static int FL_TIMEOUT = 0;                                   /* independent frontlight auto-off timeout (seconds; 0 = off) */
 static int FAST_DRAG = 1;
 /* --rt <prio>: run as SCHED_FIFO <prio> (1..20). This program sleeps in poll() and forwards a frame in microseconds; at
    nice 0 on a single-core Kindle (PW2 / PW3 / PW4) a touch frame waited behind Android's UI and render threads (nice -4 /
@@ -204,6 +206,7 @@ static void gconf_load(void)
     G_EDGE_BACK = G_EDGE_PANEL = G_EDGE_LIGHT = G_TWO_TAP = G_TWO_LONG = G_TWO_BACK = G_TWO_SLIDE = 1; G_EDGE_LIGHT_SWAP = 0; G_BACK_EXCLUDE[0] = 0; G_EDGE_SENS = 1;
     G_TAP = 1; G_TAP_KEY = KEY_VOLUMEDOWN; snprintf(G_CORNERS, sizeof(G_CORNERS), "all");
     BOOST_MS = 150; BOOST_KHZ = 0; SCROLL_PX = 20; FAST_DRAG = 1;
+    IDLE_CAP_MS = 10000; IDLE_CAP_KHZ = 792000; FL_TIMEOUT = 0;
     G_EDGE_THIRDS = 0; G_EB_HOLD_MS = 500;
     G_AUTO_ROTATE = 0; KEY_SWAP = KEY_SWAP_CLI;
     snprintf(KEY_NEXT_LONG, sizeof(KEY_NEXT_LONG), "clear");
@@ -238,6 +241,9 @@ static void gconf_load(void)
             }
             else if (!strcmp(line, "BOOST_MS")) { BOOST_MS = atoi(v); if (BOOST_MS < 0 || BOOST_MS > 2000) BOOST_MS = 150; }
             else if (!strcmp(line, "BOOST_KHZ")) { BOOST_KHZ = atoi(v); if (BOOST_KHZ < 0) BOOST_KHZ = 0; }
+            else if (!strcmp(line, "IDLE_CAP_MS")) { IDLE_CAP_MS = atoi(v); if (IDLE_CAP_MS < 0 || IDLE_CAP_MS > 120000) IDLE_CAP_MS = 10000; }
+            else if (!strcmp(line, "IDLE_CAP_KHZ")) { IDLE_CAP_KHZ = atoi(v); if (IDLE_CAP_KHZ < 0) IDLE_CAP_KHZ = 792000; }
+            else if (!strcmp(line, "FL_TIMEOUT")) { FL_TIMEOUT = atoi(v); if (FL_TIMEOUT < 0 || FL_TIMEOUT > 3600) FL_TIMEOUT = 0; }
             else if (!strcmp(line, "FAST_DRAG")) FAST_DRAG = b;
             else if (!strcmp(line, "SCROLL_PX")) { SCROLL_PX = atoi(v); if (SCROLL_PX < 0 || SCROLL_PX > 400) SCROLL_PX = 20; }
             else if (!strcmp(line, "G_TAP_KEY")) {
@@ -591,7 +597,15 @@ static long boost_until = 0;          /* 0 = not boosted */
 static int boost_on = 0;
 static char boost_orig[24];
 static unsigned long n_boost = 0;
-static char CPUFREQ_MIN[160], CPUFREQ_MAX[160];   /* empty = no --cpufreq: boost off */
+static char CPUFREQ_MIN[160], CPUFREQ_MAX[160], CPUFREQ_AVAIL[160];   /* empty = no --cpufreq: boost off */
+static int idle_cap_probed = 0, idle_cap_on = 0;
+static char idle_cap_orig[24], idle_cap_target[24];
+static unsigned long n_idle_cap = 0;
+static long last_activity_ms = 0;
+static int fl_dimmed = 0, fl_saved_br = 0;
+static void el_init(void);
+static int el_read(int side);
+static void el_write(int side, int v);
 static int sysfs_read(const char *path, char *buf, int len)
 {
     int fd = open(path, O_RDONLY);
@@ -609,6 +623,59 @@ static int sysfs_write(const char *path, const char *v)
     int r = write(fd, v, strlen(v));
     close(fd);
     return r < 0 ? -1 : 0;
+}
+static void idle_cap_init(void)
+{
+    if (idle_cap_probed || !CPUFREQ_MAX[0]) return;
+    idle_cap_probed = 1;
+    idle_cap_orig[0] = idle_cap_target[0] = 0;
+    if (sysfs_read(CPUFREQ_MAX, idle_cap_orig, sizeof(idle_cap_orig)) < 0) return;
+    long orig = atol(idle_cap_orig);
+    if (orig <= 0) return;
+    long best = 0;
+    char av[256];
+    if (CPUFREQ_AVAIL[0] && sysfs_read(CPUFREQ_AVAIL, av, sizeof(av)) > 0) {
+        char *p = av;
+        while (*p) {
+            while (*p == ' ' || *p == '\t') p++;
+            if (!*p) break;
+            long f = strtol(p, &p, 10);
+            if (f > 0 && f < orig && f <= IDLE_CAP_KHZ && f > best) best = f;
+        }
+    }
+    if (best > 0) {
+        snprintf(idle_cap_target, sizeof(idle_cap_target), "%ld", best);
+        logf_("idle cap: orig=%ld kHz -> cap=%ld kHz after %d ms", orig, best, IDLE_CAP_MS);
+    }
+}
+static void idle_cap_end(void)
+{
+    if (!idle_cap_on) return;
+    if (idle_cap_orig[0] && CPUFREQ_MAX[0]) sysfs_write(CPUFREQ_MAX, idle_cap_orig);
+    idle_cap_on = 0;
+}
+static void idle_cap_begin(void)
+{
+    if (idle_cap_on || IDLE_CAP_MS <= 0 || !CPUFREQ_MAX[0] || boost_on) return;
+    idle_cap_init();
+    if (!idle_cap_target[0]) return;
+    if (sysfs_write(CPUFREQ_MAX, idle_cap_target) == 0) { idle_cap_on = 1; n_idle_cap++; }
+}
+static void fl_timeout_wake(void)
+{
+    if (!fl_dimmed) return;
+    fl_dimmed = 0;
+    el_init();
+    if (el_read(0) == 0 && fl_saved_br > 0) {
+        el_write(0, fl_saved_br);
+        logf_("fl_timeout: restored brightness %d", fl_saved_br);
+    }
+}
+static void activity_touch(void)
+{
+    last_activity_ms = now_ms();
+    idle_cap_end();
+    fl_timeout_wake();
 }
 static void boost_begin(void)
 {
@@ -1009,6 +1076,7 @@ static void handle_frame(struct input_event *fr, int n)
     if (active && !prev_any) {        /* first finger down: boost before anything else (the gconf may switch it off) */
         idle_thaw();                  /* the container first: the frame below goes to its input reader */
         gconf_load();
+        activity_touch();             /* uncap CPU max freq & restore dimmed frontlight before boost */
         boost_begin();
         boost_until = 0;              /* held while a finger is down */
         scroll_sent = 0;
@@ -1637,6 +1705,7 @@ static void handle_page_key(int code)
                                : (is_next ? KEY_VOLUMEDOWN : KEY_VOLUMEUP);
     logf_("hw key %d -> key %d (rot=%d swap=%d)", code, out_key, ROT, KEY_SWAP);
     idle_thaw();
+    activity_touch();
     boost_begin();
     if (boost_on) boost_until = now_ms() + BOOST_MS;
     epd_dir(is_next ? 2 : 3);
@@ -1662,6 +1731,7 @@ static void pk_check(void)
             logf_("hw key %d (%s) long-press %dms -> %s", pk_down[i].code, i ? "next" : "prev", KEY_LONG_MS, act);
             if (act[0] && strcmp(act, "none")) {
                 idle_thaw();
+                activity_touch();
                 boost_begin();
                 if (boost_on) boost_until = now + BOOST_MS;
                 action("keylong", act);
@@ -1770,6 +1840,7 @@ int main(int argc, char **argv)
             const char *d = argv[++i];
             snprintf(CPUFREQ_MIN, sizeof(CPUFREQ_MIN), "%s/scaling_min_freq", d);
             snprintf(CPUFREQ_MAX, sizeof(CPUFREQ_MAX), "%s/scaling_max_freq", d);
+            snprintf(CPUFREQ_AVAIL, sizeof(CPUFREQ_AVAIL), "%s/scaling_available_frequencies", d);
         }
         else if (!strcmp(argv[i], "--proto") && i + 1 < argc) {
             const char *v = argv[++i];
@@ -1839,6 +1910,8 @@ int main(int argc, char **argv)
         if (want_release) {
             want_release = 0;
             boost_end();
+            idle_cap_end();
+            fl_timeout_wake();
             gyro_want = -1;
             if (!paused) { release_android(1, "released to the Kindle"); ioctl(tfd, EVIOCGRAB, 0); if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 0); if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 0); paused = 1; md = IDLE; nheld = 0; nf = 0; slots_reset(); memset(as_, 0, sizeof(as_)); st_btn = 0; logf_("released"); }
         }
@@ -1854,12 +1927,42 @@ int main(int argc, char **argv)
             }
         }
         if (boost_until && now_ms() >= boost_until) boost_end();
+        if (!last_activity_ms) last_activity_ms = now_ms();
+        if (!paused && !is_sleeping() && !count_active()) {
+            long idle_ms = now_ms() - last_activity_ms;
+            if (!idle_cap_on && IDLE_CAP_MS > 0 && !boost_on && idle_ms >= IDLE_CAP_MS) idle_cap_begin();
+            if (!fl_dimmed && FL_TIMEOUT > 0 && idle_ms >= (long)FL_TIMEOUT * 1000L) {
+                el_init();
+                int cur_br = el_read(0);
+                if (cur_br > 0) {
+                    fl_saved_br = cur_br;
+                    fl_dimmed = 1;
+                    el_write(0, 0);
+                    logf_("fl_timeout: dimmed %d -> 0 after %ds idle", cur_br, FL_TIMEOUT);
+                } else {
+                    last_activity_ms = now_ms(); /* already off; check again later */
+                }
+            }
+        }
         gyro_check();
         pk_check();
         struct pollfd pf[4] = { { tfd, POLLIN, 0 }, { ifd, POLLIN, 0 }, { tapfd, POLLIN, 0 }, { keyfd, POLLIN, 0 } };
         int pto = md == IDLE ? -1 : 10;
         if (STUCK_MS > 0 && (out_any() || count_active())) { int w = STUCK_MS / 4 > 10 ? STUCK_MS / 4 : 10; if (pto < 0 || w < pto) pto = w; }
         if (boost_until) { long left = boost_until - now_ms(); if (left < 1) left = 1; if (pto < 0 || left < pto) pto = (int)left; }
+        if (!paused && !is_sleeping() && !count_active()) {
+            long idle_ms = now_ms() - last_activity_ms;
+            if (!idle_cap_on && IDLE_CAP_MS > 0 && CPUFREQ_MAX[0]) {
+                long left = IDLE_CAP_MS - idle_ms;
+                if (left < 10) left = 10;
+                if (pto < 0 || left < pto) pto = (int)left;
+            }
+            if (!fl_dimmed && FL_TIMEOUT > 0) {
+                long left = (long)FL_TIMEOUT * 1000L - idle_ms;
+                if (left < 50) left = 50;
+                if (pto < 0 || left < pto) pto = (int)left;
+            }
+        }
         if (G_AUTO_ROTATE && gyro_want >= 0 && gyro_want != ROT) {
             long left = GYRO_SETTLE_MS - (now_ms() - gyro_since);
             if (left < 1) left = 1;
@@ -1980,6 +2083,8 @@ int main(int argc, char **argv)
         }
     }
     boost_end();
+    idle_cap_end();
+    fl_timeout_wake();
     ioctl(tfd, EVIOCGRAB, 0);
     if (tapfd >= 0) ioctl(tapfd, EVIOCGRAB, 0);
     if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 0);

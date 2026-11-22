@@ -373,6 +373,10 @@ static int skip_cfa = 0;      /* --skip-cfa 1: experimental, off by default. On 
 static int g_has_eclipse = 0;
 static int g_eclipse_en = 1;
 static int g_heavy_flash_en = 1;
+static int g_img_dither = 1;       /* KFB_IMG_DITHER: tile-level 4x4 Bayer ordered dither for grayscale images only */
+static int sp_valid = 0, sp_x0 = 0, sp_y0 = 0, sp_w = 0, sp_h = 0, sp_hits = 0;
+static long sp_last_ms = 0, sp_drawn_ms = 0;
+static unsigned long n_spinner_skip = 0;
 static int g_dark_page = 0;
 static int g_dark_known = 0;
 static int g_dark_crush = 36;
@@ -420,6 +424,53 @@ static void kobo_analyze_frame(const uint8_t *y8, int *out_dark_pct, int *out_mi
     *out_body_vis = (int)bvis;
 }
 
+/* Tile-level 4x4 Bayer ordered dithering for grayscale illustrations/covers only (pure text tiles stay untouched).
+   Returns a freshly malloc'd buffer if >=1 image tile was dithered, or NULL if the region is pure text/UI. */
+static uint8_t *kobo_smart_img_dither(const uint8_t *buf, int x, int y, int w, int h)
+{
+    static const int8_t bayer4[4][4] = {
+        { -8,  0, -6,  2 },
+        {  4, -4,  6, -2 },
+        { -5,  3, -7,  1 },
+        {  7, -1,  5, -3 }
+    };
+    uint8_t *out = NULL;
+    for (int ty = 0; ty < h; ty += 32) {
+        int th = (ty + 32 <= h) ? 32 : (h - ty);
+        for (int tx = 0; tx < w; tx += 32) {
+            int tw = (tx + 32 <= w) ? 32 : (w - tx);
+            int mid = 0, samp = 0;
+            for (int dy = 1; dy < th; dy += 2) {
+                const uint8_t *row = buf + (size_t)(ty + dy) * w + tx;
+                for (int dx = 1; dx < tw; dx += 2) {
+                    uint8_t v = row[dx];
+                    samp++;
+                    if (v >= 36 && v <= 220) mid++;
+                }
+            }
+            if (samp == 0 || mid * 100 < samp * 25) continue;
+            if (!out) {
+                out = malloc((size_t)w * h);
+                if (!out) return NULL;
+                memcpy(out, buf, (size_t)w * h);
+            }
+            for (int dy = 0; dy < th; dy++) {
+                uint8_t *row = out + (size_t)(ty + dy) * w + tx;
+                const int8_t *br = bayer4[(y + ty + dy) & 3];
+                for (int dx = 0; dx < tw; dx++) {
+                    int v = row[dx];
+                    if (v >= 16 && v <= 239) {
+                        v += br[(x + tx + dx) & 3];
+                        if (v < 0) v = 0;
+                        else if (v > 255) v = 255;
+                        row[dx] = (uint8_t)v;
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
 static void kobo_polish_dark_y8(uint8_t *y8, size_t n)
 {
     for (size_t i = 0; i < n; i++) y8[i] = dark_lut[y8[i]];
@@ -1155,15 +1206,23 @@ static int push_y8(const uint8_t *buf, int x, int y, int w, int h, int mode)
         for (size_t i = 0; i < (size_t)w * h; i++) mono[i] = buf[i] >= mono_level ? 255 : 0;
         c.dithering_mode = HWD_PASSTHROUGH;
     }
-    int rc;
 #ifdef FBINK_FOR_KOBO
-    if (anim) {
-        rc = kobo_wipe_y8(mono ? mono : buf, x, y, w, h, last_swipe_dir, swipe_steps, c);
-        if (rc < 0) rc = fbink_print_raw_data(fbfd, (unsigned char *)(mono ? mono : buf), w, h, (size_t)w * h, (short)x, (short)y, &c);
-    } else {
-        rc = fbink_print_raw_data(fbfd, (unsigned char *)(mono ? mono : buf), w, h, (size_t)w * h, (short)x, (short)y, &c);
+    uint8_t *smart_d = NULL;
+    if (!mono && g_img_dither && dither == 0 && !g_scroll && !g_color &&
+        c.wfm_mode != WFM_A2 && c.wfm_mode != WFM_DU && w >= 64 && h >= 64) {
+        smart_d = kobo_smart_img_dither(buf, x, y, w, h);
     }
+    const uint8_t *send_buf = mono ? mono : (smart_d ? smart_d : buf);
+    int rc;
+    if (anim) {
+        rc = kobo_wipe_y8(send_buf, x, y, w, h, last_swipe_dir, swipe_steps, c);
+        if (rc < 0) rc = fbink_print_raw_data(fbfd, (unsigned char *)send_buf, w, h, (size_t)w * h, (short)x, (short)y, &c);
+    } else {
+        rc = fbink_print_raw_data(fbfd, (unsigned char *)send_buf, w, h, (size_t)w * h, (short)x, (short)y, &c);
+    }
+    free(smart_d);
 #else
+    int rc;
     rc = fbink_print_raw_data(fbfd, mono ? mono : buf, w, h, (size_t)w * h, (short)x, (short)y, &c);
 #endif
     free(mono);
@@ -1452,6 +1511,35 @@ static int show_page_rows(const uint8_t *shm, int page, int mode, int force_full
         (cy1[0] <= 56 || cy0[0] >= H - 56) && (cx1[0] - cx0[0]) <= 360 &&
         last_big_ms > 0 && now_ms() - last_big_ms < 180000) {
         return 0;
+    }
+    /* Loading-spinner throttle: repeated small-box redraws (<=180x180 px overlapping the same spot within 500 ms)
+       are throttled to once per 600 ms so single-core CPU stays free for TypeSetting and center ghosting is avoided. */
+    if (mode == M_AUTO && !force_full && !g_scroll && nc == 1) {
+        int sw = cx1[0] - cx0[0], sh = cy1[0] - cy0[0];
+        if (sw <= 180 && sh <= 180) {
+            long now_sp = now_ms();
+            int same = sp_valid && (now_sp - sp_last_ms < 500) &&
+                       abs(cx0[0] - sp_x0) <= 48 && abs(cy0[0] - sp_y0) <= 48 &&
+                       abs(sw - sp_w) <= 48 && abs(sh - sp_h) <= 48;
+            if (same) {
+                sp_hits++;
+                if (sp_hits >= 2 && now_sp - sp_drawn_ms < 600) {
+                    sp_last_ms = now_sp;
+                    n_spinner_skip++;
+                    return 0;
+                }
+                sp_drawn_ms = now_sp;
+            } else {
+                sp_hits = 1;
+                sp_drawn_ms = now_sp;
+            }
+            sp_x0 = cx0[0]; sp_y0 = cy0[0]; sp_w = sw; sp_h = sh;
+            sp_last_ms = now_sp; sp_valid = 1;
+        } else {
+            sp_valid = 0; sp_hits = 0;
+        }
+    } else if (nc > 1 || mode == M_FULL) {
+        sp_valid = 0; sp_hits = 0;
     }
 #endif
     /* 整页变化：交给 MTK 控制器做硬件滑动动画（和 Kindle 原生翻页同一套 P2SW/REAGL），
@@ -2269,6 +2357,7 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
             else if (!strncmp(line, "ECLIPSE", 7)) { int v; if (sscanf(line + 7, "%d", &v) == 1) { g_eclipse_en = v != 0; fprintf(stderr, "epd: eclipse_en=%d (hw=%d)\n", g_eclipse_en, g_has_eclipse); } }
             else if (!strncmp(line, "DARKCRUSH", 9)) { int v; if (sscanf(line + 9, "%d", &v) == 1 && v >= 0 && v <= 80) { g_dark_crush = v; build_dark_lut(); if (g_dark_page) redraw = 1; fprintf(stderr, "epd: dark_crush=%d\n", g_dark_crush); } }
             else if (!strncmp(line, "HEAVYFLASH", 10)) { int v; if (sscanf(line + 10, "%d", &v) == 1) { g_heavy_flash_en = v != 0; fprintf(stderr, "epd: heavy_flash_en=%d\n", g_heavy_flash_en); } }
+            else if (!strncmp(line, "IMGDITHER", 9)) { int v; if (sscanf(line + 9, "%d", &v) == 1) { g_img_dither = v != 0; fprintf(stderr, "epd: img_dither=%d\n", g_img_dither); } }
 #endif
             else if (!strncmp(line, "NOFLIP", 6)) { int v; if (sscanf(line + 6, "%d", &v) == 1 && v >= 0 && v <= 5000) noflip_until = now_ms() + v; }
             else if (!strncmp(line, "HINT", 4)) {

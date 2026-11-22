@@ -215,6 +215,7 @@ cmd_listen() {
             esac ;;
         wa)      type wa_request >/dev/null 2>&1 && wa_request "$a" ;;
         compile) type compile_cmd >/dev/null 2>&1 && compile_cmd "$a" ;;
+        wrmaint) ( wrmaint_cmd "$a" ) </dev/null >>"$LOG" 2>&1 & ;;
         optimize) ( opt_run ) & ;;
         poke)    touch "$W/lastinput" 2>/dev/null || true ;;
         wifi)
@@ -235,4 +236,70 @@ cmd_listen() {
             esac ;;
         esac
     done
+}
+
+wrmaint_status() {
+    _ma=$(awk '/^MemAvailable:/{printf "%.1f MB", $2/1024}' /proc/meminfo 2>/dev/null)
+    _zr=$(awk '{printf "%.1f MB", $1/1024/1024}' /sys/block/zram0/compr_data_size 2>/dev/null)
+    _cf=$(awk '{printf "%d MHz", $1/1000}' /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 2>/dev/null)
+    _odex=$(ls -lh "$SYS"/data/app/com.tencent.weread.eink-*/oat/arm/base.odex 2>/dev/null | awk 'NR==1{print $5}')
+    _w1=$(wc -c < "$SYS/data/data/com.tencent.weread.eink/databases/WRBook-wal" 2>/dev/null || echo 0)
+    _w2=$(wc -c < "$SYS/data/data/com.tencent.weread.eink/databases/WRReader-wal" 2>/dev/null || echo 0)
+    _wal_kb=$(( (_w1 + _w2) / 1024 ))
+    _lps=$(cat /proc/net/rtl8723ds/wlan0/lps_info 2>/dev/null | awk '/lps_mode/{print $NF; exit}')
+    {
+        echo "可用内存：${_ma:-?}（ZRAM 已压缩：${_zr:-0 MB}）"
+        echo "当前 CPU 上限：${_cf:-?}（静止限频：${IDLE_CAP_MS:-10000}ms / $(( ${IDLE_CAP_KHZ:-792000} / 1000 ))MHz）"
+        echo "微信读书热点包 (base.odex)：${_odex:-未编译}"
+        echo "微信读书数据库 WAL 占用：${_wal_kb} KB"
+        echo "笔锋加黑档位：${KFB_FONT_GAMMA:-2}　|　插图智能抖动：${KFB_IMG_DITHER:-1}"
+        echo "无操作自动息灯：${FL_TIMEOUT:-0} 秒　|　Wi-Fi LPS：${_lps:-auto}"
+    } > "$X/wrmaint.txt.tmp" && mv -f "$X/wrmaint.txt.tmp" "$X/wrmaint.txt"
+}
+
+wrmaint_cmd() {
+    case "$1" in
+        wal)
+            echo "正在清理微信读书日志并压缩 SQLite WAL..." > "$X/wrmaint.txt"
+            rm -rf "$SYS/data/data/com.tencent.weread.eink/files/log"/* \
+                   "$SYS/data/data/com.tencent.weread.eink/files/logs"/* \
+                   "$SYS/data/data/com.tencent.weread.eink/files/BusReport"/* \
+                   "$SYS/data/data/com.tencent.weread.eink/files"/wr.log.* 2>/dev/null || true
+            _lua=/mnt/onboard/.adds/koreader/luajit
+            _sql=/mnt/onboard/.adds/koreader/libs/libsqlite3.so
+            if [ -x "$_lua" ] && [ -f "$_sql" ]; then
+                for _db in WRBook WRReader; do
+                    _f="$SYS/data/data/com.tencent.weread.eink/databases/$_db"
+                    [ -f "$_f" ] || continue
+                    WR_DB="$_f" "$_lua" -e '
+                        local ffi = require("ffi")
+                        ffi.cdef[[int sqlite3_open(const char*, void**); int sqlite3_exec(void*, const char*, void*, void*, char**); int sqlite3_close(void*);]]
+                        local sq = ffi.load("'"$_sql"'")
+                        local p = ffi.new("void*[1]")
+                        if sq.sqlite3_open(os.getenv("WR_DB"), p) == 0 then
+                            sq.sqlite3_exec(p[0], "PRAGMA busy_timeout=1500; PRAGMA wal_checkpoint(TRUNCATE); PRAGMA optimize;", nil, nil, nil)
+                            sq.sqlite3_close(p[0])
+                        end
+                    ' 2>/dev/null || true
+                done
+            fi
+            wrmaint_status
+            echo "✔ 日志清理与数据库 WAL 压缩已完成" >> "$X/wrmaint.txt"
+            [ -p "$X/epd.fifo" ] && echo "BADGE 1200 t clear DONE|微信读书维护完成" > "$X/epd.fifo" 2>/dev/null || true
+            ;;
+        profile)
+            echo "正在采集热点并刷新微信读书 speed-profile 编译（后台执行约 1–2 分钟）..." > "$X/wrmaint.txt"
+            if [ -f "$VD/tools/weread-speed-profile.sh" ]; then
+                sh "$VD/tools/weread-speed-profile.sh" >>"$LOG" 2>&1 || true
+            elif type weread_profile_refresh >/dev/null 2>&1; then
+                weread_profile_refresh >>"$LOG" 2>&1 || true
+            fi
+            wrmaint_status
+            echo "✔ 微信读书热点加速编译已刷新" >> "$X/wrmaint.txt"
+            [ -p "$X/epd.fifo" ] && echo "BADGE 1200 t clear DONE|热点编译刷新完成" > "$X/epd.fifo" 2>/dev/null || true
+            ;;
+        *)
+            wrmaint_status
+            ;;
+    esac
 }

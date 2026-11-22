@@ -229,6 +229,15 @@ grep -q 'g_reader_mode' "$TOP/display/legacy/epd.c" \
     && grep -q 'isReaderActivity' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HostService.java" \
     && ok "Page-turn animation gated strictly to reading-page turns (READER + fresh DIR)" \
     || fail "missing reader-only page-turn animation gate"
+grep -q 'kobo_smart_img_dither' "$TOP/display/legacy/epd.c" \
+    && grep -q 'n_spinner_skip' "$TOP/display/legacy/epd.c" \
+    && grep -q 'idle_cap_begin' "$TOP/input/legacy/vinput.c" \
+    && grep -q 'FL_TIMEOUT' "$TOP/input/legacy/vinput.c" \
+    && grep -q 'wrmaint_cmd' "$TOP/host/kobo/boot/lib/cmd.sh" \
+    && grep -q 'wrMaintDialog' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && grep -q 'KFB_IMG_DITHER' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && ok "Spinner throttle, Smart Image Dither (KFB_IMG_DITHER), Reading Idle CPU Cap, FL_TIMEOUT, and WeRead Maintenance Dashboard wired end-to-end" \
+    || fail "missing spinner/img-dither/idle-cap/fl-timeout/wrmaint wiring"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"
