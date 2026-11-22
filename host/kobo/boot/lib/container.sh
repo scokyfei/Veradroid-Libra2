@@ -230,6 +230,7 @@ container_start() {
         fi
     fi
     sysfont_prepare
+    type skia_opt_sync >/dev/null 2>&1 && skia_opt_sync
     fstrim_defuse
     # Purge any cached WeRead self-update metadata (KVAppUpdate/KVAppUpdateFile), downloaded update APKs,
     # and queued telemetry/crash upload spools (BusReport / Bugly uploads / oversized bugly_db_).

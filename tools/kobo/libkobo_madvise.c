@@ -32,6 +32,9 @@ extern int pthread_detach(long);
 extern void *opendir(const char *);
 extern void *readdir(void *);
 extern int closedir(void *);
+struct prop_info;
+extern const struct prop_info *__system_property_find(const char *);
+extern int __system_property_read(const struct prop_info *, char *, char *);
 
 #define RTLD_LAZY       1
 #define PRIO_PROCESS    0
@@ -386,10 +389,11 @@ static void tune_weread_threads(void)
         if (tid == 0) continue;
         if (str_starts(comm, "WRCommonPool") ||
             str_starts(comm, "WRNetworkPool")) {
-            /* Match Koboweread PoolPriority.java: put ONLY WRCommonPool & WRNetworkPool
-               at nice 19 so they yield completely to UI/page-turns after book open,
-               while NEVER touching Bugly-ThreadMonitor0 (avoids MessageQueue lock inversion). */
-            setpriority(PRIO_PROCESS, tid, 19);
+            /* Put WRCommonPool & WRNetworkPool at nice 10: yields 90% CPU to main (nice 0)
+               and 99.6% to TypeSetting (nice -6), yet stays strictly above :seg (nice 19)
+               so a stop-the-world MS GC or SQLiteConnectionPool lock held by WRCommonPool
+               is never starved by :seg dictionary loading. Never touch Bugly-ThreadMonitor0. */
+            setpriority(PRIO_PROCESS, tid, 10);
         } else if (str_starts(comm, "TypeSetting")) {
             /* Give chapter typesetting near-UI priority (-6) so TOC chapter jumps
                win the single Cortex-A9 core over background pools. */
@@ -472,9 +476,10 @@ static void lower_all_threads_nice8(void)
         if (ent->d_name[0] < '1' || ent->d_name[0] > '9')
             continue;
         unsigned int tid = (unsigned int)parse_uint(ent->d_name);
-        /* Mild nice 8 (not 19): keeps :seg out of the way of main (-10) and TypeSetting (-6)
-           without starving :seg GC safepoints (was 499ms pause) or Binder calls. */
-        if (tid > 0) setpriority(PRIO_PROCESS, tid, 8);
+        /* Match Koboweread SegDictRelease.java: keep :seg threads at nice 19 so background
+           21 MB IK dictionary loading and chapter segmentation only use leftover idle CPU
+           and never preempt main (0), TypeSetting (-6), or WRCommonPool (10). */
+        if (tid > 0) setpriority(PRIO_PROCESS, tid, 19);
     }
     closedir(d);
 }
@@ -560,12 +565,17 @@ static const char *load_weread_opt_jar(JNIEnvPtr e, jobj app, const char *proc_n
     return "loaded";
 }
 
+static void configure_weread_art_heap(const char *proc, int (*say)(int, const char *, const char *, ...));
+
 static void *weread_seg_opt_thread(void *unused)
 {
     (void)unused;
     void *log = dlopen("liblog.so", RTLD_LAZY);
     int (*say)(int, const char *, const char *, ...) =
         log ? (int (*)(int, const char *, const char *, ...))dlsym(log, "__android_log_print") : NULL;
+
+    /* Apply WeRead-only ART Heap (4m-8m, 0.75) + non-concurrent MS GC to :seg */
+    configure_weread_art_heap("seg", say);
 
     int (*get_vms)(JavaVMPtr *, int, int *) =
         (int (*)(JavaVMPtr *, int, int *))dlsym((void *)-2L, "JNI_GetCreatedJavaVMs");
@@ -828,12 +838,124 @@ int fdatasync(int fd)
     return (int)syscall(148L, fd);
 }
 
+/* Per-process ART property overrides (matching Koboweread jit-config.c):
+   WeRead (com.tencent.weread.eink & :seg) gets MS collector, 4m-8m free heap, 0.75 utilization,
+   96m memory class (for Glide cover bitmap cache), and JIT hot-method profiling;
+   other app processes keep standard Android CMS defaults and 64m memory class. */
+int __system_property_get(const char *name, char *value)
+{
+    const char *setting = NULL;
+    if (name && value) {
+        if (is_weread_proc()) {
+            if (str_eq(name, "dalvik.vm.gctype")) setting = "MS";
+            else if (str_eq(name, "dalvik.vm.heapminfree")) setting = "4m";
+            else if (str_eq(name, "dalvik.vm.heapmaxfree")) setting = "8m";
+            else if (str_eq(name, "dalvik.vm.heaptargetutilization")) setting = "0.75";
+            else if (str_eq(name, "dalvik.vm.heapgrowthlimit")) setting = "96m";
+            else if (str_eq(name, "dalvik.vm.usejit")) setting = "true";
+            else if (str_eq(name, "dalvik.vm.usejitprofiles")) setting = "true";
+            else if (str_eq(name, "dalvik.vm.jitinitialsize")) setting = "256K";
+            else if (str_eq(name, "dalvik.vm.jitmaxsize")) setting = "8M";
+        } else if (getuid() >= 10000) {
+            if (str_eq(name, "dalvik.vm.heapgrowthlimit")) setting = "64m";
+        }
+        if (setting) {
+            int n = 0;
+            while (setting[n]) { value[n] = setting[n]; n++; }
+            value[n] = 0;
+            return n;
+        }
+    }
+    const struct prop_info *pi = name ? __system_property_find(name) : NULL;
+    if (!pi) {
+        if (value) value[0] = 0;
+        return 0;
+    }
+    return __system_property_read(pi, NULL, value);
+}
+
+static void configure_weread_art_heap(const char *proc, int (*say)(int, const char *, const char *, ...))
+{
+    void *art = dlopen("/system/lib/libart.so", RTLD_LAZY);
+    if (!art) art = dlopen("libart.so", RTLD_LAZY);
+    if (!art) return;
+    uintptr_t *rt_sym = (uintptr_t *)dlsym(art, "_ZN3art7Runtime9instance_E");
+    void (*set_util)(void *, float) =
+        (void (*)(void *, float))dlsym(art, "_ZN3art2gc4Heap24SetTargetHeapUtilizationEf");
+    if (!rt_sym || !*rt_sym) return;
+    uint32_t *heap = *(uint32_t **)(*rt_sym + 0xc8u);
+    if (!heap) return;
+    if (heap[0xec / 4] == (192u << 20) && heap[0xf0 / 4] == (96u << 20) &&
+        (heap[0x58 / 4] == 1u || heap[0x58 / 4] == 2u) &&
+        (heap[0x5c / 4] == 1u || heap[0x5c / 4] == 2u) &&
+        heap[0x2d8 / 4] >= (512u << 10) && heap[0x2d8 / 4] <= (32u << 20)) {
+        /* Switch the 3 MarkSweep collectors (full, partial, sticky) in garbage_collectors_
+           (std::vector at heap + 0x300) from concurrent CMS (is_concurrent_ @ +0x1d0 == 1)
+           to non-concurrent MS (is_concurrent_ @ +0x1d0 == 0) before updating collector_type_. */
+        uintptr_t *gc_begin = (uintptr_t *)heap[0x300 / 4];
+        uintptr_t *gc_end   = (uintptr_t *)heap[0x304 / 4];
+        int switched = 0;
+        if (gc_begin && gc_end && gc_end > gc_begin && (gc_end - gc_begin) <= 8) {
+            for (uintptr_t *p = gc_begin; p < gc_end && switched < 3; p++) {
+                uint8_t *c = (uint8_t *)(*p);
+                if (!c) continue;
+                int (*get_ct)(void *) = *(int (**)(void *))(*(uintptr_t *)c + 0x14u);
+                int ct = get_ct ? get_ct(c) : 0;
+                if ((ct == 1 || ct == 2) && (c[0x1d0] == 0 || c[0x1d0] == 1)) {
+                    c[0x1d0] = 0;
+                    switched++;
+                }
+            }
+        }
+        if (switched == 3) {
+            heap[0x58 / 4] = 1u;          /* collector_type_ = kCollectorTypeMS */
+            heap[0x5c / 4] = 1u;          /* foreground_collector_type_ = kCollectorTypeMS */
+            heap[0x100 / 4] = 0xffffffffu;/* concurrent_start_bytes_ = UINT32_MAX */
+        }
+        heap[0x2d8 / 4] = 4u << 20;       /* min_free_ = 4 MB */
+        heap[0x2dc / 4] = 8u << 20;       /* max_free_ = 8 MB (Koboweread 1.9.7) */
+        if (set_util) set_util(heap, 0.75f);
+        if (say) say(4, "KoboWeRead", "ART_HEAP proc=%s gctype=%s(collectors=%d) minfree=4m maxfree=8m growth=96m",
+                     proc, switched == 3 ? "MS" : "CMS", switched);
+    } else if (say) {
+        say(4, "KoboWeRead", "ART_HEAP proc=%s skipped cap=%u growth=%u fg=%u",
+            proc, heap[0xec / 4], heap[0xf0 / 4], heap[0x5c / 4]);
+    }
+}
+
+static void *other_app_skia_opt_thread(void *unused)
+{
+    (void)unused;
+    usleep(400000);
+    void *log = dlopen("liblog.so", RTLD_LAZY);
+    int (*say)(int, const char *, const char *, ...) =
+        log ? (int (*)(int, const char *, const char *, ...))dlsym(log, "__android_log_print") : NULL;
+    void *skia = dlopen("libskia.so", RTLD_LAZY);
+    if (skia) {
+#ifdef __ARM_NEON
+        install_neon_blit(skia, say);
+        install_neon_color(skia, say);
+#endif
+        unsigned (*set_lim)(unsigned) = (unsigned (*)(unsigned))dlsym(skia, "_ZN10SkGraphics17SetFontCacheLimitEj");
+        int (*set_cnt)(int) = (int (*)(int))dlsym(skia, "_ZN10SkGraphics22SetFontCacheCountLimitEi");
+        unsigned (*get_lim)(void) = (unsigned (*)(void))dlsym(skia, "_ZN10SkGraphics17GetFontCacheLimitEv");
+        if (set_lim) set_lim(8u << 20);
+        if (set_cnt) set_cnt(4096);
+        if (say && get_lim)
+            say(4, "KoboWeRead", "SKIA_ALL_APP limit=%u count_limit=4096", get_lim());
+    }
+    return NULL;
+}
+
 static void *weread_opt_thread(void *unused)
 {
     (void)unused;
     void *log = dlopen("liblog.so", RTLD_LAZY);
     int (*say)(int, const char *, const char *, ...) =
         log ? (int (*)(int, const char *, const char *, ...))dlsym(log, "__android_log_print") : NULL;
+
+    /* 0. Apply WeRead-only ART Heap (4m-8m, 0.75) + non-concurrent MS GC */
+    configure_weread_art_heap("main", say);
 
     /* 1. Install NEON Skia blitters (byte-for-byte self-verified) + 16 MB Skia glyph cache */
     void *skia = dlopen("libskia.so", RTLD_LAZY);
@@ -946,5 +1068,13 @@ static void maybe_init_weread_opt(void)
         long tid = 0;
         if (pthread_create(&tid, NULL, weread_seg_opt_thread, NULL) == 0)
             pthread_detach(tid);
+    } else if (cmd[0] != '/' && str_has(cmd, ".") && !str_starts(cmd, "com.tencent.weread.eink")) {
+        int fd = open("/data/local/tmp/kobo-skia-all", 0);
+        if (fd >= 0) {
+            close(fd);
+            long tid = 0;
+            if (pthread_create(&tid, NULL, other_app_skia_opt_thread, NULL) == 0)
+                pthread_detach(tid);
+        }
     }
 }

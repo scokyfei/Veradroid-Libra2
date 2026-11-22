@@ -189,9 +189,11 @@ public class HostSettingsActivity extends Activity {
             stepper("大图后自动清残影", "离开包含大面积插图或深色块的页面时，自动做一次整屏全刷清残影（开启“不按页数闪”时同步停用）。",
                 "KFB_HEAVY_FLASH", new String[] { "关", "开（默认）" }, new String[] { "0", "1" }, "1", null);
             stepper("非翻页定时全刷", "开关目录、弹窗、划词等非翻页局部刷新累计达到此次数后自动整屏清残影。",
-                "KFB_GCN", new String[] { "关", "每 20 次（默认）", "每 30 次", "每 50 次" }, new String[] { "0", "20", "30", "50" }, "20", null);
+                "KFB_GCN", new String[] { "关（默认）", "每 20 次", "每 30 次", "每 50 次" }, new String[] { "0", "20", "30", "50" }, "0", null);
             stepper("切换应用首屏全刷", "切换到新应用的第一屏自动全刷一次，防止上一个界面的底影带入新页面。",
-                "KFB_NEWWIN", new String[] { "关", "开（默认）" }, new String[] { "0", "1" }, "1", null);
+                "KFB_NEWWIN", new String[] { "关（默认）", "开" }, new String[] { "0", "1" }, "0", null);
+            stepper("全局 NEON 文字与字形加速", "为微信读书以外的其他应用也启用 ARM NEON 文字/矩形混合加速与 8 MB 字形缓存（微信读书始终启用 16 MB）。",
+                "KFB_SKIA_OPT", new String[] { "仅微信读书", "所有应用（默认）" }, new String[] { "0", "1" }, "1", null);
         }
         section("画面");
         stepper("浅色过滤", Panel.LIGHTF_DESC, "KFB_LIGHTF", Panel.LIGHTF_L, Panel.LIGHTF_V, "0", null);

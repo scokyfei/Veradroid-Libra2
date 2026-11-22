@@ -125,11 +125,13 @@ grep -q 'SYSTEM_FONT=' "$TOP/host/kobo/boot/lib/settings.sh" \
     && ok "kobo-sdcard zero-FUSE vold helper present and bind-mounted over /system/bin/sdcard" \
     || fail "kobo-sdcard missing or not wired in container.sh"
 grep -q '^HEAP_TARGET_UTIL=' "$TOP/host/kobo/models/libra2.conf" \
-    && grep -q '^HEAP_MINFREE=4m' "$TOP/host/kobo/models/libra2.conf" \
-    && grep -q '^DALVIK_GCTYPE=MS' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q '^HEAP_MINFREE=2m' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q '^WEREAD_GCTYPE=MS' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q '^WEREAD_HEAP_MAXFREE=8m' "$TOP/host/kobo/models/libra2.conf" \
     && grep -q 'heaptargetutilization' "$TOP/host/kobo/boot/lib/memory.sh" \
-    && grep -q 'dalvik\.vm\.gctype' "$TOP/host/kobo/boot/lib/memory.sh" \
-    && ok "ART heap + non-concurrent MS GC tuning (minfree/maxfree/targetutil/gctype) wired" || fail "ART heap/GC tuning missing"
+    && grep -q 'configure_weread_art_heap' "$TOP/tools/kobo/libkobo_madvise.c" \
+    && grep -q '__system_property_get' "$TOP/tools/kobo/libkobo_madvise.c" \
+    && ok "Per-process WeRead ART heap (4m-8m, 0.75) + non-concurrent MS GC tuning wired" || fail "ART heap/GC tuning missing"
 grep -q 'cpufreq.interactive.state' "$TOP/host/kobo/boot/lib/memory.sh" \
     && grep -q 'io_is_busy' "$TOP/host/kobo/boot/lib/memory.sh" \
     && ok "interactive governor tuning saved/restored" || fail "interactive governor tuning missing"
@@ -168,6 +170,10 @@ grep -q 'SetFontCacheLimit' "$TOP/tools/kobo/libkobo_madvise.c" \
     || fail "missing Koboweread native WeRead optimizations"
 grep -q 'kobo-weread-opt.jar' "$TOP/host/kobo/boot/lib/container.sh" \
     && grep -q 'load_weread_opt_jar' "$TOP/tools/kobo/libkobo_madvise.c" \
+    && grep -q 'other_app_skia_opt_thread' "$TOP/tools/kobo/libkobo_madvise.c" \
+    && grep -q 'KFB_SKIA_OPT' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q 'KFB_SKIA_OPT' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && grep -q 'SegPrestart' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \
     && grep -q 'FontSizeCache' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \
     && grep -q 'FontMap' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \
     && grep -q 'SyncThrottle' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \
@@ -178,8 +184,8 @@ grep -q 'kobo-weread-opt.jar' "$TOP/host/kobo/boot/lib/container.sh" \
     && grep -q 'SegDictRelease' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \
     && grep -q 'speed-profile' "$TOP/host/kobo/boot/lib/compile.sh" \
     && grep -q 'weread_boot_prefetch' "$TOP/host/kobo/boot/lib/afterboot.sh" \
-    && ok "WeRead opt JAR (FontSizeCache + FontMap + SyncThrottle + MarkUsersCache + ChapterPrefetch + MemoryTrim + ReaderPageRelease + SegDictRelease) + speed-profile + boot-prefetch wired" \
-    || fail "missing WeRead opt JAR / speed-profile / boot-prefetch hooks"
+    && ok "WeRead opt JAR (SegPrestart + FontSizeCache + FontMap + SyncThrottle + MarkUsersCache + ChapterPrefetch + MemoryTrim + ReaderPageRelease + SegDictRelease) + KFB_SKIA_OPT + speed-profile + boot-prefetch wired" \
+    || fail "missing WeRead opt JAR / KFB_SKIA_OPT / speed-profile / boot-prefetch hooks"
 grep -q 'WFM_GLKW16' "$TOP/display/legacy/epd.c" \
     && grep -q 'WFM_GCK16' "$TOP/display/legacy/epd.c" \
     && grep -q 'kobo_polish_dark_y8' "$TOP/display/legacy/epd.c" \

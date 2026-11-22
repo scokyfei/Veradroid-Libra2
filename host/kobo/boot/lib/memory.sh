@@ -29,10 +29,14 @@ heap_fix() {
     _prop dalvik.vm.heapstartsize "${HEAP_START:-8m}"
     _prop dalvik.vm.heapgrowthlimit "$hg"
     _prop dalvik.vm.heapsize "$hs"
-    _prop dalvik.vm.heapminfree "${HEAP_MINFREE:-4m}"
-    _prop dalvik.vm.heapmaxfree "${HEAP_MAXFREE:-12m}"
+    _prop dalvik.vm.heapminfree "${HEAP_MINFREE:-2m}"
+    _prop dalvik.vm.heapmaxfree "${HEAP_MAXFREE:-8m}"
     _prop dalvik.vm.heaptargetutilization "${HEAP_TARGET_UTIL:-0.75}"
-    [ -n "${DALVIK_GCTYPE:-}" ] && _prop dalvik.vm.gctype "$DALVIK_GCTYPE"
+    if [ -n "${DALVIK_GCTYPE:-}" ]; then
+        _prop dalvik.vm.gctype "$DALVIK_GCTYPE"
+    else
+        sed -i '/^dalvik\.vm\.gctype=/d' "$f" 2>/dev/null || true
+    fi
     _prop ro.config.low_ram true
     _prop ro.config.max_starting_bg "${MAX_STARTING_BG:-2}"
     _prop ro.sys.fw.bg_apps_limit "${PROC_LIMIT:-2}"

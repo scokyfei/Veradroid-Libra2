@@ -16,7 +16,9 @@
  *                         returns heap pages via concurrentGC() + trimHeap().
  */
 import android.app.Application;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.database.DataSetObservable;
 import android.database.DataSetObserver;
 import android.os.Handler;
@@ -69,10 +71,48 @@ public final class KoboWeReadOpt {
             ChapterPrefetch.start(app);
             MemoryTrim.start(true);
             RMonitorStopper.start(app);
+            SegPrestart.start(app);
         } else if ("com.tencent.weread.eink:seg".equals(procName)) {
             Log.i(TAG, "OPT_INIT proc=seg");
             SegDictRelease.start(app);
             MemoryTrim.start(false);
+        }
+    }
+
+    /* ========================================================================
+     * 0. SegPrestart (adapted from Koboweread SegPrestart.java)
+     *    Pre-starts WeRead's word-segmentation service (process :seg) ~4s after
+     *    WeRead main starts, so :seg forks and initializes while idle on the
+     *    bookshelf instead of competing for the single CPU core during the
+     *    first book open.
+     * ======================================================================== */
+    static final class SegPrestart implements Runnable {
+        private final Application app;
+
+        private SegPrestart(Application app) {
+            this.app = app;
+        }
+
+        static void start(Application app) {
+            if (new File("/data/local/tmp/kobo-segprestart-disabled").exists()) return;
+            Thread t = new Thread(new SegPrestart(app), "kobo-seg-prestart");
+            t.setDaemon(true);
+            t.start();
+        }
+
+        @Override
+        public void run() {
+            try {
+                Process.setThreadPriority(19);
+                Thread.sleep(4000);
+                Intent intent = new Intent().setComponent(new ComponentName(
+                        "com.tencent.weread.eink",
+                        "com.tencent.weread.reader.segment.aidl.SegmentService"));
+                ComponentName cn = app.startService(intent);
+                Log.i(TAG, "SEG_PRESTART result=" + cn);
+            } catch (Throwable t) {
+                Log.w(TAG, "SEG_PRESTART err=" + t);
+            }
         }
     }
 
@@ -641,8 +681,13 @@ public final class KoboWeReadOpt {
                     int rss = readSelfRssKb();
                     Class<?> vm = Class.forName("dalvik.system.VMRuntime");
                     Object runtime = vm.getMethod("getRuntime").invoke(null);
-                    vm.getMethod("concurrentGC").invoke(runtime);
-                    vm.getMethod("trimHeap").invoke(runtime);
+                    try {
+                        Process.setThreadPriority(0);
+                        vm.getMethod("concurrentGC").invoke(runtime);
+                        vm.getMethod("trimHeap").invoke(runtime);
+                    } finally {
+                        try { Process.setThreadPriority(8); } catch (Throwable ignored) {}
+                    }
                     Log.i(TAG, "SEG_DICT released heap_kb=" + before + "->" + heapKb()
                             + " rss_kb=" + rss + "->" + readSelfRssKb());
                 } catch (Throwable err) {
@@ -1226,8 +1271,14 @@ public final class KoboWeReadOpt {
                         int before = readSelfRssKb();
                         Class<?> vm = Class.forName("dalvik.system.VMRuntime");
                         Object rt = vm.getMethod("getRuntime").invoke(null);
-                        vm.getMethod("concurrentGC").invoke(rt);
-                        vm.getMethod("trimHeap").invoke(rt);
+                        try {
+                            /* Never run a stop-the-world GC at nice 19 (Thread.MIN_PRIORITY) on single-core Cortex-A9! */
+                            Process.setThreadPriority(0);
+                            vm.getMethod("concurrentGC").invoke(rt);
+                            vm.getMethod("trimHeap").invoke(rt);
+                        } finally {
+                            try { Process.setThreadPriority(mainProc ? 19 : 8); } catch (Throwable ignored) {}
+                        }
                         Log.i(TAG, "MEM_TRIM heap proc=" + (mainProc ? "main" : "seg")
                                 + " avail_kb=" + avail + " rss_kb=" + before + "->" + readSelfRssKb());
                     }

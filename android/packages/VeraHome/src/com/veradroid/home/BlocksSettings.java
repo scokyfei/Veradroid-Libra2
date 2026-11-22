@@ -200,10 +200,12 @@ final class BlocksSettings {
                 @Override public void onStep(int i) { host("KFB_DARKCRUSH=" + DARKCRUSH_V[i]); } })));
             add(ng, Blocks.row(a, "大图后自动清残影", "Auto flash after images", toggle(!"0".equals(cfg.get("KFB_HEAVY_FLASH")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("KFB_HEAVY_FLASH=" + (on ? 1 : 0)); } })));
-            add(ng, Blocks.row(a, "非翻页定时全刷", "UI ghosting cleanup", new Blocks.Stepper(a, GCN_L, idx(GCN_V, cfg.get("KFB_GCN"), 1), new Blocks.Stepper.Listener() {
+            add(ng, Blocks.row(a, "非翻页定时全刷", "UI ghosting cleanup", new Blocks.Stepper(a, GCN_L, idx(GCN_V, cfg.get("KFB_GCN"), 0), new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { host("KFB_GCN=" + GCN_V[i]); } })));
-            add(ng, Blocks.row(a, "切换应用首屏全刷", "Full refresh on app switch", toggle(!"0".equals(cfg.get("KFB_NEWWIN")), new Icons.Toggle.Listener() {
+            add(ng, Blocks.row(a, "切换应用首屏全刷", "Full refresh on app switch", toggle("1".equals(cfg.get("KFB_NEWWIN")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("KFB_NEWWIN=" + (on ? 1 : 0)); } })));
+            add(ng, Blocks.row(a, "全局 NEON 文字与字形加速", "Skia NEON & glyph cache for all apps", toggle(!"0".equals(cfg.get("KFB_SKIA_OPT")), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("KFB_SKIA_OPT=" + (on ? 1 : 0)); } })));
         }
         if (HostLink.isKobo()) {
             LinearLayout kr = group(c, "方向与实体按键");
