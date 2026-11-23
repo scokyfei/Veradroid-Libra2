@@ -30,13 +30,17 @@ import java.util.List;
 public class StoreActivity extends Activity {
     private static final String[] CATS = { "official", "user" };
     private static final String[] CAT_L = { "官方推荐", "用户上传" };
+    private static final String[] TAGS = { "", "阅读", "漫画与资讯", "笔记与词典", "浏览器与传输", "输入法与效率", "棋牌与益智" };
+    private static final String[] TAG_L = { "全部", "阅读", "资讯", "笔记词典", "浏览传输", "效率输入", "棋牌益智" };
     private static int cat;                     // 上次看的那一栏（重新打开商店还在那一栏）
+    private static int tagIdx = 0;              // 官方推荐下的功能分类筛选（0 = 全部）
     private final int[] counts = { -1, -1 };
     private String query = "";
     private int batch = 1, batches = 1;
-    private LinearLayout tabs;
+    private LinearLayout tabs, tagBar;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final List<App> apps = new ArrayList<App>();
+    private volatile java.util.Map<String, Integer> installedVersions = java.util.Collections.emptyMap();
     private LinearLayout list;
     private TextView status;
     // 一次只下载 / 安装一个，进度和结果放在静态字段里（Scribe 用户：商店装微信读书“失败”，同一个 APK 侧载能装）：
@@ -53,7 +57,7 @@ public class StoreActivity extends Activity {
         int id, versionCode;
         long size;
         String name, pkg, versionName, description, sha, download;
-        String uploader = "", source = "", iconUrl = "";
+        String uploader = "", source = "", iconUrl = "", tag = "";
         boolean user;                               // 用户上传的（已审核）
         android.graphics.drawable.Drawable icon;   // 已经装了的应用的图标（后台取好）；没装的画首字
     }
@@ -80,8 +84,13 @@ public class StoreActivity extends Activity {
 
         tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
-        tabs.setPadding(0, dp(2), 0, dp(6));
+        tabs.setPadding(0, dp(2), 0, dp(4));
         page.addView(tabs);
+
+        tagBar = new LinearLayout(this);
+        tagBar.setOrientation(LinearLayout.VERTICAL);
+        tagBar.setPadding(0, dp(2), 0, dp(6));
+        page.addView(tagBar);
 
         // 整页翻（PageScrollView + 翻页条），不跟手滚动：墨水屏上一次只换一次画面
         list = new LinearLayout(this);
@@ -108,7 +117,38 @@ public class StoreActivity extends Activity {
         Blocks.restyle(this, page, title, actions, "Store / e-ink apps");
 
         tabsRender();
+        tagBarRender();
         load();
+    }
+
+    /** 官方推荐下的 6 大功能分类（2 行紧凑排布，墨水屏无需横向滚动，点击 0ms 本地筛选）。 */
+    private void tagBarRender() {
+        tagBar.removeAllViews();
+        if (cat != 0) { tagBar.setVisibility(View.GONE); return; }
+        tagBar.setVisibility(View.VISIBLE);
+        int[][] rows = { { 0, 1, 2, 3 }, { 4, 5, 6 } };
+        for (int r = 0; r < rows.length; r++) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            if (r > 0) row.setPadding(0, dp(4), 0, 0);
+            for (int c = 0; c < rows[r].length; c++) {
+                final int idx = rows[r][c];
+                android.widget.Button b = Ui.button(this, TAG_L[idx], 13, idx == tagIdx, new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        if (tagIdx == idx) return;
+                        tagIdx = idx;
+                        tagBarRender();
+                        render();
+                    }
+                });
+                b.setSingleLine(true);
+                b.setPadding(dp(4), dp(4), dp(4), dp(4));
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+                lp.leftMargin = c == 0 ? 0 : dp(6);
+                row.addView(b, lp);
+            }
+            tagBar.addView(row);
+        }
     }
 
     /** 官方推荐 | 用户上传 | 字体商店：选中的那一栏黑底。 */
@@ -121,7 +161,7 @@ public class StoreActivity extends Activity {
                 @Override public void onClick(View v) {
                     if (idx == CATS.length) { FontStoreActivity.open(StoreActivity.this); return; }
                     if (idx == cat) return;
-                    cat = idx; batch = 1; tabsRender(); load();
+                    cat = idx; batch = 1; tabsRender(); tagBarRender(); load();
                 }
             });
             b.setSingleLine(true);
@@ -191,15 +231,18 @@ public class StoreActivity extends Activity {
                         a.size = o.optLong("size"); a.sha = o.optString("sha256");
                         a.download = o.optString("download");
                         a.user = "user".equals(o.optString("category"));
+                        a.tag = o.optString("tag", "");
                         a.uploader = o.optString("uploader"); a.source = o.optString("source"); a.iconUrl = o.optString("icon");
                         try { a.icon = getPackageManager().getApplicationIcon(a.pkg); } catch (Throwable ignored) { }
                         got.add(a);
                     }
                 } catch (Exception e) { err = e.getMessage(); }
+                final java.util.Map<String, Integer> instMap = err == null ? snapshotInstalled(getApplicationContext()) : null;
                 final String fe = err;
                 ui.post(new Runnable() { @Override public void run() {
                     if (isFinishing() || myCat != cat || myBatch != batch || !q.equals(query)) return;   // 用户已经换了一栏
                     if (fe != null) { showError(fe); return; }
+                    if (instMap != null) installedVersions = instMap;
                     apps.clear(); apps.addAll(got);
                     batches = cnt[2];
                     if (cnt[0] != counts[0] || cnt[1] != counts[1]) { counts[0] = cnt[0]; counts[1] = cnt[1]; tabsRender(); }
@@ -241,16 +284,19 @@ public class StoreActivity extends Activity {
     }
 
     private void render() {
-        String what = query.length() > 0 ? "“" + query + "”" : CAT_L[cat];
-        status.setText(apps.isEmpty() ? (query.length() > 0 ? "没有找到" + what + "。" : cat == 1 ? "还没有用户上传的应用。在 veradroid.wenjin.jp 登录后可以上传。" : "商店里还没有应用。")
-            : what + " " + apps.size() + " 个" + (batches > 1 ? "（第 " + batch + " / " + batches + " 批）" : "")
-              + (cat == 1 ? " · 都经过人工审核" : " · 点安装后由宿主完成"));
+        String activeTag = (cat == 0 && tagIdx > 0 && tagIdx < TAGS.length) ? TAGS[tagIdx] : "";
+        List<App> shown = new ArrayList<App>();
+        for (App a : apps) {
+            if (activeTag.length() == 0 || activeTag.equals(a.tag)) shown.add(a);
+        }
+        String what = query.length() > 0 ? "“" + query + "”" : (activeTag.length() > 0 ? activeTag : CAT_L[cat]);
+        status.setText(shown.isEmpty() ? (query.length() > 0 ? "没有找到" + what + "。" : cat == 1 ? "还没有用户上传的应用。在 veradroid.wenjin.jp 登录后可以上传。" : "当前分类下还没有应用。")
+            : what + " " + shown.size() + " 个" + (batches > 1 ? "（第 " + batch + " / " + batches + " 批）" : "")
+              + (cat == 1 ? " · 都经过人工审核" : " · 阅读类已置顶"));
         if (jobMsg != null) status.setText(jobMsg);   // 正在下载 / 安装，或者上一次的结果（包括失败原因）
         list.removeAllViews();
-        // 每一行同一个样子：左边固定大小的图标框（装了的用应用图标，没装的写首字），中间名字 / 版本 / 说明各自一行或两行、
-        // 放不下就省略号，右边按钮固定宽度。以前名字、说明多长就折几行，按钮跟着名字那一行上下跑（多看那一条名字长、说明长，看起来是歪的）。
         int box = dp(56), btnW = dp(104);
-        for (final App a : apps) {
+        for (final App a : shown) {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.HORIZONTAL);
             card.setGravity(Gravity.CENTER_VERTICAL);
@@ -281,7 +327,8 @@ public class StoreActivity extends Activity {
             col.addView(n);
             int installed = installed(a.pkg);
             String label = installed <= 0 ? "安装" : (installed < a.versionCode ? "更新" : "重新安装");
-            TextView meta = Ui.text(this, a.versionName + " · " + StoreNet.mb(a.size) + (installed > 0 ? " · 已装" : "")
+            String tagPrefix = (!a.user && a.tag.length() > 0) ? "[" + a.tag + "] · " : "";
+            TextView meta = Ui.text(this, tagPrefix + a.versionName + " · " + StoreNet.mb(a.size) + (installed > 0 ? " · 已装" : "")
                 + (a.user ? " · 用户上传 · " + a.uploader + " · 已审核" : " · " + a.pkg), 12, false);
             meta.setTextColor(Blocks.on(this) ? Color.BLACK : Color.DKGRAY);
             meta.setSingleLine(true);
@@ -331,9 +378,38 @@ public class StoreActivity extends Activity {
         list.addView(again, alp);
     }
 
+    private static java.util.Map<String, Integer> snapshotInstalled(Context c) {
+        java.util.Map<String, Integer> m = new java.util.HashMap<String, Integer>();
+        try {
+            List<android.content.pm.PackageInfo> pkgs = c.getPackageManager().getInstalledPackages(0);
+            if (pkgs != null) {
+                for (android.content.pm.PackageInfo pi : pkgs) {
+                    if (pi != null && pi.packageName != null) m.put(pi.packageName, pi.versionCode);
+                }
+            }
+        } catch (Throwable ignored) { }
+        return m;
+    }
+
+    private void refreshInstalled(final boolean rerender) {
+        final Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final java.util.Map<String, Integer> m = snapshotInstalled(app);
+                ui.post(new Runnable() { @Override public void run() {
+                    if (isFinishing()) return;
+                    boolean changed = !m.equals(installedVersions);
+                    installedVersions = m;
+                    if (rerender && changed && !apps.isEmpty()) render();
+                } });
+            }
+        }, "StoreInstalled").start();
+    }
+
     private int installed(String pkg) {
-        try { return getPackageManager().getPackageInfo(pkg, 0).versionCode; }
-        catch (Exception e) { return 0; }
+        if (pkg == null) return 0;
+        Integer v = installedVersions.get(pkg);
+        return v != null ? v.intValue() : 0;
     }
 
     private void install(final App a) {
@@ -358,11 +434,18 @@ public class StoreActivity extends Activity {
 
     /** The end of a job: remember the result for a store screen opened later, show it on the one in front. */
     private static void jobDone(final String msg, final boolean ok) {
+        jobDone(msg, ok, null);
+    }
+
+    private static void jobDone(final String msg, final boolean ok, final java.util.Map<String, Integer> inst) {
         jobMsg = msg;
         new Handler(Looper.getMainLooper()).post(new Runnable() { @Override public void run() {
             StoreActivity s = live;
             if (s == null || s.isFinishing()) return;
-            if (ok) s.render();      // 按钮变成“已安装”；render 会显示 jobMsg
+            if (ok) {
+                if (inst != null) s.installedVersions = inst;
+                s.render();
+            }
             s.status.setText(msg);
             VeraToast.show(s, msg.length() > 60 ? msg.substring(0, 60) + "…" : msg);
         }});
@@ -426,29 +509,36 @@ public class StoreActivity extends Activity {
             : r != null ? "安装失败：" + r
             : "安装 " + a.name + " " + (Transfer.INSTALL_WAIT_MS / 60000) + " 分钟还没有结果，稍后看看应用列表";
         if (ok || r != null) out.delete();
-        jobDone(msg, ok);
+        jobDone(msg, ok, ok ? snapshotInstalled(ctx) : null);
     }
 
     /** Download a.download into out (Dl: fastest of the mirrors and the main site, several Range connections for big
-     *  files), resuming after a broken / stalled connection; up to 8 tries, the counter starts again after real progress. */
+     *  files), switching mirrors if slow (< 40 KB/s) and resuming from already-downloaded bytes. */
     private void download(final App a, String t, File out, List<String> mirrors) throws Exception {
         String q = "device_id=" + enc(Update.deviceId(getApplicationContext())) + "&token=" + enc(t);
         List<String> cands = Dl.candidates(a.download, q, mirrors);
         Exception last = null;
         long before = Dl.have(out); int fails = 0;
-        final long t0 = System.currentTimeMillis(); final long have0 = before;
-        Dl.Progress p = new Dl.Progress() { @Override public void on(long done, long total, boolean mirror) {
-            long pct = total > 0 ? done * 100 / total : -1;
-            long sec = Math.max(1, (System.currentTimeMillis() - t0) / 1000);
-            long kbs = Math.max(0, (done - have0) / 1024 / sec);
-            if (pct >= 0) say("正在下载 " + a.name + " … " + pct + "%（" + (done >> 20) + " / " + (total >> 20) + " MB，"
-                + (kbs >= 1024 ? String.format("%.1f MB/s", kbs / 1024.0) : kbs + " KB/s") + (mirror ? "，镜像" : "") + "）");
-        }};
+        final java.util.Set<String> slow = new java.util.HashSet<String>();
+        Dl.Progress p = new Dl.Progress() {
+            long wt = System.currentTimeMillis(), wd = -1, kbs = -1;
+            @Override public void on(long done, long total, boolean mirror) {
+                long now = System.currentTimeMillis();
+                if (wd < 0 || done < wd) { wd = done; wt = now; }
+                else if (now - wt >= 3000) { kbs = (done - wd) * 1000 / (now - wt) / 1024; if (now - wt >= 10000) { wd = done; wt = now; } }
+                long pct = total > 0 ? done * 100 / total : -1;
+                if (pct >= 0) say("正在下载 " + a.name + " … " + pct + "%（" + StoreNet.mb(done) + " / " + StoreNet.mb(total)
+                    + (kbs < 0 ? "" : "，" + (kbs >= 1024 ? String.format("%.1f MB/s", kbs / 1024.0) : kbs + " KB/s")) + (mirror ? "，镜像" : "") + "）");
+            }};
         while (fails < 8) {
             if (a.size > 0 && out.isFile() && out.length() == a.size && !new File(out.getPath() + ".seg").exists()) return;
             try {
-                Dl.fetchOnce(cands, out, a.size, p);
+                Dl.fetchOnce(cands, out, a.size, p, slow);
                 if (a.size <= 0 || out.length() == a.size) return;
+            } catch (Dl.Slow e) {
+                say("下载太慢（" + (e.bps >> 10) + " KB/s），换一个下载源继续…");
+                before = Dl.have(out);
+                continue;
             } catch (Dl.HttpError e) {
                 if (e.code == 404 || e.code == 403) throw e;   // 商店里没有了 / 没权限：重试也没用
                 last = e;
@@ -496,6 +586,7 @@ public class StoreActivity extends Activity {
         super.onResume();
         live = this;
         if (jobMsg != null && status != null) status.setText(jobMsg);
+        if (!apps.isEmpty()) refreshInstalled(true);
         StatusBarService.setSuppressed(true);
         StatusBarService.refresh(this);
     }

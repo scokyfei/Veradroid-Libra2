@@ -89,6 +89,7 @@ public class ReaderActivity extends Activity {
     private Bitmap pdfBitmap;
     private volatile int pdfGen;
     private volatile boolean gone;   // onDestroy 之后：排队的 PDF 活不再做
+    private volatile boolean destroyed;
     private final java.util.concurrent.ExecutorService pdfWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler();
     private long readStarted;
@@ -227,12 +228,14 @@ public class ReaderActivity extends Activity {
         bottomBox.setVisibility(View.GONE);
         pageView.addView(bottomBox, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
+        availH = prefs().getInt(availHKey(), 0);
         content.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
             @Override public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int or, int ob) {
                 int hh = b - t;
                 if (hh <= 0 || hh == (availH > 0 ? availH : getResources().getDisplayMetrics().heightPixels)) return;
                 android.util.Log.i("VeraHome", "reader: text area " + hh + " px, screen " + getResources().getDisplayMetrics().heightPixels);
                 availH = hh;
+                prefs().edit().putInt(availHKey(), hh).apply();
                 if (!pages.isEmpty()) v.post(new Runnable() { @Override public void run() { rebuildKeepPosition(); } });
             }
         });
@@ -291,6 +294,11 @@ public class ReaderActivity extends Activity {
     /** 分页用的画笔、宽、高：主线程上取好，后台线程只读。 */
     private static final class Geometry {
         android.text.TextPaint tp; int w, h; android.text.Layout.Alignment al; String sig; int indentPx, paraPx;
+    }
+
+    private String availHKey() {
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        return "availH_" + dm.widthPixels + "x" + dm.heightPixels;
     }
 
     private Geometry geometry() {
@@ -390,26 +398,31 @@ public class ReaderActivity extends Activity {
                             showFirst(fc, fi, start, end, same ? savedPg : -1, same ? savedTotal : 0, same ? savedLeft : "");
                         } });
                     }
+                    if (destroyed) return;
                     if (all == null) {
                         Epub.Book b = loadBook(f); all = b.chapters; bookToc = b.toc;
                         if (!b.chapters.isEmpty()) Epub.saveCache(b, tocCache(f));
                     }
+                    if (destroyed) return;
                     if (all.isEmpty()) throw new Exception("EPUB 里没有可读的章节");
                     final List<Chapter> chs = all;
                     final List<Epub.TocItem> tc = bookToc;
                     // 分页前：目录换成整本读出来的那份，翻页 / 跳章先用读进来的章节（大书分页要几十秒）
                     ui.post(new Runnable() { @Override public void run() {
-                        if (isDestroyed()) return;
+                        if (destroyed || isDestroyed()) return;
                         preChapters = chs;
+                        provBookReady();
                         if (tc != null) { toc.clear(); toc.addAll(tc); tocEntries = null; }
                     } });
                     final List<Page> pg = new ArrayList<Page>();
                     final List<Integer> starts = new ArrayList<Integer>();
                     long tp0 = SystemClock.uptimeMillis();
                     paginate(chs, g, pg, starts);
+                    if (destroyed) return;
                     android.util.Log.i("VeraPerf", "reader whole book: " + pg.size() + " pages in " + (SystemClock.uptimeMillis() - tp0) + " ms (background)");
-                    ui.post(new Runnable() { @Override public void run() { if (tc != null) { toc.clear(); toc.addAll(tc); } installPages(chs, pg, starts, g.sig); } });
+                    ui.post(new Runnable() { @Override public void run() { if (destroyed || isDestroyed()) return; if (tc != null) { toc.clear(); toc.addAll(tc); } installPages(chs, pg, starts, g.sig); } });
                 } catch (Throwable t) {
+                    if (destroyed) return;
                     final String msg = String.valueOf(t.getMessage());
                     ui.post(new Runnable() {
                         @Override public void run() {
@@ -485,68 +498,63 @@ public class ReaderActivity extends Activity {
     // ------------------------------------------------------------------ turning
 
     private void prev() {
-        turned();
+        turned(-1);
         if (isPdf) {
             if (page > 0) { page--; readPages++; showPdf(page); }
         } else if (pages.isEmpty() && provChapter != null) {
-            // 整本还没分完页：先从临时翻页历史退回，没有历史时在本章（或上一章）向前排一页
-            if (!provHist.isEmpty()) {
-                int[] h = provHist.remove(provHist.size() - 1);
-                Chapter c = (h[0] == provIndex || preChapters == null || h[0] < 0 || h[0] >= preChapters.size())
-                    ? provChapter : preChapters.get(h[0]);
-                provChapter = c; provIndex = h[0]; provStart = h[1]; provEnd = h[2];
-                readPages++;
-                setPageText(styled(c.text, provStart, provEnd), c.text, provStart, provEnd);
-                footLeft.setText(""); pageOverlay.setText(""); pageInfo.setText("");
-            } else if (provStart > 0) {
-                Geometry g = geometry();
-                int pos = skipBreaks(provChapter.text, 0), ps = -1, pe = -1;
-                while (pos < provStart && pos < provChapter.text.length()) {
-                    int e = pageEnd(provChapter.text, pos, g);
-                    if (e <= pos) break;
-                    ps = pos; pe = e;
-                    pos = skipBreaks(provChapter.text, e);
-                }
-                if (ps >= 0) {
-                    provStart = ps; provEnd = pe;
-                    readPages++;
-                    setPageText(styled(provChapter.text, provStart, provEnd), provChapter.text, provStart, provEnd);
-                    footLeft.setText(""); pageOverlay.setText(""); pageInfo.setText("");
-                }
-            } else if (preChapters != null && provIndex > 0) {
-                Chapter pc = preChapters.get(provIndex - 1);
-                Geometry g = geometry();
-                int pos = skipBreaks(pc.text, 0), ps = -1, pe = -1;
-                while (pos < pc.text.length()) {
-                    int e = pageEnd(pc.text, pos, g);
-                    if (e <= pos) break;
-                    ps = pos; pe = e;
-                    pos = skipBreaks(pc.text, e);
-                }
-                if (ps >= 0) {
-                    provChapter = pc; provIndex = provIndex - 1; provStart = ps; provEnd = pe;
-                    readPages++;
-                    setPageText(styled(pc.text, provStart, provEnd), pc.text, provStart, provEnd);
-                    footLeft.setText(""); pageOverlay.setText(""); pageInfo.setText("");
-                }
-            }
+            provPrev();
         } else if (page > 0) { page--; readPages++; showText(); }
     }
 
+    private void provPrev() {
+        if (!provHist.isEmpty()) {
+            int[] h = provHist.remove(provHist.size() - 1);
+            Chapter c = (h[0] == provIndex || preChapters == null || h[0] < 0 || h[0] >= preChapters.size())
+                ? provChapter : preChapters.get(h[0]);
+            provChapter = c; provIndex = h[0]; provStart = h[1]; provEnd = h[2];
+            readPages++;
+            setPageText(styled(c.text, provStart, provEnd), c.text, provStart, provEnd);
+            footLeft.setText(""); pageOverlay.setText(""); pageInfo.setText("");
+            return;
+        }
+        final Geometry g = geometry();
+        ReaderTurn.Cut cut = new ReaderTurn.Cut() { @Override public int end(String s, int from) { return pageEnd(s, from, g); } };
+        int s = ReaderTurn.prevStart(provChapter.text, provStart, cut);
+        if (s >= 0) { showProv(provChapter, provIndex, s); return; }
+        if (provIndex <= 0) return;
+        if (preChapters != null && provIndex - 1 < preChapters.size()) {
+            Chapter c = preChapters.get(provIndex - 1);
+            showProv(c, provIndex - 1, Math.max(0, ReaderTurn.prevStart(c.text, Integer.MAX_VALUE, cut)));
+            return;
+        }
+        waitForBook(-1);
+    }
+
+    private int provPending;
+    private void waitForBook(int dir) {
+        provPending = dir;
+        VeraToast.show(this, "还在读这本书，读好就翻");
+    }
+    private void provBookReady() {
+        int d = provPending;
+        provPending = 0;
+        if (d == 0 || !pages.isEmpty() || provChapter == null) return;
+        if (d > 0) next(); else prev();
+    }
+
     private void next() {
-        turned();
+        turned(1);
         if (isPdf) {
             if (page < pdfPages - 1) { page++; readPages++; showPdf(page); }
-        } else if (pages.isEmpty() && provChapter != null && preChapters != null && skipBreaks(provChapter.text, provEnd) >= provChapter.text.length()
-                && provIndex >= 0 && provIndex + 1 < preChapters.size()) {
-            // 还没分完页、这一章翻完了：整本已经读进来，接着排下一章的第一页
-            provHist.add(new int[] { provIndex, provStart, provEnd });
-            showProv(preChapters.get(provIndex + 1), provIndex + 1, 0);
-        } else if (pages.isEmpty() && provChapter != null && provEnd < provChapter.text.length()) {
-            // 整本还没分完页：从这一页的末尾接着排下一页（页码等分完再显示）
+        } else if (pages.isEmpty() && provChapter != null && !ReaderTurn.chapterHasMore(provChapter.text, provEnd)) {
+            if (preChapters == null) waitForBook(1);
+            else if (provIndex >= 0 && provIndex + 1 < preChapters.size()) {
+                provHist.add(new int[] { provIndex, provStart, provEnd });
+                showProv(preChapters.get(provIndex + 1), provIndex + 1, 0);
+            }
+        } else if (pages.isEmpty() && provChapter != null) {
             Geometry g = geometry();
             int start = skipBreaks(provChapter.text, provEnd);
-            if (start >= provChapter.text.length()) return;
             provHist.add(new int[] { provIndex, provStart, provEnd });
             provStart = start; provEnd = pageEnd(provChapter.text, start, g);
             readPages++;
@@ -738,8 +746,21 @@ public class ReaderActivity extends Activity {
         turnsSinceJump = 0;
     }
 
-    /** 每翻一页调一次：跳转后读了 BACK_KEEP_TURNS 页，“返回”就收起。 */
-    private void turned() {
+    /** 打开/关闭显示桥的按页数全刷计数（自带阅读器与桌面同包，必须主动发 FLIPCOUNT 1 才会计数全刷）。 */
+    private void flipCount(boolean on) { HostLink.epd(on ? "FLIPCOUNT 1" : "FLIPCOUNT 0"); }
+
+    /** 翻页动画：开启全局翻页动画时发送一次性 SWIPE 方向与步数。 */
+    private void slideTurn(int dir) {
+        java.util.Map<String, String> cfg = HostLink.kv(HostLink.KFB + "settings");
+        int d = ReaderTurn.slideDir(HostLink.num(cfg, "KFB_ANIM_MODE", 0), "0".equals(cfg.get("KFB_SWIPE")), dir);
+        if (d < 0) return;
+        HostLink.epd("SWIPE " + d + " " + Math.max(1, Math.min(30, HostLink.num(cfg, "KFB_ANIM_STEPS", 12))));
+    }
+
+    /** 每翻一页调一次（dir 1 下一页 / -1 上一页）：跳转后读了 BACK_KEEP_TURNS 页，“返回”就收起。 */
+    private void turned(int dir) {
+        flipCount(true);
+        slideTurn(dir);
         if (backStack.isEmpty()) return;
         if (++turnsSinceJump >= BACK_KEEP_TURNS) { backStack.clear(); paintBackChip(); }
     }
@@ -1113,10 +1134,7 @@ public class ReaderActivity extends Activity {
     }
 
     /** 跳过页首的空行（每页都不以空行开头）。 */
-    private static int skipBreaks(String s, int i) {
-        while (i < s.length() && (s.charAt(i) == '\n' || s.charAt(i) == '\r')) i++;
-        return i;
-    }
+    private static int skipBreaks(String s, int i) { return ReaderTurn.skipBreaks(s, i); }
 
     /**
      * 从 i 开始一页放得下的文字到哪里为止：用和正文 TextView 相同的画笔、宽度、行距排一遍，取放得下的整行。
@@ -1155,10 +1173,12 @@ public class ReaderActivity extends Activity {
     /** 整本分页（后台线程也能调：只读 chs 和 g）。 */
     private void paginate(List<Chapter> chs, Geometry g, List<Page> out, List<Integer> starts) {
         for (int ci = 0; ci < chs.size(); ci++) {
+            if (destroyed) return;
             String s = chs.get(ci).text;
             int i = 0;
             starts.add(out.size());
             while (i < s.length()) {
+                if (destroyed) return;
                 i = skipBreaks(s, i);
                 if (i >= s.length()) break;
                 int end = pageEnd(s, i, g);
@@ -1466,6 +1486,7 @@ public class ReaderActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        flipCount(true);
         readStarted = SystemClock.elapsedRealtime();
         readPages = 0;
         resumedNow = true;
@@ -1475,6 +1496,7 @@ public class ReaderActivity extends Activity {
 
     @Override protected void onPause() {
         resumedNow = false;
+        flipCount(false);
         if (readStarted > 0) {
             Stats.addReading(this, SystemClock.elapsedRealtime() - readStarted, readPages);
             readStarted = 0;
@@ -1487,8 +1509,10 @@ public class ReaderActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        destroyed = true;
         pdfGen++;
         gone = true;
+        ui.removeCallbacksAndMessages(null);
         // 关文档也排在 PDF 线程上：等正在渲染的那一页画完再关。以前这里最多等 2 秒就关，大 PDF 一页要画 4 秒多，
         // close() 因为页面还开着失败，文档留给 finalize 去关；finalize 又要等全局的 PDF 锁，超过 10 秒整个桌面进程被杀（实测连开 4 次就崩）。
         try {
@@ -1763,13 +1787,15 @@ public class ReaderActivity extends Activity {
         final int gen = ++rebuildGen;
         new Thread(new Runnable() {
             @Override public void run() {
+                if (destroyed) return;
                 final List<Page> pg = new ArrayList<Page>();
                 final List<Integer> starts = new ArrayList<Integer>();
                 long t0 = SystemClock.uptimeMillis();
                 try { paginate(chs, g, pg, starts); } catch (Throwable t) { android.util.Log.w("VeraHome", "reader: repaginate failed", t); }
+                if (destroyed) return;
                 android.util.Log.i("VeraPerf", "reader repaginate: " + pg.size() + " pages in " + (SystemClock.uptimeMillis() - t0) + " ms (background)");
                 ui.post(new Runnable() { @Override public void run() {
-                    if (gen != rebuildGen || isDestroyed() || !pages.isEmpty()) return;
+                    if (destroyed || gen != rebuildGen || isDestroyed() || !pages.isEmpty()) return;
                     installPages(chs, pg, starts, g.sig);
                 } });
             }
@@ -2073,7 +2099,7 @@ public class ReaderActivity extends Activity {
             if (ch < chapters.size() && chapters.get(ch).title != null) t = chapters.get(ch).title;
         }
         if (!t.contentEquals(blkTitle.getText())) blkTitle.setText(t);
-        java.util.Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
+        java.util.Map<String, String> st = HostLink.status(this);
         String c = Ui.clock(this) + (st.get("battery") != null ? "   " + st.get("battery") + "%" : "");
         if (!c.contentEquals(blkClock.getText())) blkClock.setText(c);
     }

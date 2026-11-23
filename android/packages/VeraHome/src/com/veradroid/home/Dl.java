@@ -18,11 +18,44 @@ import java.util.List;
  *  - Files of 8 MB or more are split into {@link #SEGS} pieces, each on its own connection, kept in out.seg/N and
  *    resumed from where they stopped on the next try; the pieces are joined in order when all are complete.
  *  - The caller always checks SHA-256; on a mismatch it calls again with mirrors off.
+ *  - Slow source (2026-11-21 field report: "einkbro 11%, 8 KB/s, 镜像"; measured: direct connections to dl.wenjin.jp from
+ *    China in the evening had a median of 32 KB/s, via Cloudflare 142 KB/s): the 256 KB probe can pick a source that then
+ *    crawls. After {@link #WARM_MS} of a try, if the last {@link #WINDOW_MS} averaged under {@link #SLOW_BPS} and another
+ *    candidate is left, the try stops with {@link Slow}; the caller passes the same {@code slow} set to the next try, which
+ *    then skips that source and resumes (Range) from the bytes already on the disk. The last remaining source is never dropped.
  */
 final class Dl {
     static final String[] DEF_MIRRORS = {"https://dl.wenjin.jp"};
     static final int SEGS = 4;                 // dl.wenjin.jp allows 8 connections per IP; stay well under it
-    static final long SEG_MIN = 8L << 20;
+    static final long SEG_MIN = 2L << 20;      // was 8 MB: a 4 MB app (EinkBro) went over one slow connection
+    static volatile long SLOW_BPS = 40L << 10;  // under this (bytes/s, over WINDOW_MS) another source is tried
+    static volatile long WARM_MS = 15000, WINDOW_MS = 12000;
+
+    /** This try was stopped because src was too slow while another source is left; resume with src in the slow set. */
+    static final class Slow extends java.io.IOException {
+        final String src; final long bps;
+        Slow(String src, long bps) { super("下载太慢（" + (bps >> 10) + " KB/s），换一个下载源"); this.src = src; this.bps = bps; }
+    }
+
+    /** Throughput over a sliding window; slow() once warm and the window average is under SLOW_BPS. */
+    static final class Meter {
+        final long t0 = System.currentTimeMillis();
+        final long[] ts = new long[64], bs = new long[64]; int n;
+        volatile boolean cancel;
+        synchronized void sample(long total) { long now = System.currentTimeMillis(); ts[n % 64] = now; bs[n % 64] = total; n++; }
+        /** Bytes/s over the last WINDOW_MS, or -1 while still warming up / not enough samples. */
+        synchronized long rate() {
+            if (n < 2) return -1;
+            long now = ts[(n - 1) % 64];
+            if (now - t0 < WARM_MS) return -1;
+            int i = n - 1;
+            while (i > 0 && i > n - 64 && now - ts[(i - 1) % 64] <= WINDOW_MS) i--;
+            long dt = now - ts[i % 64];
+            if (dt < WINDOW_MS / 2) return -1;
+            return (bs[(n - 1) % 64] - bs[i % 64]) * 1000 / dt;
+        }
+        boolean slow() { long r = rate(); return r >= 0 && r < SLOW_BPS; }
+    }
 
     interface Progress { void on(long done, long total, boolean mirror); }
 
@@ -41,9 +74,20 @@ final class Dl {
     }
 
     /** {url, segments}: segments is SEGS (Range works), 1 (no Range) or 0 (nothing answered: try the main site anyway). */
-    static Object[] pick(List<String> cands) {
+    static Object[] pick(List<String> cands) { return pick(cands, null); }
+
+    /** Candidates not in slow (all of them when every one is in slow). */
+    static List<String> usable(List<String> cands, java.util.Set<String> slow) {
+        List<String> u = new ArrayList<String>();
+        for (String c : cands) if (slow == null || !slow.contains(c)) u.add(c);
+        if (u.isEmpty()) { if (slow != null) slow.clear(); u.addAll(cands); }
+        return u;
+    }
+
+    static Object[] pick(List<String> all, java.util.Set<String> slow) {
         String best = null; long bestSpeed = -1; int segs = 0;
-        String main = cands.get(cands.size() - 1);
+        String main = all.get(all.size() - 1);
+        List<String> cands = usable(all, slow);
         for (String u : cands) {
             HttpURLConnection h = null;
             try {
@@ -90,30 +134,44 @@ final class Dl {
     /** One try: pick a source, then download with one connection (resume) or with segments. Throws on failure; the
      *  caller retries (pieces and partial files stay for the next try). */
     static void fetchOnce(List<String> cands, final File out, final long size, final Progress p) throws Exception {
-        Object[] pk = pick(cands);
+        fetchOnce(cands, out, size, p, null);
+    }
+
+    /** As above; slow (may be null) collects sources that were too slow: they are skipped by the next try. */
+    static void fetchOnce(List<String> cands, final File out, final long size, final Progress p, java.util.Set<String> slow) throws Exception {
+        Object[] pk = pick(cands, slow);
         final String src = (String) pk[0];
         int segs = (Integer) pk[1];
         final boolean mirror = !src.equals(cands.get(cands.size() - 1));
+        // another source left to switch to? Only then a slow source is given up.
+        final Meter meter = usable(cands, slow).size() > 1 ? new Meter() : null;
+        try { fetchFrom(src, segs, mirror, out, size, p, meter); }
+        catch (Slow e) { if (slow != null) slow.add(src); throw e; }
+    }
+
+    private static void fetchFrom(final String src, int segs, final boolean mirror, final File out, final long size, final Progress p, final Meter meter) throws Exception {
         File dir = new File(out.getPath() + ".seg");
         File plan = new File(dir, "plan");
         int planned = 0;
         if (plan.isFile()) try { planned = Integer.parseInt(new String(read(plan), "UTF-8").trim().split(" ")[1]); } catch (Exception e) { }
         if (planned > 1 && segs == 1) { clear(out); planned = 0; }          // the source stopped doing Range: start again whole
         int n = planned > 1 ? planned : (segs > 1 && size >= SEG_MIN && !(out.isFile() && out.length() > 0)) ? segs : 1;
-        if (n <= 1) { single(src, out, size, p, mirror); return; }
+        if (n <= 1) { single(src, out, size, p, mirror, meter); return; }
 
         if (!dir.isDirectory() && !dir.mkdirs()) throw new Exception("无法创建下载目录");
         if (planned != n) { clear(out); dir.mkdirs(); write(plan, (size + " " + n).getBytes("UTF-8")); }
         final long len = (size + n - 1) / n;
         final Exception[] err = new Exception[1];
+        final HttpURLConnection[] activeConns = new HttpURLConnection[n];
         List<Thread> ts = new ArrayList<Thread>();
         for (int i = 0; i < n; i++) {
+            final int idx = i;
             final long a = i * len, b = Math.min(size, a + len) - 1;
             final File f = new File(dir, String.valueOf(i));
             if (f.length() > b - a + 1) f.delete();
             if (a + f.length() > b) continue;
             Thread t = new Thread(new Runnable() { @Override public void run() {
-                try { range(src, f, a + f.length(), b); }
+                try { range(src, f, a + f.length(), b, meter, activeConns, idx); }
                 catch (Exception e) { synchronized (err) { if (err[0] == null) err[0] = e; } }
             }}, "StoreSeg" + i);
             t.start(); ts.add(t);
@@ -122,7 +180,20 @@ final class Dl {
         while (alive) {
             alive = false;
             for (Thread t : ts) { t.join(1000); if (t.isAlive()) { alive = true; break; } }
-            if (p != null) p.on(have(out), size, mirror);
+            long h = have(out);
+            if (p != null) p.on(h, size, mirror);
+            if (meter != null && !meter.cancel) {
+                meter.sample(h);
+                if (meter.slow()) {
+                    synchronized (activeConns) { meter.cancel = true; }
+                    abortActive(activeConns, ts);
+                }
+            }
+        }
+        if (meter != null && meter.cancel) {
+            long r = Math.max(0, meter.rate());
+            android.util.Log.i("VeraStore", "slow source " + host(src) + " " + (r >> 10) + " KB/s, switching (" + (have(out) >> 10) + " KB kept)");
+            throw new Slow(src, r);
         }
         for (int i = 0; i < n; i++) {
             long a = i * len, b = Math.min(size, a + len) - 1;
@@ -149,9 +220,30 @@ final class Dl {
         dir.delete();
     }
 
+    private static void abortActive(HttpURLConnection[] activeConns, List<Thread> ts) {
+        HttpURLConnection[] snap;
+        synchronized (activeConns) {
+            snap = activeConns.clone();
+        }
+        for (HttpURLConnection c : snap) {
+            if (c != null) try { c.disconnect(); } catch (Throwable ignored) { }
+        }
+        for (Thread t : ts) {
+            try { t.interrupt(); } catch (Throwable ignored) { }
+        }
+    }
+
     /** Bytes from..to (inclusive) of url appended to f. */
-    private static void range(String url, File f, long from, long to) throws Exception {
+    private static void range(String url, File f, long from, long to, Meter meter, HttpURLConnection[] activeConns, int idx) throws Exception {
+        if (meter != null && meter.cancel) return;
         HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
+        synchronized (activeConns) {
+            if (meter != null && meter.cancel) {
+                try { h.disconnect(); } catch (Throwable ignored) { }
+                return;
+            }
+            activeConns[idx] = h;
+        }
         try {
             h.setConnectTimeout(20000); h.setReadTimeout(60000);
             h.setRequestProperty("User-Agent", "VeraDroid/Store");
@@ -163,14 +255,23 @@ final class Dl {
             long left = to - from + 1;
             try {
                 byte[] buf = new byte[65536]; int r;
-                while (left > 0 && (r = in.read(buf, 0, (int) Math.min(buf.length, left))) > 0) { fo.write(buf, 0, r); left -= r; }
-            } finally { fo.close(); in.close(); }
+                while (left > 0 && (r = in.read(buf, 0, (int) Math.min(buf.length, left))) > 0) {
+                    fo.write(buf, 0, r); left -= r;
+                    if (meter != null && meter.cancel) return;      // the monitor gave up this source; the piece is resumed elsewhere
+                }
+            } finally {
+                try { fo.close(); } catch (Exception ignored) { }
+                try { in.close(); } catch (Exception ignored) { }
+            }
             if (left > 0) throw new java.io.IOException("unexpected end of stream");
-        } finally { h.disconnect(); }
+        } finally {
+            synchronized (activeConns) { activeConns[idx] = null; }
+            try { h.disconnect(); } catch (Throwable ignored) { }
+        }
     }
 
     /** One connection, resuming after what out already holds. */
-    private static void single(String url, File out, long size, Progress p, boolean mirror) throws Exception {
+    private static void single(String url, File out, long size, Progress p, boolean mirror, Meter meter) throws Exception {
         long have = out.isFile() ? out.length() : 0;
         if (size > 0 && have == size) return;
         HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
@@ -189,7 +290,19 @@ final class Dl {
                 while ((n = in.read(buf)) > 0) {
                     fo.write(buf, 0, n); done += n;
                     long now = System.currentTimeMillis();
-                    if (p != null && now - last >= 1000) { last = now; p.on(done, size, mirror); }
+                    if (now - last >= 1000) {
+                        last = now;
+                        if (p != null) p.on(done, size, mirror);
+                        if (meter != null) {
+                            meter.sample(done);
+                            // the bytes so far stay: the next source resumes after them (Range), or starts over if it cannot
+                            if (meter.slow()) {
+                                long r = Math.max(0, meter.rate());
+                                android.util.Log.i("VeraStore", "slow source " + host(url) + " " + (r >> 10) + " KB/s, switching (" + (done >> 10) + " KB kept)");
+                                throw new Slow(url, r);
+                            }
+                        }
+                    }
                 }
             } finally { fo.close(); in.close(); }
             if (size > 0 && out.length() > size) { out.delete(); throw new Exception("文件大小不对"); }
