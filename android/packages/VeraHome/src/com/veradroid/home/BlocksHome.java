@@ -181,7 +181,7 @@ final class BlocksHome {
     }
     /** 闲下来时先搭好的页：四个标签和“我的”下面的设置页（和经典风格的设置页一样都预先搭）。 */
     private static final int[] PREBUILD = Ui.ONE_CORE ? new int[] { HOME, FILES, APPS, ME }   // 单核：只搭四个标签，设置页点进去时再搭
-        : new int[] { HOME, FILES, APPS, ME, S_DISPLAY, S_POWER, S_STORAGE, S_ABOUT, S_CARDS };
+        : new int[] { HOME, FILES, APPS, ME, S_DISPLAY, S_DISPLAY_ADV, S_CONTROLS, S_POWER, S_STORAGE, S_UI, S_ABOUT, S_CARDS };
     boolean prebuilt() { for (int k : PREBUILD) if (pages.get(k) == null || !sig(k).equals(sigs.get(k))) return false; return true; }
 
     private String sig(int key) {

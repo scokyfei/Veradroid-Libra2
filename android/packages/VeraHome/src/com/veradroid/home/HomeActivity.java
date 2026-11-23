@@ -1792,7 +1792,9 @@ public class HomeActivity extends Activity {
                     prefs.edit().putString("name", t).commit();
                     refreshStatus();
                     if (blocks != null && Blocks.on(HomeActivity.this)) {
+                        blocks.invalidate(BlocksHome.HOME);
                         blocks.invalidate(BlocksHome.ME);
+                        blocks.invalidate(BlocksHome.S_UI);
                         blocks.invalidate(BlocksHome.S_ABOUT);
                         blocks.invalidate(BlocksHome.S_DISPLAY);
                         int page = blocks.current();
@@ -1899,8 +1901,8 @@ public class HomeActivity extends Activity {
         // 方块风格：经典设置的各类都是方块的设置页（BlocksHome 里的 S_CATS 一组）。这里的“重画设置页”就是重画当前那一页。
         if (blocks != null && Blocks.on(this)) {
             int cur = blocks.current();
-            if (!BlocksHome.isCat(cur)) { blocks.openCat(tab); showBlocks(blocks.current()); }
-            else showBlocks(cur);
+            if (cur >= 10) { blocks.invalidate(cur); showBlocks(cur); }
+            else { blocks.openCat(tab); showBlocks(blocks.current()); }
             return;
         }
         Perf.measure(page, tab < 0 ? "settings" : "settings page " + tab);
