@@ -7,7 +7,8 @@ status_write() {
     fl=$(kobo_light_get)
     warm=$(kobo_warmth_get)
     wifi=$(kobo_wifi_enabled)
-    slp=${SLEEP_TIMEOUT:-600}
+    slp=$(sed -n 's/^SLEEP_TIMEOUT=//p' "$SYS/settings.conf" 2>/dev/null | tail -n 1)
+    case "$slp" in ''|*[!0-9]*) slp=${SLEEP_TIMEOUT:-600} ;; esac
     lan=$(kobo_wifi_ip)
     inv=$(sed -n 's/^KFB_INVERT=//p' "$X/settings" 2>/dev/null)
     {

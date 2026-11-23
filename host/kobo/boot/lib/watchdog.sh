@@ -202,6 +202,7 @@ watchdog() {
         if [ ! -f $W/saver_frozen ] && [ ! -f $W/frozen ]; then
             # 命令监听没了（FIFO 建不起来、被杀）：桌面的“返回 Kindle”、设置、手势全都没反应，只能重启 Kindle。重新起一个。
             alive $W/cmd.pid || { t "cmd listener gone, restarting it"; cmd_listen & echo $! > $W/cmd.pid; }
+            alive $W/sleep.pid || { t "sleep_watch gone, restarting it"; sleep_watch & echo $! > $W/sleep.pid; }
             # 显示桥 / 触摸前端没了（崩溃、被 OOM 杀掉）：以前没人管，屏幕永远停在最后一帧，或者 Android 再也收不到触摸，
             # 只能重启 Kindle。重新起一个（每次开机各最多 3 次，再多就是程序本身起不来，留给诊断）。
             helpers_supervise

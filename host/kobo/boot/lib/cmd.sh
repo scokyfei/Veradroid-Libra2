@@ -119,6 +119,7 @@ cmd_listen() {
         exit)    do_exit ;;
         stop)    do_stop ;;
         restart) do_restart ;;
+        sleep)   [ -p "$W/power.fifo" ] && ( echo sleep > "$W/power.fifo" ) & ;;
         diag)    ( diag_save; touch "$X/ctl/diag.done" ) & ;;
         clear)   epd_send FULL ;;
         screenshot)

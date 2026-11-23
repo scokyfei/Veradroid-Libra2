@@ -135,7 +135,7 @@ final class Panel {
     private static final String[] CONTRAST = { "1.0", "1.3", "1.6", "1.9", "2.2" };
     private static final String[] MODE_V = { "0", "1", "2" };
     private static final String[] FLASH_V = { "0", "1", "3", "6", "8" };   // 8 是宿主默认值，必须在表里
-    private static final int[] SLEEP_S = { 300, 600, 1800, 3600 };
+    private static final int[] SLEEP_S = { 300, 600, 900, 1800, 3600, 0 };
     private static final float[] FONT_S = { 0.85f, 1.0f, 1.15f, 1.3f };
 
     private Panel(Context c) {
@@ -670,7 +670,7 @@ final class Panel {
         });
         xr.addView(xferToggle);
         p.addView(xr);
-        sleep = new Seg(ctx, new String[] { "5 分", "10 分", "30 分", "1 小时" }, 15, new Seg.Listener() {
+        sleep = new Seg(ctx, new String[] { "5分", "10分", "15分", "30分", "1小时", "永不" }, 14, new Seg.Listener() {
             @Override public void onPick(int i) { HostLink.cmd("sleeptime " + SLEEP_S[i]); }
         });
         sleepRow = labeled("自动休眠", sleep, 76);
@@ -813,7 +813,8 @@ final class Panel {
         if (sleep != null) {
             vis(sleepRow, HostLink.num(st, "hassleeptime", 1) == 1);
             int sl = HostLink.num(st, "sleep", 600), bi = 1;
-            for (int i = 0; i < SLEEP_S.length; i++) if (Math.abs(SLEEP_S[i] - sl) < Math.abs(SLEEP_S[bi] - sl)) bi = i;
+            if (sl <= 0) bi = SLEEP_S.length - 1;
+            else for (int i = 0; i < SLEEP_S.length - 1; i++) if (Math.abs(SLEEP_S[i] - sl) < Math.abs(SLEEP_S[bi] - sl)) bi = i;
             sleep.select(bi);
         }
     }

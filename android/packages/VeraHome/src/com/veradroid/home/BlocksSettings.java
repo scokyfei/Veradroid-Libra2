@@ -29,8 +29,8 @@ final class BlocksSettings {
     static final String[] FLASH_V = { "0", "1", "3", "6", "8", "10", "20" };
     static final String[] CONTRAST_L = { "1.0 柔和", "1.3 标准", "1.6 较黑", "1.9 很黑", "2.2 最黑" };
     static final String[] CONTRAST_V = { "1.0", "1.3", "1.6", "1.9", "2.2" };
-    static final String[] SLEEP_L = { "5 分钟", "10 分钟", "30 分钟", "1 小时" };
-    static final int[] SLEEP_S = { 300, 600, 1800, 3600 };
+    static final String[] SLEEP_L = { "5 分钟", "10 分钟", "15 分钟", "30 分钟", "1 小时", "永不" };
+    static final int[] SLEEP_S = { 300, 600, 900, 1800, 3600, 0 };
     static final String[] RETURN_L = { "挂起", "关闭" };
     static final String[] RETURN_V = { "freeze", "off" };
     static final String[] TIME_L = { "跟随 Kobo", "24 小时", "12 小时" };
@@ -378,8 +378,9 @@ final class BlocksSettings {
         LinearLayout g = group(c, "休眠与省电");
         if (HostLink.num(st, "hassleeptime", 1) == 1) {
             int sl = HostLink.num(st, "sleep", 600), bi = 1;
-            for (int i = 0; i < SLEEP_S.length; i++) if (Math.abs(SLEEP_S[i] - sl) < Math.abs(SLEEP_S[bi] - sl)) bi = i;
-            add(g, Blocks.row(a, "自动休眠", "Auto lock", new Blocks.Stepper(a, SLEEP_L, bi, new Blocks.Stepper.Listener() {
+            if (sl <= 0) bi = SLEEP_S.length - 1;
+            else for (int i = 0; i < SLEEP_S.length - 1; i++) if (Math.abs(SLEEP_S[i] - sl) < Math.abs(SLEEP_S[bi] - sl)) bi = i;
+            add(g, Blocks.row(a, "自动休眠", "Auto sleep (also sleeps while charging)", new Blocks.Stepper(a, SLEEP_L, bi, new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { HostLink.cmd("sleeptime " + SLEEP_S[i]); } })));
         }
         if (HostLink.isKobo()) {

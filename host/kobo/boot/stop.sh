@@ -57,7 +57,7 @@ if [ -f "$W/sleep.fl" ]; then
     rm -f "$W/sleep.fl"
 fi
 
-rm -f "$W/fwd.id" "$W/epd.log" "$W/pid" "$W/frozen" "$W/saver_frozen" "$W/saver_nofreeze" "$W/sleeping" "$W/resolv.conf" "$W/input.log" "$W/input.err" "$W/power.fifo"
+rm -f "$W/fwd.id" "$W/epd.log" "$W/pid" "$W/frozen" "$W/saver_frozen" "$W/saver_nofreeze" "$W/sleeping" "$W/fl.dimmed" "$W/resolv.conf" "$W/input.log" "$W/input.err" "$W/power.fifo"
 
 # Kill all Android container processes sharing the rootfs mount
 i=0

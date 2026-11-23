@@ -165,8 +165,12 @@ grep -q 'kobo_deep_suspend' "$TOP/host/kobo/boot/lib/sleep.sh" \
     && grep -q '^CACHE_DEDUP_S=30' "$TOP/host/kobo/models/libra2.conf" \
     && grep -q 'kobo_wake_irq_sum' "$TOP/host/kobo/boot/lib/sleep.sh" \
     && grep -q 'sleep_timeout_get' "$TOP/host/kobo/boot/lib/sleep.sh" \
+    && grep -q 'KEY_F1' "$TOP/input/legacy/vinput.c" \
+    && grep -q 'fl.dimmed' "$TOP/host/kobo/boot/lib/sleep.sh" \
+    && grep -q 'alive \$W/sleep.pid' "$TOP/host/kobo/boot/lib/watchdog.sh" \
+    && grep -q 's/\^SLEEP_TIMEOUT=//p' "$TOP/host/kobo/boot/lib/status.sh" \
     && ! grep -q 'kobo_is_charging && continue' "$TOP/host/kobo/boot/lib/sleep.sh" \
-    && ok "Power optimization wired (deep mem suspend + spurious RTC wakeup filter + charging auto-sleep + dynamic SLEEP_TIMEOUT)" \
+    && ok "Power optimization wired (deep mem suspend + spurious RTC wakeup filter + charging auto-sleep + dynamic SLEEP_TIMEOUT + Hall cover + fl.dimmed)" \
     || fail "missing power optimization hooks in sleep.sh/network.sh/libra2.conf"
 grep -q 'SetFontCacheLimit' "$TOP/tools/kobo/libkobo_madvise.c" \
     && grep -q 'WRWebViewPool' "$TOP/tools/kobo/libkobo_madvise.c" \

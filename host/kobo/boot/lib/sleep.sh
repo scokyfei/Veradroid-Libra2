@@ -238,6 +238,11 @@ kobo_enter_sleep() {
     type lock_request >/dev/null 2>&1 && lock_request
     usleep 250000
     cur_fl=$(kobo_light_get)
+    if [ "${cur_fl:-0}" -eq 0 ] && [ -f "$W/fl.dimmed" ]; then
+        dim_fl=$(tr -cd '0-9' < "$W/fl.dimmed" 2>/dev/null)
+        [ "${dim_fl:-0}" -gt 0 ] && cur_fl=$dim_fl
+        rm -f "$W/fl.dimmed"
+    fi
     echo "${cur_fl:-0}" > "$W/sleep.fl"
     kobo_light_set 0
     screensaver_show

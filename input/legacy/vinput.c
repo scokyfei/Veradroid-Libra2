@@ -674,6 +674,7 @@ static void fl_timeout_wake(void)
 {
     if (!fl_dimmed) return;
     fl_dimmed = 0;
+    unlink("/tmp/veradroid/fl.dimmed");
     el_init();
     if (el_read(0) == 0 && fl_saved_br > 0) {
         el_write(0, fl_saved_br);
@@ -1773,6 +1774,17 @@ static void keydev_read(void)
                 }
                 continue;
             }
+            if (ev.type == EV_KEY && ev.code == KEY_F1) {
+                /* Kobo magnetic SleepCover (Hall sensor): press (1) = cover closed -> sleep, release (0) = opened -> wake */
+                if (ev.value == 1) {
+                    logf_("hw key: KEY_F1 (Hall cover closed) -> action sleep");
+                    action("sleep", NULL);
+                } else if (ev.value == 0) {
+                    logf_("hw key: KEY_F1 (Hall cover opened) -> action wake");
+                    action("wake", NULL);
+                }
+                continue;
+            }
             if (ev.type == EV_KEY && (ev.code == 193 || ev.code == 194 || ev.code == KEY_PAGEUP || ev.code == KEY_PAGEDOWN)) {
                 if (is_sleeping()) { pk_down[0].active = pk_down[1].active = 0; continue; }
                 gconf_load();
@@ -1946,6 +1958,9 @@ int main(int argc, char **argv)
                 if (cur_br > 0) {
                     fl_saved_br = cur_br;
                     fl_dimmed = 1;
+                    char bbuf[16]; snprintf(bbuf, sizeof(bbuf), "%d\n", cur_br);
+                    int bfd = open("/tmp/veradroid/fl.dimmed", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (bfd >= 0) { if (write(bfd, bbuf, strlen(bbuf)) < 0) {} close(bfd); }
                     el_write(0, 0);
                     logf_("fl_timeout: dimmed %d -> 0 after %ds idle", cur_br, FL_TIMEOUT);
                 } else {

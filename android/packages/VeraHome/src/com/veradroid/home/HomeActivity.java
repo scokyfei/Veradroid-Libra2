@@ -1840,8 +1840,16 @@ public class HomeActivity extends Activity {
             }).show();
     }
 
-    /** 电源菜单：返回 Kobo / 关机，替代 Android 原生关机提示。 */
+    /** 电源菜单：立即休眠 / 返回 Kobo / 关机，替代 Android 原生关机提示。 */
     void powerMenu() {
+        if (HostLink.isKobo()) {
+            box("电源", "立即休眠：熄灭前光、显示屏保并进入深度休眠（按电源键唤醒）。\n返回 Kobo：完全退出 Android 并卸载镜像回到 Kobo 系统（USB 传书可用）。",
+                new String[] { "取消", "立即休眠", "返回 Kobo" },
+                new Runnable[] { null,
+                    new Runnable() { @Override public void run() { HostLink.cmd("sleep"); } },
+                    new Runnable() { @Override public void run() { HostLink.cmd("exit"); } } });
+            return;
+        }
         box("电源", "返回 Kobo：冻结在后台，再打开几秒。\n关机：完全退出，下次打开约 15 秒。",
             new String[] { "取消", "返回 Kobo", "关机" },
             new Runnable[] { null,
