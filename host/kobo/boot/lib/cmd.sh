@@ -275,8 +275,11 @@ wrmaint_cmd() {
                    "$_wr/files"/wr.log.* \
                    "$_wr/cache/downloader"/*.zip 2>/dev/null || true
             _lua=/mnt/onboard/.adds/koreader/luajit
-            _sql=/mnt/onboard/.adds/koreader/libs/libsqlite3.so
-            if [ -x "$_lua" ] && [ -f "$_sql" ]; then
+            _sql=
+            for _cand in /mnt/onboard/.adds/koreader/libs/libsqlite3.so.0 /mnt/onboard/.adds/koreader/libs/libsqlite3.so /usr/lib/libsqlite3.so.0; do
+                [ -f "$_cand" ] && { _sql=$_cand; break; }
+            done
+            if [ -x "$_lua" ] && [ -n "$_sql" ]; then
                 for _f in "$_wr"/databases/WRAccount "$_wr"/databases/*/WRBook "$_wr"/databases/*/WRReader "$_wr"/databases/WRBook "$_wr"/databases/WRReader; do
                     [ -f "$_f" ] || continue
                     WR_DB="$_f" "$_lua" -e '
