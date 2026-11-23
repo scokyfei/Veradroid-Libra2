@@ -133,7 +133,7 @@ cmd_listen() {
             apkg=${a%%|*}; aspec=${a#*|}
             rm -f "$SYS/settings.app"
             if [ "$apkg" != home ] && [ -n "$aspec" ] && [ "$aspec" != "$a" ]; then
-                printf '%s\n' "$aspec" | tr ';' '\n' | grep -E '^KFB_(CONTRAST|DITHER|FLASH|INVERT|LIGHTF|DARKEN|MODE|SETTLE|HOLD|SMOOTH|PACE|CLEAN|REAGL_MIN|SCROLLDU|IMG|SCROLLDELAY|SCROLLSTYLE|GCN|NEWWIN|MONO|MAXDEFER|FLIPINPUT|ECLIPSE|DARKCRUSH|HEAVY_FLASH|ANIM_MODE|ANIM_DIR|ANIM_STEPS|ANIM_MIN)=[0-9.]{1,6}$' > "$SYS/settings.app.tmp"
+                printf '%s\n' "$aspec" | tr ';' '\n' | grep -E '^KFB_(CONTRAST|DITHER|FLASH|INVERT|LIGHTF|DARKEN|MODE|SETTLE|HOLD|SMOOTH|PACE|CLEAN|REAGL_MIN|SCROLLDU|IMG|SCROLLDELAY|SCROLLSTYLE|GCN|NEWWIN|MONO|MAXDEFER|FLIPINPUT|ECLIPSE|DARKCRUSH|HEAVY_FLASH|IMG_DITHER|ANIM_MODE|ANIM_DIR|ANIM_STEPS|ANIM_MIN)=[0-9.]{1,6}$' > "$SYS/settings.app.tmp"
                 [ -s "$SYS/settings.app.tmp" ] && mv -f "$SYS/settings.app.tmp" "$SYS/settings.app" || rm -f "$SYS/settings.app.tmp"
             fi
             settings_load 2>/dev/null || true
@@ -243,15 +243,22 @@ wrmaint_status() {
     _zr=$(awk '{printf "%.1f MB", $1/1024/1024}' /sys/block/zram0/compr_data_size 2>/dev/null)
     _cf=$(awk '{printf "%d MHz", $1/1000}' /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 2>/dev/null)
     _odex=$(ls -lh "$SYS"/data/app/com.tencent.weread.eink-*/oat/arm/base.odex 2>/dev/null | awk 'NR==1{print $5}')
-    _w1=$(wc -c < "$SYS/data/data/com.tencent.weread.eink/databases/WRBook-wal" 2>/dev/null || echo 0)
-    _w2=$(wc -c < "$SYS/data/data/com.tencent.weread.eink/databases/WRReader-wal" 2>/dev/null || echo 0)
-    _wal_kb=$(( (_w1 + _w2) / 1024 ))
+    _wr="$SYS/data/data/com.tencent.weread.eink"
+    _wal_b=0
+    for _wf in "$_wr"/databases/*-wal "$_wr"/databases/*/*-wal; do
+        [ -f "$_wf" ] || continue
+        _sz=$(wc -c < "$_wf" 2>/dev/null || echo 0)
+        _wal_b=$((_wal_b + _sz))
+    done
+    _wal_kb=$((_wal_b / 1024))
+    _log_mb=$(du -sm "$_wr/files/log" 2>/dev/null | awk '{print $1}')
+    _zip_mb=$(du -sm "$_wr/cache/downloader" 2>/dev/null | awk '{print $1}')
     _lps=$(cat /proc/net/rtl8723ds/wlan0/lps_info 2>/dev/null | awk '/lps_mode/{print $NF; exit}')
     {
         echo "可用内存：${_ma:-?}（ZRAM 已压缩：${_zr:-0 MB}）"
         echo "当前 CPU 上限：${_cf:-?}（静止限频：${IDLE_CAP_MS:-10000}ms / $(( ${IDLE_CAP_KHZ:-792000} / 1000 ))MHz）"
         echo "微信读书热点包 (base.odex)：${_odex:-未编译}"
-        echo "微信读书数据库 WAL 占用：${_wal_kb} KB"
+        echo "数据库 WAL：${_wal_kb} KB　|　日志：${_log_mb:-0} MB　|　下载包残留：${_zip_mb:-0} MB"
         echo "笔锋加黑档位：${KFB_FONT_GAMMA:-2}　|　插图智能抖动：${KFB_IMG_DITHER:-1}"
         echo "无操作自动息灯：${FL_TIMEOUT:-0} 秒　|　Wi-Fi LPS：${_lps:-auto}"
     } > "$X/wrmaint.txt.tmp" && mv -f "$X/wrmaint.txt.tmp" "$X/wrmaint.txt"
@@ -260,16 +267,17 @@ wrmaint_status() {
 wrmaint_cmd() {
     case "$1" in
         wal)
-            echo "正在清理微信读书日志并压缩 SQLite WAL..." > "$X/wrmaint.txt"
-            rm -rf "$SYS/data/data/com.tencent.weread.eink/files/log"/* \
-                   "$SYS/data/data/com.tencent.weread.eink/files/logs"/* \
-                   "$SYS/data/data/com.tencent.weread.eink/files/BusReport"/* \
-                   "$SYS/data/data/com.tencent.weread.eink/files"/wr.log.* 2>/dev/null || true
+            echo "正在清理微信读书日志/安装残包并压缩 SQLite WAL..." > "$X/wrmaint.txt"
+            _wr="$SYS/data/data/com.tencent.weread.eink"
+            rm -rf "$_wr/files/log"/* \
+                   "$_wr/files/logs"/* \
+                   "$_wr/files/BusReport"/* \
+                   "$_wr/files"/wr.log.* \
+                   "$_wr/cache/downloader"/*.zip 2>/dev/null || true
             _lua=/mnt/onboard/.adds/koreader/luajit
             _sql=/mnt/onboard/.adds/koreader/libs/libsqlite3.so
             if [ -x "$_lua" ] && [ -f "$_sql" ]; then
-                for _db in WRBook WRReader; do
-                    _f="$SYS/data/data/com.tencent.weread.eink/databases/$_db"
+                for _f in "$_wr"/databases/WRAccount "$_wr"/databases/*/WRBook "$_wr"/databases/*/WRReader "$_wr"/databases/WRBook "$_wr"/databases/WRReader; do
                     [ -f "$_f" ] || continue
                     WR_DB="$_f" "$_lua" -e '
                         local ffi = require("ffi")
@@ -284,7 +292,7 @@ wrmaint_cmd() {
                 done
             fi
             wrmaint_status
-            echo "✔ 日志清理与数据库 WAL 压缩已完成" >> "$X/wrmaint.txt"
+            echo "✔ 日志/残包清理与数据库 WAL 压缩已完成" >> "$X/wrmaint.txt"
             [ -p "$X/epd.fifo" ] && echo "BADGE 1200 t clear DONE|微信读书维护完成" > "$X/epd.fifo" 2>/dev/null || true
             ;;
         profile)
