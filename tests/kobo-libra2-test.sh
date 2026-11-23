@@ -244,6 +244,8 @@ grep -q 'S_CONTROLS' "$TOP/android/packages/VeraHome/src/com/veradroid/home/Bloc
     && grep -q 'displayAdv()' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
     && grep -q 'controls()' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
     && grep -q 'appearance()' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && grep -q 'case 3: tab = -1; openSettingsEntry();' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HomeActivity.java" \
+    && grep -q 'else if (tab < 0) { showBlocks(BlocksHome.ME); }' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HomeActivity.java" \
     && ok "VeraHome 6-category settings IA (display/displayAdv/controls/power/storage/appearance/about) wired" \
     || fail "missing VeraHome 6-category settings IA"
 

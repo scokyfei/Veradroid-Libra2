@@ -363,7 +363,7 @@ final class BlocksSettings {
         add(ui, Blocks.row(a, "英文小字", "English captions", toggle(Blocks.caps(a), new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { prefs.edit().putBoolean(Blocks.CAPS_KEY, on).commit(); h.show(BlocksHome.S_UI); a.changed(); } })));
         add(ui, Blocks.row(a, "桌面动画", "E-ink animation", new Blocks.Stepper(a, Blocks.ANIM_L, Blocks.anim(a), new Blocks.Stepper.Listener() {
-            @Override public void onStep(int i) { prefs.edit().putInt(Blocks.ANIM_KEY, i).apply(); } })));
+            @Override public void onStep(int i) { prefs.edit().putInt(Blocks.ANIM_KEY, i).apply(); h.invalidate(BlocksHome.ME); } })));
         c.addView(Blocks.navRow(a, "更多桌面与输入法设置", "应用网格 · 壁纸与图标 · 状态栏 · 软件商店 · 输入法", new View.OnClickListener() {
             @Override public void onClick(View v) { h.openCat(3); } }), Blocks.gap(a, 14));
         return shell("System / appearance", "桌面与外观", c);

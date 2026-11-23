@@ -901,7 +901,7 @@ public class HomeActivity extends Activity {
                     case 0: startActivity(new Intent(HomeActivity.this, TransferActivity.class).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)); overridePendingTransition(0, 0); break;
                     case 1: startActivity(new Intent(HomeActivity.this, StoreActivity.class).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)); overridePendingTransition(0, 0); break;
                     case 2: startActivity(new Intent(HomeActivity.this, StatsActivity.class).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)); overridePendingTransition(0, 0); break;
-                    case 3: tab = -1; showSettings(); changed(); break;
+                    case 3: tab = -1; openSettingsEntry(); changed(); break;
                     case 4: HostLink.cmd("clear"); break;
                     case 5: HostLink.cmd("exit"); break;
                     default: powerMenu(); break;
@@ -1902,6 +1902,7 @@ public class HomeActivity extends Activity {
         if (blocks != null && Blocks.on(this)) {
             int cur = blocks.current();
             if (cur >= 10) { blocks.invalidate(cur); showBlocks(cur); }
+            else if (tab < 0) { showBlocks(BlocksHome.ME); }
             else { blocks.openCat(tab); showBlocks(blocks.current()); }
             return;
         }
