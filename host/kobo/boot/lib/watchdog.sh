@@ -192,6 +192,7 @@ watchdog() {
     # MEM: re-apply kernel LMK each tick (lab126 can reset minfree).
     last_st_bat=
     last_st_chg=
+    last_st_ip=
     while :; do
         if [ -f $W/saver_frozen ] || [ -f $W/frozen ]; then sleep_for=60; else sleep_for=20; fi
         sleep $sleep_for
@@ -222,8 +223,9 @@ watchdog() {
             [ -f $W/booted ] && type compile_watch >/dev/null 2>&1 && compile_watch
             cur_st_bat=$(kobo_battery 2>/dev/null)
             kobo_is_charging && cur_st_chg=1 || cur_st_chg=0
-            if [ "$cur_st_bat" != "$last_st_bat" ] || [ "$cur_st_chg" != "$last_st_chg" ]; then
-                last_st_bat=$cur_st_bat; last_st_chg=$cur_st_chg
+            cur_st_ip=$(kobo_wifi_ip 2>/dev/null)
+            if [ "$cur_st_bat" != "$last_st_bat" ] || [ "$cur_st_chg" != "$last_st_chg" ] || [ "$cur_st_ip" != "$last_st_ip" ]; then
+                last_st_bat=$cur_st_bat; last_st_chg=$cur_st_chg; last_st_ip=$cur_st_ip
                 type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
             fi
         fi

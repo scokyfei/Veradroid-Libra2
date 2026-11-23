@@ -46,6 +46,7 @@ final class BlocksHome {
     private final FrameLayout body;
     private final Blocks.Nav nav;
     private final TextView stLeft, stRight;
+    private final Icons.IconView stWifi;
     private final SparseArray<View> pages = new SparseArray<View>();
     private final SparseArray<String> sigs = new SparseArray<String>();
     private int cur = -1;
@@ -75,6 +76,11 @@ final class BlocksHome {
         stLeft.setEllipsize(android.text.TextUtils.TruncateAt.END);
         stLeft.setPadding(dp(6), 0, dp(8), 0);
         st.addView(stLeft, Blocks.weight(1));
+        stWifi = new Icons.IconView(a, Icons.Kind.WIFI);
+        LinearLayout.LayoutParams wp = Blocks.lp(dp(15), dp(15));
+        wp.rightMargin = dp(6);
+        stWifi.setVisibility(View.GONE);
+        st.addView(stWifi, wp);
         stRight = Ui.text(a, "", 12, false);
         st.addView(stRight);
         root.addView(st);
@@ -231,11 +237,13 @@ final class BlocksHome {
         return true;
     }
 
-    void refreshStatus(String clock, String state) {
+    void refreshStatus(String clock, String state, boolean wifiConnected) {
         String name = prefs.getString("name", "VeraDroid");
         if (name.length() == 0) name = "VeraDroid";
         if (!name.contentEquals(stLeft.getText())) stLeft.setText(name);
-        String r = clock + "    " + state;
+        int wvis = wifiConnected ? View.VISIBLE : View.GONE;
+        if (stWifi.getVisibility() != wvis) stWifi.setVisibility(wvis);
+        String r = state.length() == 0 ? clock : clock + "    " + state;
         if (!r.contentEquals(stRight.getText())) stRight.setText(r);
         refreshMe();
     }

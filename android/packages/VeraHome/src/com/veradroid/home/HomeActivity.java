@@ -376,8 +376,19 @@ public class HomeActivity extends Activity {
             tf.addAction(Intent.ACTION_POWER_CONNECTED); tf.addAction(Intent.ACTION_POWER_DISCONNECTED);
             try { registerReceiver(timeReceiver, tf); timeReceiverOn = true; } catch (Throwable ignored) { }
         }
+        if (statusWatch == null) {
+            statusWatch = new CtlWatch.Listener() {
+                @Override public void onCtl(String path) {
+                    if (!"status".equals(path)) return;
+                    handler.post(new Runnable() { @Override public void run() { if (resumed && !isFinishing()) refreshStatus(); } });
+                }
+            };
+            CtlWatch.add(statusWatch);
+        }
         showUploadResult();
     }
+
+    private CtlWatch.Listener statusWatch;
 
     private final Runnable updateNotice = new Runnable() { @Override public void run() { if (resumed && !isFinishing()) SysUpdate.maybeNotify(HomeActivity.this); } };
 
@@ -396,6 +407,7 @@ public class HomeActivity extends Activity {
         if (Blocks.on(this) && !ownStart && !standalone) { leftForApp = true; BlocksCards.onLeaveHome(this); }
         ownStart = false;
         handler.removeCallbacks(tick);
+        if (statusWatch != null) { CtlWatch.remove(statusWatch); statusWatch = null; }
         if (timeReceiverOn) { try { unregisterReceiver(timeReceiver); } catch (Throwable ignored) { } timeReceiverOn = false; }
         if (!ReaderActivity.opening) {   // 打开自带阅读器时由阅读器在第一页画出来时放出状态栏
             StatusBarService.setSuppressed(false);
@@ -1325,14 +1337,16 @@ public class HomeActivity extends Activity {
         int[] live = Ui.liveBattery(this);
         String batStr = live != null ? String.valueOf(live[0]) : st.get("battery");
         boolean chg = live != null ? (live[1] == 1) : "1".equals(st.get("charging"));
-        StringBuilder sb = new StringBuilder();
-        if ("0".equals(st.get("wifi"))) sb.append("Wi-Fi 关   ");
+        String lanip = st.get("lanip");
+        boolean wifiConnected = "1".equals(st.get("wifi")) && lanip != null && lanip.trim().length() > 0;
+        StringBuilder batSb = new StringBuilder();
         if (batStr != null) {
-            if (chg) sb.append("充电中 ");
-            sb.append(batStr).append("%");
+            if (chg) batSb.append("充电中 ");
+            batSb.append(batStr).append("%");
         }
-        String state = sb.toString();
-        if (blocks != null) blocks.refreshStatus(Ui.clock(this), state);
+        String batOnly = batSb.toString();
+        String state = (!wifiConnected ? "Wi-Fi 关   " : "") + batOnly;
+        if (blocks != null) blocks.refreshStatus(Ui.clock(this), batOnly, wifiConnected);
         for (int i = 0; i < 2; i++) {
             if (clockViews[i] != null && !clock.equals(String.valueOf(clockViews[i].getText()))) clockViews[i].setText(clock);
             if (stateViews[i] != null && !state.equals(String.valueOf(stateViews[i].getText()))) stateViews[i].setText(state);

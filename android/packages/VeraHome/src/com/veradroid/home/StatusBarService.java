@@ -35,6 +35,8 @@ public class StatusBarService extends Service {
     private WindowManager wm;
     private View bar;
     private TextView clock, batt;
+    private Icons.IconView wifiIcon;
+    private CtlWatch.Listener statusWatch;
     private final Handler handler = new Handler();
     private final Runnable tick = new Runnable() {
         @Override public void run() {
@@ -92,6 +94,15 @@ public class StatusBarService extends Service {
             tf.addAction(Intent.ACTION_POWER_CONNECTED); tf.addAction(Intent.ACTION_POWER_DISCONNECTED);
             try { registerReceiver(timeReceiver, tf); timeReceiverOn = true; } catch (Throwable ignored) { }
         }
+        if (statusWatch == null) {
+            statusWatch = new CtlWatch.Listener() {
+                @Override public void onCtl(String path) {
+                    if (!"status".equals(path)) return;
+                    handler.post(new Runnable() { @Override public void run() { if (!suppressed && !appSuppressed) refreshNow(); } });
+                }
+            };
+            CtlWatch.add(statusWatch);
+        }
         return START_STICKY;
     }
 
@@ -114,6 +125,13 @@ public class StatusBarService extends Service {
             if (!cfg.optBoolean("clock", true)) now = "";
             String clockText = text.length() == 0 ? now : now.length() == 0 ? text : text + "   " + now;
             if (!clockText.equals(String.valueOf(clock.getText()))) clock.setText(clockText);
+        }
+        if (wifiIcon != null) {
+            java.util.Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
+            String lanip = st.get("lanip");
+            boolean wifiOn = "1".equals(st.get("wifi")) && lanip != null && lanip.trim().length() > 0;
+            int wvis = wifiOn ? View.VISIBLE : View.GONE;
+            if (wifiIcon.getVisibility() != wvis) wifiIcon.setVisibility(wvis);
         }
         if (batt != null) batt.setVisibility(cfg.optBoolean("battery", true) ? View.VISIBLE : View.GONE);
         if (batt != null) {
@@ -157,6 +175,11 @@ public class StatusBarService extends Service {
         // 每分钟换一次图案，看起来就是“左上角斜着闪”（PW6 真机：每 60 s 一次 24x22 的 DU，就是分钟那一位）。纯黑白的字 DU 刷出来和原图一样。
         for (TextView tv : new TextView[] { clock, batt }) { tv.getPaint().setAntiAlias(false); tv.getPaint().setSubpixelText(false); }
         row.addView(clock, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
+        wifiIcon = new Icons.IconView(this, Icons.Kind.WIFI);
+        LinearLayout.LayoutParams wp = new LinearLayout.LayoutParams(dp(13), dp(13));
+        wp.rightMargin = dp(6);
+        wifiIcon.setVisibility(View.GONE);
+        row.addView(wifiIcon, wp);
         row.addView(batt, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT));
         // 状态栏只有 20dp 高。以前用 14dp 的线条箭头（﹀）：线只有 2 像素，墨水屏抖动后又淡又细，看起来像残缺的，
         // 还贴着屏幕右边。改成实心倒三角 ▼（14dp 宽、8dp 高），离右边 10dp；整行仍然都能点开面板。
@@ -226,6 +249,7 @@ public class StatusBarService extends Service {
         if (bar == null) return;
         try { wm.removeView(bar); } catch (Throwable ignored) { }
         bar = null;
+        wifiIcon = null;
     }
 
     private void openPanel() {
@@ -237,6 +261,7 @@ public class StatusBarService extends Service {
 
     @Override public void onDestroy() {
         handler.removeCallbacks(tick);
+        if (statusWatch != null) { CtlWatch.remove(statusWatch); statusWatch = null; }
         if (timeReceiverOn) { try { unregisterReceiver(timeReceiver); } catch (Throwable ignored) { } timeReceiverOn = false; }
         hide();
         super.onDestroy();
