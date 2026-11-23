@@ -1204,7 +1204,6 @@ final class BlocksHome {
         content.addView(devBox, Blocks.gap(a, 2));
         // 后台在做的事：系统更新 / 安装应用 / 优化应用（方块进度小卡片，没有就不显示）
         content.addView(TaskCards.strip(a), Blocks.match());
-        content.addView(quickRow(st), Blocks.gap(a, 8));
         // 阅读统计
         int done = 0;
         if (a.libOn()) for (Lib.Book b : Lib.all()) if (b.percent >= 100) done++;
@@ -1288,43 +1287,6 @@ final class BlocksHome {
         r.setClickable(true);
         r.setOnClickListener(l);
         Blocks.fast(r);
-        return r;
-    }
-
-    /** 我的页的快捷设置：Wi-Fi 开关、亮度（下拉面板）、整屏刷新、动画档位。每格点一下只改它自己那一格的字。 */
-    private View quickRow(Map<String, String> st) {
-        LinearLayout r = new LinearLayout(a);
-        final boolean[] wifi = { !"0".equals(st.get("wifi")) };
-        final String[][] t = { { "Wi-Fi", wifi[0] ? "开" : "关" }, { "亮度", "面板" }, { "整屏刷新", "清残影" }, { "动画", Blocks.ANIM_L[Blocks.anim(a)] } };
-        final Icons.Kind[] k = { Icons.Kind.WIFI, Icons.Kind.SUN_L, Icons.Kind.REFRESH, Icons.Kind.SWIPE };
-        for (int i = 0; i < 4; i++) {
-            final int idx = i;
-            LinearLayout c = new LinearLayout(a);
-            c.setOrientation(LinearLayout.VERTICAL);
-            c.setGravity(Gravity.CENTER_HORIZONTAL);
-            c.setBackground(Blocks.frame(a));
-            c.setPadding(dp(4), dp(6), dp(4) + Blocks.shade(a), dp(5) + Blocks.shade(a));
-            c.addView(new Icons.IconView(a, k[i]), Blocks.lp(dp(24), dp(24)));
-            TextView name = Ui.text(a, t[i][0], 13, true);
-            name.setGravity(Gravity.CENTER);
-            c.addView(name, Blocks.match());
-            final TextView val = Ui.text(a, t[i][1], 11, false);
-            val.setGravity(Gravity.CENTER);
-            c.addView(val, Blocks.match());
-            c.setClickable(true);
-            c.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
-                switch (idx) {
-                case 0: wifi[0] = !wifi[0]; HostLink.cmd("wifi " + (wifi[0] ? 1 : 0)); HostLink.cmd("status"); val.setText(wifi[0] ? "开" : "关"); break;
-                case 1: Panel.open(a); break;
-                case 2: HostLink.cmd("clear"); break;
-                default: int n = (Blocks.anim(a) + 1) % 3; prefs.edit().putInt(Blocks.ANIM_KEY, n).apply(); val.setText(Blocks.ANIM_L[n]); break;
-                }
-            } });
-            Blocks.fast(c);
-            LinearLayout.LayoutParams lp = Blocks.weight(1);
-            if (i > 0) lp.leftMargin = dp(8);
-            r.addView(c, lp);
-        }
         return r;
     }
 
