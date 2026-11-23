@@ -32,7 +32,7 @@ import java.util.Map;
  */
 final class BlocksHome {
     static final int HOME = 0, FILES = 1, APPS = 2, ME = 3;
-    static final int S_DISPLAY = 10, S_POWER = 11, S_STORAGE = 12, S_ABOUT = 13, S_CARDS = 14, S_LIBRARY = 15;
+    static final int S_DISPLAY = 10, S_POWER = 11, S_STORAGE = 12, S_ABOUT = 13, S_CARDS = 14, S_LIBRARY = 15, S_CONTROLS = 16, S_UI = 17, S_DISPLAY_ADV = 18;
     /** 经典设置的各类做成的方块设置页：S_CATS = 分类列表（全部设置），S_CATS + 1 + t = 第 t 类。只在点进去时搭，回到标签页时拆掉。 */
     static final int S_CATS = 30;
     static int catKey(int t) { return S_CATS + 1 + Math.max(-1, Math.min(HomeActivity.CAT_COUNT - 1, t)); }
@@ -101,11 +101,11 @@ final class BlocksHome {
 
     /** 用户点进某一页（设置分类、全部书……）：往左擦；返回：往右擦。 */
     /** 打开经典设置第 t 类对应的方块设置页（-1 = 全部设置的分类列表）；返回时回到现在这一页。 */
-    void openCat(int t) {
-        int key = catKey(t);
+    void push(int key) {
         if (cur >= 10 && cur != key) trail.add(cur); else if (cur < 10) { trail.clear(); backTo = cur < 0 ? ME : cur; }
         go(key);
     }
+    void openCat(int t) { push(catKey(t)); }
 
     void go(int key) { Blocks.swipe(a, order(key) >= order(cur) ? Blocks.DIR_LEFT : Blocks.DIR_RIGHT, Blocks.KIND_PAGE); show(key); a.changed(); }
     int current() { return cur < 0 ? HOME : cur; }
@@ -1231,16 +1231,17 @@ final class BlocksHome {
         int lp4 = dp(4) + Blocks.stroke(a);
         list.setPadding(lp4, lp4, lp4 + Blocks.shade(a), lp4 + Blocks.shade(a));
         String[][] rows = {
-            { "首页卡片", "继续阅读 · 天气 · 日历 · 小部件…" },
-            { "显示与刷新", "亮度 · 刷新档位 · 全刷 · 界面风格" },
-            { "电源与时间", "自动休眠 · 回 Kobo · 时间格式" },
-            { "存储与连接", BluetoothActivity.supported() ? "Wi-Fi · 蓝牙 · Web 文件管理 · 存储空间" : "Wi-Fi · Web 文件管理 · 存储空间" },
-            { "设备与关于", "版本 · 更新 · 日志 · 全部设置" } };
-        final int[] keys = { S_CARDS, S_DISPLAY, S_POWER, S_STORAGE, S_ABOUT };
+            { "显示与阅读画质", "前光 · 刷新档位 · 文字笔锋 · 夜间与残影" },
+            { "按键与手势操控", "实体翻页键 · 边缘滑调光 · 旋转 · 全局手势" },
+            { "电源与省电", "自动休眠 · 自动息灯 · 静止限频 · 屏保锁屏" },
+            { "网络与传书存储", BluetoothActivity.supported() ? "Wi-Fi · 蓝牙 · 网页传书 · 存储空间" : "Wi-Fi · 网页传书 · 存储空间" },
+            { "桌面与外观", "首页卡片 · 快捷面板 · 风格字重 · 网格图标" },
+            { "系统维护与关于", "微信读书维护看板 · 性能编译 · 日志 · 关于" } };
+        final int[] keys = { S_DISPLAY, S_CONTROLS, S_POWER, S_STORAGE, S_UI, S_ABOUT };
         for (int i = 0; i < rows.length; i++) {
             final int k = keys[i];
             if (i > 0) list.addView(Blocks.hair(a));
-            list.addView(meNavRow(rows[i][0], rows[i][1], new View.OnClickListener() { @Override public void onClick(View v) { backTo = ME; go(k); } }));
+            list.addView(meNavRow(rows[i][0], rows[i][1], new View.OnClickListener() { @Override public void onClick(View v) { trail.clear(); backTo = ME; go(k); } }));
         }
         content.addView(list, Blocks.gap(a, 4));
         pg.addView(paged(content), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
@@ -1267,7 +1268,7 @@ final class BlocksHome {
         LinearLayout r = new LinearLayout(a);
         r.setOrientation(LinearLayout.HORIZONTAL);
         r.setGravity(Gravity.CENTER_VERTICAL);
-        r.setPadding(dp(12), dp(7), dp(8), dp(7));
+        r.setPadding(dp(12), dp(6), dp(8), dp(6));
         r.setMinimumHeight(dp(56));
         LinearLayout mid = new LinearLayout(a);
         mid.setOrientation(LinearLayout.VERTICAL);

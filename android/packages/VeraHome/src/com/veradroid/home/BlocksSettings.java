@@ -49,6 +49,8 @@ final class BlocksSettings {
     static final String[] FLTO_V = { "0", "60", "120", "180", "300", "600" };
     static final String[] IDLECAP_L = { "关", "10 秒（默认）", "20 秒", "30 秒" };
     static final String[] IDLECAP_V = { "0", "10000", "20000", "30000" };
+    static final String[] ROTATE_L = { "竖屏 0°", "倒过来 180°", "横屏 90°", "横屏 270°" };
+    static final String[] ROTATE_V = { "0", "180", "90", "270" };
     static final String[] GCN_L = { "关", "20 次", "30 次", "50 次" };
     static final String[] GCN_V = { "0", "20", "30", "50" };
     static final String[] FONT_L = { "小", "标准", "大", "特大" };
@@ -69,9 +71,12 @@ final class BlocksSettings {
         Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
         String cfg = new java.util.TreeMap<String, String>(HostLink.kv(HostLink.KFB + "settings")).toString();
         switch (key) {
-        case BlocksHome.S_DISPLAY: return cfg + prefs.getString("name", "VeraDroid") + prefs.getString("quick", "") + prefs.getString("panelname", "") + AppFont.user(a) + st.get("light") + st.get("warmth") + st.get("lightmax") + st.get("haslight") + st.get("haswarmth") + Blocks.on(a);
+        case BlocksHome.S_DISPLAY: return cfg + AppFont.user(a) + st.get("light") + st.get("warmth") + st.get("lightmax") + st.get("haslight") + st.get("haswarmth");
+        case BlocksHome.S_DISPLAY_ADV: return cfg;
+        case BlocksHome.S_CONTROLS: return cfg;
         case BlocksHome.S_POWER: return cfg + st.get("sleep") + prefs.getBoolean("clock12", false) + "|" + java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR);
         case BlocksHome.S_STORAGE: return st.get("wifi") + "|" + Transfer.get(a).running() + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
+        case BlocksHome.S_UI: return prefs.getString("name", "VeraDroid") + "|" + prefs.getString("quick", "") + "|" + prefs.getString("panelname", "") + "|" + Fonts.weight(a) + "|" + Blocks.caps(a) + "|" + Blocks.anim(a) + "|" + Blocks.on(a);
         case BlocksHome.S_CARDS: return prefs.getString(BlocksCards.KEY, BlocksCards.DEFAULT) + prefs.getString("blk_quick", "") + prefs.getString("wx_city", "") + prefs.getString("blk_readers", "") + a.appsVersion();
         default: return prefs.getString("name", "VeraDroid") + "|" + (System.currentTimeMillis() / 60000);
         }
@@ -84,8 +89,11 @@ final class BlocksSettings {
         }
         switch (key) {
         case BlocksHome.S_DISPLAY: return display();
+        case BlocksHome.S_DISPLAY_ADV: return displayAdv();
+        case BlocksHome.S_CONTROLS: return controls();
         case BlocksHome.S_POWER: return power();
         case BlocksHome.S_STORAGE: return storage();
+        case BlocksHome.S_UI: return appearance();
         case BlocksHome.S_CARDS: return cards();
         default: return about();
         }
@@ -150,7 +158,7 @@ final class BlocksSettings {
 
     private View toggle(boolean on, Icons.Toggle.Listener l) { return new Blocks.Switch(a, on, l); }
 
-    // ------------------------------------------------------------------ 显示与刷新
+    // ------------------------------------------------------------------ 1. 显示与阅读画质
 
     private View display() {
         LinearLayout c = content();
@@ -172,36 +180,54 @@ final class BlocksSettings {
                 add(g, wideRow("暖光", "Warm light", warm));
             }
         }
-        LinearLayout g = group(c, "刷新");
+        LinearLayout g = group(c, "刷新与画质");
         int sm = Math.max(0, Math.min(3, HostLink.num(cfg, "KFB_SMOOTH", 0)));
         LinearLayout smRow = new LinearLayout(a);
         smRow.setOrientation(LinearLayout.VERTICAL);
         smRow.setPadding(dp(12), dp(8), dp(10), dp(10));
         smRow.addView(Ui.text(a, "刷新档位", 17, true));
         smRow.addView(Blocks.cap(a, "Refresh profile"));
-        TextView smHint = Ui.text(a, "流畅：先快刷再补灰度 · 均衡：一次刷完 · 画质：最干净（跟随 = 用下面“更多”里的各项）", 12, false);
+        TextView smHint = Ui.text(a, "流畅：先快刷再补灰度 · 均衡：一次刷完 · 画质：最干净（跟随 = 用高级显示设置）", 12, false);
         smHint.setPadding(0, dp(2), 0, dp(6));
         smRow.addView(smHint);
         smRow.addView(new Blocks.SegBar(a, SMOOTH_L, sm, new Blocks.SegBar.Listener() { @Override public void onPick(int i) { host("KFB_SMOOTH=" + i); } }), Blocks.match());
         add(g, smRow);
-        add(g, Blocks.row(a, "刷新方式", "Partial update", new Blocks.Stepper(a, MODE_L, idx(MODE_V, cfg.get("KFB_MODE"), 0), new Blocks.Stepper.Listener() {
-            @Override public void onStep(int i) { host("KFB_MODE=" + MODE_V[i]); } })));
         add(g, Blocks.row(a, "全刷周期", "Full refresh period", new Blocks.Stepper(a, FLASH_L, idx(FLASH_V, cfg.get("KFB_FLASH"), 3), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_FLASH=" + FLASH_V[i]); } })));
         add(g, Blocks.row(a, "对比度", "Contrast", new Blocks.Stepper(a, CONTRAST_L, idx(CONTRAST_V, cfg.get("KFB_CONTRAST"), 1), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_CONTRAST=" + CONTRAST_V[i]); } })));
-        add(g, Blocks.row(a, "浅色过滤", "Light-colour filter", new Blocks.Stepper(a, Panel.LIGHTF_L, idx(Panel.LIGHTF_V, cfg.get("KFB_LIGHTF"), 0), new Blocks.Stepper.Listener() {
-            @Override public void onStep(int i) { host("KFB_LIGHTF=" + Panel.LIGHTF_V[i]); } })));
-        add(g, Blocks.row(a, "深色加深", "Darken light text", toggle("1".equals(cfg.get("KFB_DARKEN")), new Icons.Toggle.Listener() {
-            @Override public void onToggle(boolean on) { host("KFB_DARKEN=" + (on ? 1 : 0)); } })));
         add(g, Blocks.row(a, "反色", "Invert", toggle("1".equals(cfg.get("KFB_INVERT")), new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { host("KFB_INVERT=" + (on ? 1 : 0)); } })));
-        add(g, Blocks.row(a, "立即整屏刷新", "Clear ghosting", Blocks.button(a, "刷新", false, new View.OnClickListener() {
-            @Override public void onClick(View v) { HostLink.cmd("clear"); } })));
         int am = HostLink.num(cfg, "KFB_ANIM_MODE", 0);
         final int[] animLast = { am > 0 ? am : 1 };
         add(g, Blocks.row(a, "翻页动画", "Reading page turns only", toggle(am > 0, new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { host("KFB_ANIM_MODE=" + (on ? animLast[0] : 0)); } })));
+        add(g, Blocks.row(a, "立即整屏刷新", "Clear ghosting", Blocks.button(a, "刷新", false, new View.OnClickListener() {
+            @Override public void onClick(View v) { HostLink.cmd("clear"); } })));
+        LinearLayout fg = group(c, "文字与插图");
+        if (HostLink.isKobo()) {
+            add(fg, Blocks.row(a, "文字笔锋加黑", "E-Ink glyph-edge Gamma (images untouched)", new Blocks.Stepper(a, FONTGAMMA_L, idx(FONTGAMMA_V, cfg.get("KFB_FONT_GAMMA"), 2), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("KFB_FONT_GAMMA=" + FONTGAMMA_V[i]); } })));
+            add(fg, Blocks.row(a, "插图智能抖动", "Bayer dither for grayscale images only (text untouched)", toggle(!"0".equals(cfg.get("KFB_IMG_DITHER")), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("KFB_IMG_DITHER=" + (on ? 1 : 0)); } })));
+        }
+        float fs = AppFont.user(a);
+        int fi = 0;
+        for (int i = 0; i < FONT_S.length; i++) if (Math.abs(FONT_S[i] - fs) < Math.abs(FONT_S[fi] - fs)) fi = i;
+        add(fg, Blocks.row(a, "应用字号", "App font size", new Blocks.Stepper(a, FONT_L, fi, new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { AppFont.setUser(a, FONT_S[i]); } })));
+        add(fg, Blocks.navRow(a, "应用优化", "单独给某个应用设刷新、全刷、对比度、字号、保持后台", new View.OnClickListener() {
+            @Override public void onClick(View v) { appDisplayPicker(); } }));
+        c.addView(Blocks.navRow(a, "高级显示设置", "夜间波形 · 残影控制 · 局部刷新 · 浅色过滤 · 系统字体", new View.OnClickListener() {
+            @Override public void onClick(View v) { h.push(BlocksHome.S_DISPLAY_ADV); } }), Blocks.gap(a, 14));
+        return shell("System / display", "显示与阅读画质", c);
+    }
+
+    // ------------------------------------------------------------------ 1b. 高级显示设置
+
+    private View displayAdv() {
+        LinearLayout c = content();
+        final Map<String, String> cfg = HostLink.kv(HostLink.KFB + "settings");
         if (HostLink.isKobo()) {
             LinearLayout ng = group(c, "夜间与残影");
             add(ng, Blocks.row(a, "夜间原生波形", "Eclipse GLKW16 / GCK16", toggle(!"0".equals(cfg.get("KFB_ECLIPSE")), new Icons.Toggle.Listener() {
@@ -216,13 +242,31 @@ final class BlocksSettings {
                 @Override public void onToggle(boolean on) { host("KFB_NEWWIN=" + (on ? 1 : 0)); } })));
             add(ng, Blocks.row(a, "全局 NEON 文字与字形加速", "Skia NEON & glyph cache for all apps", toggle(!"0".equals(cfg.get("KFB_SKIA_OPT")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("KFB_SKIA_OPT=" + (on ? 1 : 0)); } })));
-            add(ng, Blocks.row(a, "文字笔锋加黑", "E-Ink glyph-edge Gamma (images untouched)", new Blocks.Stepper(a, FONTGAMMA_L, idx(FONTGAMMA_V, cfg.get("KFB_FONT_GAMMA"), 2), new Blocks.Stepper.Listener() {
-                @Override public void onStep(int i) { host("KFB_FONT_GAMMA=" + FONTGAMMA_V[i]); } })));
-            add(ng, Blocks.row(a, "插图智能抖动", "Bayer dither for grayscale images only (text untouched)", toggle(!"0".equals(cfg.get("KFB_IMG_DITHER")), new Icons.Toggle.Listener() {
-                @Override public void onToggle(boolean on) { host("KFB_IMG_DITHER=" + (on ? 1 : 0)); } })));
         }
+        LinearLayout wf = group(c, "画面与波形细节");
+        add(wf, Blocks.row(a, "局部刷新方式", "Partial update", new Blocks.Stepper(a, MODE_L, idx(MODE_V, cfg.get("KFB_MODE"), 0), new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { host("KFB_MODE=" + MODE_V[i]); } })));
+        add(wf, Blocks.row(a, "浅色过滤", "Light-colour filter", new Blocks.Stepper(a, Panel.LIGHTF_L, idx(Panel.LIGHTF_V, cfg.get("KFB_LIGHTF"), 0), new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { host("KFB_LIGHTF=" + Panel.LIGHTF_V[i]); } })));
+        add(wf, Blocks.row(a, "深色加深", "Darken light text", toggle("1".equals(cfg.get("KFB_DARKEN")), new Icons.Toggle.Listener() {
+            @Override public void onToggle(boolean on) { host("KFB_DARKEN=" + (on ? 1 : 0)); } })));
+        LinearLayout more = group(c, "底层显示参数");
+        add(more, Blocks.navRow(a, "宿主显示步进器", "快速滑动 · 图片灰度 · REAGL 整页阈值", new View.OnClickListener() {
+            @Override public void onClick(View v) { HostSettingsActivity.open(a, "display"); } }));
+        add(more, Blocks.navRow(a, "系统字体与动画细节", "系统字体 · 滑动合并 · 翻页动画速度 · 灰度抖动 · 桌面大小", new View.OnClickListener() {
+            @Override public void onClick(View v) { h.openCat(1); } }));
+        return shell("Display / advanced", "高级显示设置", c);
+    }
+
+    // ------------------------------------------------------------------ 2. 按键与手势操控
+
+    private View controls() {
+        LinearLayout c = content();
+        final Map<String, String> cfg = HostLink.kv(HostLink.KFB + "settings");
+        LinearLayout kr = group(c, "方向与实体按键");
+        add(kr, Blocks.row(a, "屏幕方向", "Screen rotation (90°/270° restarts)", new Blocks.Stepper(a, ROTATE_L, idx(ROTATE_V, cfg.get("KFB_ROTATE"), 0), new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { host("KFB_ROTATE=" + ROTATE_V[i]); } })));
         if (HostLink.isKobo()) {
-            LinearLayout kr = group(c, "方向与实体按键");
             add(kr, Blocks.row(a, "重力感应自动旋转", "Auto rotate (0° / 180°, keys follow)", toggle("1".equals(cfg.get("KFB_AUTO_ROTATE")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("KFB_AUTO_ROTATE=" + (on ? 1 : 0)); } })));
             add(kr, Blocks.row(a, "翻页键功能互换", "Swap page-turn buttons", toggle("1".equals(cfg.get("PAGE_KEYS_SWAP")), new Icons.Toggle.Listener() {
@@ -233,41 +277,44 @@ final class BlocksSettings {
                 @Override public void onStep(int i) { host("KEY_PREV_LONG=" + KEYLONG_V[i]); } })));
             add(kr, Blocks.row(a, "翻页键长按时长", "Long-press hold threshold", new Blocks.Stepper(a, KEYLONG_MS_L, idx(KEYLONG_MS_V, cfg.get("KEY_LONG_MS"), 1), new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { host("KEY_LONG_MS=" + KEYLONG_MS_V[i]); } })));
-            add(kr, Blocks.row(a, "左右边缘滑动调光 / 色温", "Button-side edge brightness, opposite edge warmth", toggle(!"0".equals(cfg.get("G_EDGE_LIGHT")), new Icons.Toggle.Listener() {
+            LinearLayout el = group(c, "边缘滑动调光 / 色温");
+            add(el, Blocks.row(a, "左右边缘滑动调光 / 色温", "Button-side edge brightness, opposite edge warmth", toggle(!"0".equals(cfg.get("G_EDGE_LIGHT")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("G_EDGE_LIGHT=" + (on ? 1 : 0)); } })));
-            add(kr, Blocks.row(a, "边缘调光 / 色温互换", "Swap brightness & warmth edges", toggle("1".equals(cfg.get("G_EDGE_LIGHT_SWAP")), new Icons.Toggle.Listener() {
+            add(el, Blocks.row(a, "边缘调光 / 色温互换", "Swap brightness & warmth edges", toggle("1".equals(cfg.get("G_EDGE_LIGHT_SWAP")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("G_EDGE_LIGHT_SWAP=" + (on ? 1 : 0)); } })));
         }
-        LinearLayout fg = group(c, "文字");
-        float fs = AppFont.user(a);
-        int fi = 0;
-        for (int i = 0; i < FONT_S.length; i++) if (Math.abs(FONT_S[i] - fs) < Math.abs(FONT_S[fi] - fs)) fi = i;
-        add(fg, Blocks.row(a, "应用字号", "App font size", new Blocks.Stepper(a, FONT_L, fi, new Blocks.Stepper.Listener() {
-            @Override public void onStep(int i) { AppFont.setUser(a, FONT_S[i]); } })));
-        add(fg, Blocks.navRow(a, "应用优化", "单独给某个应用设刷新、全刷、对比度、字号、保持后台", new View.OnClickListener() {
-            @Override public void onClick(View v) { appDisplayPicker(); } }));
-        LinearLayout ui = group(c, "界面");
-        add(ui, Blocks.row(a, "界面风格", "Launcher style", new Blocks.Stepper(a, new String[] { "经典", "方块" }, 1, new Blocks.Stepper.Listener() {
-            @Override public void onStep(final int i) { if (i == 0) a.setStyle("classic"); } }).wrap()));
-        add(ui, Blocks.row(a, "动画", "E-ink animation", new Blocks.Stepper(a, Blocks.ANIM_L, Blocks.anim(a), new Blocks.Stepper.Listener() {
-            @Override public void onStep(int i) { prefs.edit().putInt(Blocks.ANIM_KEY, i).apply(); } })));
-        add(ui, Blocks.navRow(a, "下拉面板的快捷开关", "最多 5 个：" + quickNames(), new View.OnClickListener() {
+        c.addView(Blocks.navRow(a, "更多手势设置", "底边上划返回 · 底边分三段 · 双指手势 · 四角长按 · 灵敏度", new View.OnClickListener() {
+            @Override public void onClick(View v) { h.openCat(2); } }), Blocks.gap(a, 14));
+        return shell("System / controls", "按键与手势操控", c);
+    }
+
+    // ------------------------------------------------------------------ 5. 桌面与外观
+
+    private View appearance() {
+        LinearLayout c = content();
+        LinearLayout hm = group(c, "首页与快捷面板");
+        add(hm, Blocks.navRow(a, "首页卡片", "继续阅读 · 天气 · 日历 · 小部件排序与内容", new View.OnClickListener() {
+            @Override public void onClick(View v) { h.push(BlocksHome.S_CARDS); } }));
+        add(hm, Blocks.navRow(a, "下拉面板的快捷开关", "最多 5 个：" + quickNames(), new View.OnClickListener() {
             @Override public void onClick(View v) { a.quickDialog(); } }));
         String devName = prefs.getString("name", "VeraDroid");
         if (devName.length() == 0) devName = "VeraDroid";
-        add(ui, Blocks.navRow(a, "阅读器名称", devName + "（显示在左上角）", new View.OnClickListener() {
+        add(hm, Blocks.navRow(a, "阅读器名称", devName + "（显示在左上角）", new View.OnClickListener() {
             @Override public void onClick(View v) { a.titleDialog(); } }));
-        add(ui, Blocks.navRow(a, "面板名称", prefs.getString("panelname", "").length() == 0 ? "（不显示）" : prefs.getString("panelname", ""), new View.OnClickListener() {
+        add(hm, Blocks.navRow(a, "面板名称", prefs.getString("panelname", "").length() == 0 ? "（不显示）" : prefs.getString("panelname", ""), new View.OnClickListener() {
             @Override public void onClick(View v) { a.textDialog("面板名称", "最多 16 个字；留空就不显示。", "panelname", "", 16); } }));
+        LinearLayout ui = group(c, "界面风格与字体");
+        add(ui, Blocks.row(a, "界面风格", "Launcher style", new Blocks.Stepper(a, new String[] { "经典", "方块" }, 1, new Blocks.Stepper.Listener() {
+            @Override public void onStep(final int i) { if (i == 0) a.setStyle("classic"); } }).wrap()));
         add(ui, Blocks.row(a, "界面字重", "UI font weight", new Blocks.Stepper(a, Fonts.WEIGHT_L, Fonts.weight(a), new Blocks.Stepper.Listener() {
-            @Override public void onStep(int i) { prefs.edit().putInt(Fonts.WEIGHT_KEY, i).commit(); a.reloadBlocks(BlocksHome.S_DISPLAY); } })));
+            @Override public void onStep(int i) { prefs.edit().putInt(Fonts.WEIGHT_KEY, i).commit(); a.reloadBlocks(BlocksHome.S_UI); } })));
         add(ui, Blocks.row(a, "英文小字", "English captions", toggle(Blocks.caps(a), new Icons.Toggle.Listener() {
-            @Override public void onToggle(boolean on) { prefs.edit().putBoolean(Blocks.CAPS_KEY, on).commit(); h.show(BlocksHome.S_DISPLAY); a.changed(); } })));
-        c.addView(Blocks.navRow(a, "显示设置（屏幕旋转、刷新方式、REAGL…）", "宿主显示参数的步进器页", new View.OnClickListener() {
-            @Override public void onClick(View v) { HostSettingsActivity.open(a, "display"); } }), Blocks.gap(a, 14));
-        c.addView(Blocks.navRow(a, "更多显示设置", "系统字体 · 滑动合并 · 翻页动画速度 · 抖动 · 桌面大小", new View.OnClickListener() {
-            @Override public void onClick(View v) { h.openCat(1); } }), Blocks.gap(a, 14));
-        return shell("System / display", "显示与刷新", c);
+            @Override public void onToggle(boolean on) { prefs.edit().putBoolean(Blocks.CAPS_KEY, on).commit(); h.show(BlocksHome.S_UI); a.changed(); } })));
+        add(ui, Blocks.row(a, "桌面动画", "E-ink animation", new Blocks.Stepper(a, Blocks.ANIM_L, Blocks.anim(a), new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { prefs.edit().putInt(Blocks.ANIM_KEY, i).apply(); } })));
+        c.addView(Blocks.navRow(a, "更多桌面与输入法设置", "应用网格 · 壁纸与图标 · 状态栏 · 软件商店 · 输入法", new View.OnClickListener() {
+            @Override public void onClick(View v) { h.openCat(3); } }), Blocks.gap(a, 14));
+        return shell("System / appearance", "桌面与外观", c);
     }
 
     // ------------------------------------------------------------------ 电源与时间
@@ -340,28 +387,13 @@ final class BlocksSettings {
         TextView note = Ui.text(a, "日期、时间和时区跟 Kobo 同步（Kobo 联网自动对时）。要改请回到 Kobo 的“设置／设备选项／设备时间”。", 12, false);
         note.setPadding(dp(12), dp(6), dp(12), dp(10));
         add(t, note);
-        return shell("System / power", "电源与时间", c);
+        return shell("System / power", "电源与省电", c);
     }
 
-    // ------------------------------------------------------------------ 存储与连接
+    // ------------------------------------------------------------------ 4. 网络与传书存储
 
     private View storage() {
         LinearLayout c = content();
-        LinearLayout g = group(c, "存储");
-        LinearLayout use = new LinearLayout(a);
-        use.setOrientation(LinearLayout.VERTICAL);
-        use.setPadding(dp(12), dp(10), dp(12), dp(10));
-        long total = 0, free = 0;
-        try { android.os.StatFs s = new android.os.StatFs("/data/media/0"); total = s.getTotalBytes(); free = s.getAvailableBytes(); } catch (Throwable ignored) { }
-        use.addView(Ui.text(a, "已用 " + gb(total - free) + " / 共 " + gb(total) + "，剩 " + gb(free), 16, true));
-        Blocks.BlockBar bar = new Blocks.BlockBar(a, 20);
-        bar.setMax(100);
-        bar.setValue(BlocksHome.storageUsed());
-        LinearLayout.LayoutParams bp = Blocks.match(); bp.topMargin = dp(6);
-        use.addView(bar, bp);
-        add(g, use);
-        add(g, Blocks.navRow(a, "存储空间", "调大调小 Android 的空间、快满时自动扩大", new View.OnClickListener() {
-            @Override public void onClick(View v) { a.startActivity(new Intent(a, StorageActivity.class)); } }));
         LinearLayout n = group(c, "连接");
         final Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
         add(n, Blocks.row(a, "Wi-Fi", "Wireless", toggle(HostLink.num(st, "wifi", 1) == 1, new Icons.Toggle.Listener() {
@@ -370,7 +402,7 @@ final class BlocksSettings {
             @Override public void onClick(View v) { WifiActivity.open(a); } }));
         if (BluetoothActivity.supported()) add(n, Blocks.navRow(a, "蓝牙翻页器", "扫描、配对、连接", new View.OnClickListener() {
             @Override public void onClick(View v) { BluetoothActivity.open(a); } }));
-        add(n, Blocks.navRow(a, "DNS 等更多", "Wi-Fi 与蓝牙的全部设置", new View.OnClickListener() {
+        add(n, Blocks.navRow(a, "DNS 等更多连接设置", "Wi-Fi 与蓝牙的全部设置", new View.OnClickListener() {
             @Override public void onClick(View v) { h.openCat(0); } }));
         // 网络诊断：Wi-Fi / 域名解析 / 服务器 / 下载速度（宿主 netdiag 命令，结果 ctl/netdiag.status）
         c.addView(new TaskCards.Net(a), Blocks.gap(a, 14));
@@ -389,6 +421,8 @@ final class BlocksSettings {
         add(w, addr);
         add(w, Blocks.navRow(a, "传书页面", "大字显示地址和 PIN", new View.OnClickListener() {
             @Override public void onClick(View v) { a.startActivity(new Intent(a, TransferActivity.class).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)); a.overridePendingTransition(0, 0); } }));
+        add(w, Blocks.navRow(a, "更多传书设置", "传输地址 · 自动关闭时间", new View.OnClickListener() {
+            @Override public void onClick(View v) { h.openCat(4); } }));
         if (!HostLink.isKobo()) {
             // 无线调试（adb）：需要内核 IPv6 支持，Kobo 4.1.15 内核未启用 IPv6 故隐藏
             add(w, Blocks.row(a, "无线调试 (adb)", "adb over Wi-Fi", toggle(AdbWifi.on(), new Icons.Toggle.Listener() {
@@ -399,7 +433,22 @@ final class BlocksSettings {
             adbNote.setPadding(dp(12), dp(4), dp(12), dp(10));
             add(w, adbNote);
         }
-        return shell("Storage / network", "存储与连接", c);
+        LinearLayout g = group(c, "存储");
+        LinearLayout use = new LinearLayout(a);
+        use.setOrientation(LinearLayout.VERTICAL);
+        use.setPadding(dp(12), dp(10), dp(12), dp(10));
+        long total = 0, free = 0;
+        try { android.os.StatFs s = new android.os.StatFs("/data/media/0"); total = s.getTotalBytes(); free = s.getAvailableBytes(); } catch (Throwable ignored) { }
+        use.addView(Ui.text(a, "已用 " + gb(total - free) + " / 共 " + gb(total) + "，剩 " + gb(free), 16, true));
+        Blocks.BlockBar bar = new Blocks.BlockBar(a, 20);
+        bar.setMax(100);
+        bar.setValue(BlocksHome.storageUsed());
+        LinearLayout.LayoutParams bp = Blocks.match(); bp.topMargin = dp(6);
+        use.addView(bar, bp);
+        add(g, use);
+        add(g, Blocks.navRow(a, "存储空间", "调大调小 Android 的空间、快满时自动扩大", new View.OnClickListener() {
+            @Override public void onClick(View v) { a.startActivity(new Intent(a, StorageActivity.class)); } }));
+        return shell("Storage / network", "网络与传书存储", c);
     }
 
     private String quickNames() {
@@ -465,33 +514,19 @@ final class BlocksSettings {
 
     private View about() {
         LinearLayout c = content();
-        LinearLayout g = group(c, "设备");
-        android.app.ActivityManager am = (android.app.ActivityManager) a.getSystemService(android.content.Context.ACTIVITY_SERVICE);
-        android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
-        am.getMemoryInfo(mi);
-        String devName = prefs.getString("name", "VeraDroid");
-        if (devName.length() == 0) devName = "VeraDroid";
-        add(g, Blocks.navRow(a, "阅读器名称", devName + "（点击自定义，显示在左上角）", new View.OnClickListener() {
-            @Override public void onClick(View v) { a.titleDialog(); } }));
-        add(g, Blocks.row(a, "机型", "Model", Ui.text(a, h.model(), 15, false)));
-        add(g, Blocks.row(a, "系统", "Android", Ui.text(a, "Android " + Build.VERSION.RELEASE, 15, false)));
-        add(g, Blocks.row(a, "桌面版本", "Launcher", Ui.text(a, h.version() + " · " + h.buildDate(), 15, false)));
-        add(g, Blocks.row(a, "内存", "Memory", Ui.text(a, (mi.availMem >> 20) + " / " + (mi.totalMem >> 20) + " MB 可用", 15, false)));
-        add(g, Blocks.row(a, "原作者", "Original author", Ui.text(a, "ajie · wenjin.jp", 15, false)));
-        add(g, Blocks.row(a, "kobo系统移植优化", "Kobo port", Ui.text(a, "Scokyfei", 15, false)));
-        // 系统更新的进度（宿主写 ctl/update.status；没有在更新时不占地方）
-        c.addView(new TaskCards.Update(a, false), Blocks.gap(a, 14));
-        LinearLayout m = group(c, "维护");
+        LinearLayout m = group(c, "维护与性能");
         boolean kobo = HostLink.isKobo();
         if (kobo) {
             add(m, Blocks.navRow(a, "微信读书维护与状态看板", "查看内存 / 热点包 / WAL，一键清理日志与刷新加速编译", new View.OnClickListener() {
                 @Override public void onClick(View v) { wrMaintDialog(); } }));
         }
         String[][] rows = {
-            { "系统与性能", kobo ? "低内存 · 应用编译" : "Wi-Fi 省电 · 低内存 · Kobo 界面 · 应用编译" },
-            { "检查系统更新", "有新版本优先下载增量补丁" }, { "使用统计", "电量和阅读时长，只在本机" }, { "问题反馈", "连同系统日志一起上传" },
-            { "设备与管理", "日志 · 重启 · 恢复默认" }, { "手势", "边缘滑动 · 双指 · 四角长按 · 导航键" },
-            { "应用与桌面", "壁纸 · 图标 · 面板 · 状态栏 · 输入法" }, { "传书", "无线传输的开关、地址、自动关闭" }, { "全部设置", "所有设置的分类列表" } };
+            { "系统与性能", kobo ? "小内存模式 · 应用预编译 · 立即优化" : "Wi-Fi 省电 · 低内存 · Kobo 界面 · 应用编译" },
+            { "检查系统更新", "有新版本优先下载增量补丁" },
+            { "使用统计", "电量和阅读时长，只在本机" },
+            { "问题反馈", "连同系统日志一起上传" },
+            { "设备与管理", "导出日志 · 重启 · 恢复默认设置" },
+            { "全部设置（分类总览）", "按经典分类浏览所有设置项" } };
         for (int i = 0; i < rows.length; i++) {
             if (kobo && (i == 1 || i == 3)) continue;
             final int k = i;
@@ -502,14 +537,23 @@ final class BlocksSettings {
                 case 2: a.startActivity(new Intent(a, StatsActivity.class)); a.overridePendingTransition(0, 0); break;
                 case 3: a.feedbackDialog(); break;
                 case 4: h.openCat(5); break;
-                case 5: h.openCat(2); break;
-                case 6: h.openCat(3); break;
-                case 7: h.openCat(4); break;
                 default: h.openCat(-1); break;
                 }
             } }));
         }
-        return shell("Device / about", "设备与关于", c);
+        // 系统更新的进度（宿主写 ctl/update.status；没有在更新时不占地方）
+        c.addView(new TaskCards.Update(a, false), Blocks.gap(a, 14));
+        LinearLayout g = group(c, "设备信息");
+        android.app.ActivityManager am = (android.app.ActivityManager) a.getSystemService(android.content.Context.ACTIVITY_SERVICE);
+        android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+        am.getMemoryInfo(mi);
+        add(g, Blocks.row(a, "机型", "Model", Ui.text(a, h.model(), 15, false)));
+        add(g, Blocks.row(a, "系统", "Android", Ui.text(a, "Android " + Build.VERSION.RELEASE, 15, false)));
+        add(g, Blocks.row(a, "桌面版本", "Launcher", Ui.text(a, h.version() + " · " + h.buildDate(), 15, false)));
+        add(g, Blocks.row(a, "内存", "Memory", Ui.text(a, (mi.availMem >> 20) + " / " + (mi.totalMem >> 20) + " MB 可用", 15, false)));
+        add(g, Blocks.row(a, "原作者", "Original author", Ui.text(a, "ajie · wenjin.jp", 15, false)));
+        add(g, Blocks.row(a, "kobo系统移植优化", "Kobo port", Ui.text(a, "Scokyfei", 15, false)));
+        return shell("Device / about", "系统维护与关于", c);
     }
 
     private void wrMaintDialog() {

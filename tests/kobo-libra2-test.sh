@@ -238,6 +238,14 @@ grep -q 'kobo_smart_img_dither' "$TOP/display/legacy/epd.c" \
     && grep -q 'KFB_IMG_DITHER' "$TOP/host/kobo/boot/lib/settings.sh" \
     && ok "Spinner throttle, Smart Image Dither (KFB_IMG_DITHER), Reading Idle CPU Cap, FL_TIMEOUT, and WeRead Maintenance Dashboard wired end-to-end" \
     || fail "missing spinner/img-dither/idle-cap/fl-timeout/wrmaint wiring"
+grep -q 'S_CONTROLS' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksHome.java" \
+    && grep -q 'S_UI' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksHome.java" \
+    && grep -q 'S_DISPLAY_ADV' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksHome.java" \
+    && grep -q 'displayAdv()' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && grep -q 'controls()' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && grep -q 'appearance()' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && ok "VeraHome 6-category settings IA (display/displayAdv/controls/power/storage/appearance/about) wired" \
+    || fail "missing VeraHome 6-category settings IA"
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ALL KOBO LIBRA 2 STATIC CHECKS PASSED"
