@@ -296,7 +296,7 @@ public class HostService extends Service {
                 String op = a[2].equals("grow") ? "扩大" : a[2].equals("shrink") ? "缩小" : "调整";
                 if (a[1].equals("ok")) return "存储空间已" + op + "到 " + StorageActivity.size(Integer.parseInt(a[4]));
                 if (a[1].equals("rolledback")) return "存储空间" + op + "被中断，已恢复原样，数据没有变化";
-                return "存储空间没有" + op + "，数据没有变化（设置 → 设备与更新 → 存储空间 里有原因）";
+                return "存储空间没有" + op + "，数据没有变化（设置 → 网络与传书存储 → 存储空间 里有原因）";
             }
         } catch (Exception ignored) { }
         return null;

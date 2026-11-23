@@ -437,7 +437,7 @@ final class BlocksSettings {
         add(t, Blocks.row(a, "时区", "Time zone", Ui.text(a, "GMT" + (off >= 0 ? "+" : "-") + Math.abs(off) / 60 + (off % 60 != 0 ? ":" + Math.abs(off % 60) : "") + "（跟随 Kobo）", 15, false)));
         java.util.Calendar cal = java.util.Calendar.getInstance();
         add(t, Blocks.row(a, "日期", "Date", Ui.text(a, cal.get(java.util.Calendar.YEAR) + " 年 " + (cal.get(java.util.Calendar.MONTH) + 1) + " 月 " + cal.get(java.util.Calendar.DAY_OF_MONTH) + " 日", 15, false)));
-        TextView note = Ui.text(a, "日期、时间和时区跟 Kobo 同步（Kobo 联网自动对时）。要改请回到 Kobo 的“设置／设备选项／设备时间”。", 12, false);
+        TextView note = Ui.text(a, "日期、时间和时区跟 Kobo 同步（Kobo 联网自动对时）。要改请回到 Kobo 的“设置 → 日期和时间”。", 12, false);
         note.setPadding(dp(12), dp(6), dp(12), dp(10));
         add(t, note);
         return shell("System / power", "电源与省电", c);

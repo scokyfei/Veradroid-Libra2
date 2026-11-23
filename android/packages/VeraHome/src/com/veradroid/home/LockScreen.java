@@ -191,7 +191,7 @@ final class LockScreen {
                     H.postDelayed(render[0], w + 100);
                 } else {
                     int f = fails(c);
-                    msg.setText(f > 0 ? "密码不对（已错 " + f + " 次，连续错 " + TRIES + " 次要等 30 秒）" : "忘了密码：见“设置 - 设备与更新 - 锁屏密码”里的说明");
+                    msg.setText(f > 0 ? "密码不对（已错 " + f + " 次，连续错 " + TRIES + " 次要等 30 秒）" : "忘了密码：见“设置 → 电源与省电 → 锁屏密码”里的说明");
                 }
             }
         };

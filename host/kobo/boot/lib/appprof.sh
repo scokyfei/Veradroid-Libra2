@@ -13,7 +13,7 @@
 # 命令（cmd.sh）：
 #   fg <pkg>|home              前台变了
 #   appset <pkg>|<spec>        存用户的设置（spec 空 = 删掉这一行，回到内置推荐 / 全局；"-" = 全跟随）；"appset *|" 全部清掉
-APPPROF_RE='^KFB_(CONTRAST|DITHER|FLASH|INVERT|LIGHTF|DARKEN|MODE|SETTLE|HOLD|SMOOTH|PACE|CLEAN|REAGL_MIN|SETTLE2|SCROLLDU|IMG|SCROLLDELAY|SCROLLSTYLE|GCN|NEWWIN|MONO|MAXDEFER|FLIPINPUT|ECLIPSE|DARKCRUSH|HEAVY_FLASH|ANIM_MODE|ANIM_DIR|ANIM_STEPS|ANIM_MIN)=[0-9.]{1,6}$'
+APPPROF_RE='^KFB_(CONTRAST|DITHER|FLASH|INVERT|LIGHTF|DARKEN|MODE|SETTLE|HOLD|SMOOTH|PACE|CLEAN|REAGL_MIN|SETTLE2|SCROLLDU|IMG|SCROLLDELAY|SCROLLSTYLE|GCN|NEWWIN|MONO|MAXDEFER|FLIPINPUT|ECLIPSE|DARKCRUSH|HEAVY_FLASH|IMG_DITHER|ANIM_MODE|ANIM_DIR|ANIM_STEPS|ANIM_MIN)=[0-9.]{1,6}$'
 
 appprof_valid_pkg() { case "$1" in ''|*[!A-Za-z0-9._]*) return 1 ;; esac; [ ${#1} -le 200 ]; }
 
@@ -44,6 +44,7 @@ appprof_publish() {
         'KFB_ECLIPSE|夜间原生波形（Eclipse）|开=1,关=0' \
         'KFB_DARKCRUSH|暗底压纯黑|关=0,轻=24,标准=36,强=48' \
         'KFB_HEAVY_FLASH|大图后自动清残影|开=1,关=0' \
+        'KFB_IMG_DITHER|插图智能抖动|开=1,关=0' \
         'KFB_MONO|快刷黑白分明|关=0,开=128' \
         'KFB_MAXDEFER|画面最长等待|0.6 秒=600,1.2 秒=1200,不限=0' > $X/appknobs.d/epd.tmp 2>/dev/null \
         && mv -f $X/appknobs.d/epd.tmp $X/appknobs.d/epd
@@ -127,7 +128,7 @@ appprof_send() {
           echo "PACE ${KFB_PACE:-0}"; echo "CLEAN ${KFB_CLEAN:-0}"; echo "REAGL ${KFB_REAGL_MIN:-35}"
           echo "SETTLE2 ${KFB_SETTLE2:-40}"; echo "SCROLLDU ${KFB_SCROLLDU:-0}"; echo "IMG ${KFB_IMG:-0}"
           echo "SCROLLDELAY ${KFB_SCROLLDELAY:-500}"; echo "SCROLLSTYLE ${KFB_SCROLLSTYLE:-1}"; echo "GCN ${KFB_GCN:-0}"; echo "MONO ${KFB_MONO:-0}"; echo "MAXDEFER ${KFB_MAXDEFER:-1200}"; echo "FLIPINPUT ${KFB_FLIPINPUT:-1000}"
-          echo "ECLIPSE ${KFB_ECLIPSE:-1}"; echo "DARKCRUSH ${KFB_DARKCRUSH:-36}"; echo "HEAVYFLASH ${KFB_HEAVY_FLASH:-1}"
+          echo "ECLIPSE ${KFB_ECLIPSE:-1}"; echo "DARKCRUSH ${KFB_DARKCRUSH:-36}"; echo "HEAVYFLASH ${KFB_HEAVY_FLASH:-1}"; echo "IMGDITHER ${KFB_IMG_DITHER:-1}"
       elif type epd_scroll_lines >/dev/null 2>&1; then
           epd_scroll_lines      # legacy：触摸滚动这几条它的显示桥也认（SCROLLWFM a2 / du 只有它有）
       fi; })

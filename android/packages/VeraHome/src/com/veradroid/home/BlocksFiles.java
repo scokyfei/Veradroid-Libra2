@@ -204,7 +204,7 @@ final class BlocksFiles {
     private String emptyHint() {
         if (loading()) return "Kobo 书库在另一个文件系统上，第一次要读一会儿";
         switch (seg) {
-        case 0: return a.libOn() ? "用传书网页传进来，或者放进 Books 文件夹" : "设置／应用与桌面／书库";
+        case 0: return a.libOn() ? "用传书网页传进来，或者放进 Books 文件夹" : "我的 → 桌面与外观 → 更多桌面与输入法设置 → 书库";
         case 2: return "放进 Pictures、Download 或 VeraDroid/wallpaper";
         case 3: return "阅读时点工具栏“系统／加书签”";
         default: return "";

@@ -2138,7 +2138,7 @@ public class HomeActivity extends Activity {
                 "KFB_MODE", MODE_L, MODE_V, "0");
             hostChoice(list, host, "滑动刷新合并", "滑动、翻页动画时只画停下来的那一帧，不画中间帧：残影少、更省电。关掉则每一帧都刷。", "KFB_SETTLE", SETTLE_L, SETTLE_V, "40");
             hostChoice(list, host, "整屏刷新", "每翻这么多页（大面积变化），整个屏幕闪一下彻底刷新，清掉累积的残影。和老款 Kobo 的“页面刷新”一样。", "KFB_FLASH", FLASH_L, FLASH_V, "8");
-            localSwitch(list, "换页后整屏刷新", "桌面翻页、进出设置、切换分类后闪一下整屏，清掉上一页的残影。默认关：整页变化改走 MTK 硬件滑动动画。", "flashui", false);
+            localSwitch(list, "换页后整屏刷新", "桌面翻页、进出设置、切换分类后闪一下整屏，清掉上一页的残影。默认关：整页变化改走墨水屏硬件滑动动画。", "flashui", false);
             action(list, "立即整屏刷新", "马上闪一下整个屏幕。屏幕上有残影时用。", "刷新", new View.OnClickListener() {
                 @Override public void onClick(View v) { HostLink.cmd("clear"); }
             });

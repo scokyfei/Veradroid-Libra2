@@ -236,6 +236,8 @@ grep -q 'kobo_smart_img_dither' "$TOP/display/legacy/epd.c" \
     && grep -q 'wrmaint_cmd' "$TOP/host/kobo/boot/lib/cmd.sh" \
     && grep -q 'wrMaintDialog' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
     && grep -q 'KFB_IMG_DITHER' "$TOP/host/kobo/boot/lib/settings.sh" \
+    && grep -q 'KFB_IMG_DITHER' "$TOP/host/kobo/boot/lib/appprof.sh" \
+    && grep -q '\[!0-9A-Za-z\._,+-\]' "$TOP/host/kobo/boot/lib/settings.sh" \
     && ok "Spinner throttle, Smart Image Dither (KFB_IMG_DITHER), Reading Idle CPU Cap, FL_TIMEOUT, and WeRead Maintenance Dashboard wired end-to-end" \
     || fail "missing spinner/img-dither/idle-cap/fl-timeout/wrmaint wiring"
 grep -q 'S_CONTROLS' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksHome.java" \
