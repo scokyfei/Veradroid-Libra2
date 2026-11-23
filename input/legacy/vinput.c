@@ -119,7 +119,9 @@ static const char *LOGF = "/dev/null", *ACT = "", *FLAGF = NULL, *INJECT = NULL,
 static int G_EDGE_BACK = 1, G_EDGE_PANEL = 1, G_EDGE_LIGHT = 1, G_EDGE_LIGHT_SWAP = 0, G_TWO_TAP = 1, G_TWO_LONG = 1, G_TWO_BACK = 1, G_TWO_SLIDE = 1;
 static int G_TAP = 1, G_TAP_KEY = KEY_VOLUMEDOWN;   /* bezel double tap (gesture_tap) -> this key, see the header */
 static int tapfd = -1;
-static int BOOST_MS = 150, BOOST_KHZ = 0, SCROLL_PX = 20;   /* touch boost / scroll hints, see the header */
+static int BOOST_MS = 150, BOOST_KHZ = 0, SCROLL_PX = 20, PASS_PX = 12;   /* touch boost / scroll hints, see the header */
+static int TAP_PX = 28;       /* gconf TAP_PX: tap dead zone (px on a 1272 px wide panel, scaled), see dz_forward; 0 = off */
+static int HELD_REPLAY = 0;   /* gconf HELD_REPLAY=1: replay held frames raw instead of compacting to one down (+ lift) */
 static int IDLE_CAP_MS = 10000, IDLE_CAP_KHZ = 792000;       /* reading idle CPU max freq cap (ms, kHz; 0 = off) */
 static int FL_TIMEOUT = 0;                                   /* independent frontlight auto-off timeout (seconds; 0 = off) */
 static int FAST_DRAG = 1;
@@ -154,7 +156,7 @@ static int ROT = 0, ROT_ON = 0, PW = 0, PH = 0, VW = 0;   /* FLAGF exists -> ges
 static int gconf_rot = -1;                                /* last ROTATE= seen in --gconf, so unrelated gconf reloads don't override gyro */
 static int G_AUTO_ROTATE = 0;                             /* Kobo kx122 accelerometer auto-rotate (live 0<->180 or 90<->270) */
 static int gyro_want = -1;                                /* pending gyro target degrees, or -1 if none */
-static long gyro_since = 0;                               /* monotonic ms when gyro_want was first seen */
+static long long gyro_since = 0;                          /* monotonic ms when gyro_want was first seen */
 #define GYRO_SETTLE_MS 500
 #define MSC_RAW_PORTRAIT_DOWN   0x17
 #define MSC_RAW_PORTRAIT_UP     0x18
@@ -165,12 +167,12 @@ static const char *KEYDEV = NULL, *SLEEP_FLAG = NULL;    /* optional hardware ke
 static int keyfd = -1, KEY_SWAP = 0, KEY_SWAP_CLI = 0, KEY_MAP_PAGE = 0;   /* KEY_MAP_PAGE: 0 = volume keys (default), 1 = page keys */
 static char KEY_NEXT_LONG[32] = "clear", KEY_PREV_LONG[32] = "back";       /* physical page-key long-press actions */
 static int KEY_LONG_MS = 500;
-struct pk_state { int active; int code; long t0; int fired; };
+struct pk_state { int active; int code; long long t0; int fired; };
 static struct pk_state pk_down[2];                                         /* 0 = logical prev, 1 = logical next */
 static volatile sig_atomic_t quit = 0, want_release = 0, want_grab = 0;
 static int paused = 0;
 static int hw_slot = 0;          /* protocol B: the slot the panel's next events refer to (it only sends ABS_MT_SLOT on change) */
-static long last_hw_ms = 0;      /* last event read from the panel */
+static long long last_hw_ms = 0; /* last event read from the panel */
 static int STUCK_MS = 2000;      /* --stuck-ms: the watchdog, see the header */
 static unsigned long n_released = 0, n_tidchg = 0, n_wd = 0, n_reset = 0;
 static int src_btn_touch = 0;
@@ -179,16 +181,16 @@ enum { PROTO_B, PROTO_A, PROTO_ST };
 static int src_proto = PROTO_B, proto_forced = -1;
 
 static void on_sig(int s) { (void)s; quit = 1; }
-static void on_usr1(int s) { (void)s; want_release = 1; }   /* give the touch screen back to the Kindle */
+static void on_usr1(int s) { (void)s; want_release = 1; }   /* give the touch screen back to the host */
 static void on_usr2(int s) { (void)s; want_grab = 1; }      /* take it again */
-static long now_ms(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec * 1000L + ts.tv_nsec / 1000000L; }
+static long long now_ms(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return (long long)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL; }
 
 static void logf_(const char *fmt, ...)
 {
     FILE *f = fopen(LOGF, "a");
     if (!f) return;
     va_list ap; va_start(ap, fmt);
-    fprintf(f, "[%ld] ", now_ms());
+    fprintf(f, "[%lld] ", now_ms());
     vfprintf(f, fmt, ap);
     fputc('\n', f);
     va_end(ap); fclose(f);
@@ -205,7 +207,7 @@ static void gconf_load(void)
     gconf_sig = sig;
     G_EDGE_BACK = G_EDGE_PANEL = G_EDGE_LIGHT = G_TWO_TAP = G_TWO_LONG = G_TWO_BACK = G_TWO_SLIDE = 1; G_EDGE_LIGHT_SWAP = 0; G_BACK_EXCLUDE[0] = 0; G_EDGE_SENS = 1;
     G_TAP = 1; G_TAP_KEY = KEY_VOLUMEDOWN; snprintf(G_CORNERS, sizeof(G_CORNERS), "all");
-    BOOST_MS = 150; BOOST_KHZ = 0; SCROLL_PX = 20; FAST_DRAG = 1;
+    BOOST_MS = 150; BOOST_KHZ = 0; SCROLL_PX = 20; PASS_PX = 12; FAST_DRAG = 1; HELD_REPLAY = 0; TAP_PX = 28;
     IDLE_CAP_MS = 10000; IDLE_CAP_KHZ = 792000; FL_TIMEOUT = 0;
     G_EDGE_THIRDS = 0; G_EB_HOLD_MS = 500;
     G_AUTO_ROTATE = 0; KEY_SWAP = KEY_SWAP_CLI;
@@ -245,6 +247,9 @@ static void gconf_load(void)
             else if (!strcmp(line, "IDLE_CAP_KHZ")) { IDLE_CAP_KHZ = atoi(v); if (IDLE_CAP_KHZ < 0) IDLE_CAP_KHZ = 792000; }
             else if (!strcmp(line, "FL_TIMEOUT")) { FL_TIMEOUT = atoi(v); if (FL_TIMEOUT < 0 || FL_TIMEOUT > 3600) FL_TIMEOUT = 0; }
             else if (!strcmp(line, "FAST_DRAG")) FAST_DRAG = b;
+            else if (!strcmp(line, "PASS_PX")) { PASS_PX = atoi(v); if (PASS_PX < 0 || PASS_PX > 400) PASS_PX = 12; }
+            else if (!strcmp(line, "HELD_REPLAY")) HELD_REPLAY = b;
+            else if (!strcmp(line, "TAP_PX")) { TAP_PX = atoi(v); if (TAP_PX < 0 || TAP_PX > 200) TAP_PX = 28; }
             else if (!strcmp(line, "SCROLL_PX")) { SCROLL_PX = atoi(v); if (SCROLL_PX < 0 || SCROLL_PX > 400) SCROLL_PX = 20; }
             else if (!strcmp(line, "G_TAP_KEY")) {
                 if (!strcmp(v, "pageup")) G_TAP_KEY = KEY_PAGEUP;
@@ -421,7 +426,7 @@ static void back_key(void)
 }
 
 /* ---- touch state ---- */
-struct slot { int active; int tid; int x, y; int sx, sy; long t0, tl; };   /* tl: last event for this slot */
+struct slot { int active; int tid; int x, y; int sx, sy; long long t0, tl; };   /* tl: last event for this slot */
 static struct slot sl[MAXSLOT];
 static int cur_slot = 0, slot_ign = 0;   /* slot_ign: the driver is talking about a slot >= MAXSLOT */
 
@@ -460,7 +465,7 @@ static void resync_slots(int after_drop)
         static int warned = 0;
         if (!warned) { warned = 1; logf_("resync: EVIOCGMTSLOTS failed (%s), using the fallback", strerror(errno)); }
         if (after_drop == 2) return;
-        long now = now_ms();
+        long long now = now_ms();
         for (int i = 0; i < MAXSLOT; i++) q.v[i] = (sl[i].active && !after_drop && now - sl[i].tl < STALE_MS) ? 1 : -1;
     }
     if (after_drop == 1) {                  /* the slot the driver's next events refer to (it only sends ABS_MT_SLOT on change) */
@@ -469,7 +474,7 @@ static void resync_slots(int after_drop)
     }
     struct input_event fr[2 * MAXSLOT + 4];
     int n = 0, lifted = 0, keep = cur_slot, left = 0;
-    long now = now_ms();
+    long long now = now_ms();
     memset(fr, 0, sizeof(fr));
 #define RS(t, c, v) do { fr[n].type = (t); fr[n].code = (c); fr[n].value = (v); n++; } while (0)
     for (int i = 0; i < MAXSLOT; i++) {
@@ -516,7 +521,7 @@ static int new_touch_over_active(const struct input_event *fr, int n)
         }
     }
     if (!has_new) return 0;
-    long now = now_ms();
+    long long now = now_ms();
     for (int i = 0; i < MAXSLOT; i++)
         if (sl[i].active && now - sl[i].tl >= 250) return 1;
     return 0;
@@ -529,7 +534,7 @@ static int EDGE_HOLD_MS = 60;          /* how long a touch in the edge strip is 
 static int EDGE_SWIPE = 80;            /* vertical distance that turns an edge touch into back / panel */
 static struct input_event held[MAXEV];
 static int nheld = 0;
-static long t_down = 0;
+static long long t_down = 0;
 static int two_sx[2], two_sy[2], two_done = 0;
 static int two_i[2] = { 0, 1 };        /* the slots of the two fingers: the first two active ones. fts_ts (PW6) has 2 slots,
                                           but cyttsp4 / ilitek / zforce have up to 10, and after a finger lifts the next one
@@ -544,7 +549,7 @@ static void two_begin(void)
         two_sx[k] = s->sx >= 0 ? s->sx : s->x; two_sy[k] = s->sy >= 0 ? s->sy : s->y;
     }
 }
-static long two_t0 = 0;
+static long long two_t0 = 0;
 static int corner_fired = 0;
 
 static unsigned long fwd_count = 0;
@@ -553,21 +558,154 @@ static void forward(const struct input_event *e)
     fwd_count++;
     uout(e);
 }
+/* Compact held frames to ONE touch-down (+ one lift if already up) so uinput timestamp compression never
+   turns micro-jitter during hold into a high-velocity fake swipe. Handles Kobo Elan repeated tracking IDs. */
+static unsigned long n_compact = 0;
+static int dz_on = 0, dz_slot = 0, dz_x = 0, dz_y = 0;
+static unsigned long n_dz_taps = 0, n_dz_drops = 0;
+static int dz_thr(void) { int t = TAP_PX * (PW ? PW : W) / 1272; return t < 22 ? 22 : t; }
+static void mkev_(struct input_event *e, int type, int code, int value) { memset(e, 0, sizeof(*e)); e->type = type; e->code = code; e->value = value; }
+static void dz_forward(const struct input_event *fr, int n)
+{
+    if (!dz_on) { for (int i = 0; i < n; i++) forward(&fr[i]); return; }
+    struct slot *z = &sl[dz_slot];
+    int thr = dz_thr();
+    int lifted = !z->active;
+    int leave = !lifted && (count_active() != 1 || abs(z->x - dz_x) > thr || abs(z->y - dz_y) > thr);
+    int cs = dz_slot;
+    for (int i = 0; i < n; i++) {
+        const struct input_event *e = &fr[i];
+        if (e->type == EV_ABS && e->code == ABS_MT_SLOT) cs = e->value;
+        if (leave && e->type == EV_SYN && e->code == SYN_REPORT) {
+            struct input_event x;
+            mkev_(&x, EV_ABS, ABS_MT_SLOT, dz_slot); forward(&x);
+            mkev_(&x, EV_ABS, ABS_MT_POSITION_X, z->x); forward(&x);
+            mkev_(&x, EV_ABS, ABS_MT_POSITION_Y, z->y); forward(&x);
+            if (src_proto == PROTO_B && cs != dz_slot) { mkev_(&x, EV_ABS, ABS_MT_SLOT, cs); forward(&x); }
+        } else if (!leave && cs == dz_slot && e->type == EV_ABS && (e->code == ABS_MT_POSITION_X || e->code == ABS_MT_POSITION_Y)) {
+            n_dz_drops++;
+            continue;
+        }
+        forward(e);
+    }
+    if (lifted) { n_dz_taps++; dz_on = 0; if (TOUCH_DEBUG) logf_("tap dead zone: lifted inside (%d px)", thr); }
+    else if (leave) { dz_on = 0; if (TOUCH_DEBUG) logf_("tap dead zone: left at %d,%d", z->x, z->y); }
+}
 static void flush_held(void)
 {
     if (!nheld) return;
-    if (TOUCH_DEBUG) logf_("flush %d after %ldms", nheld, now_ms() - t_down);
-    for (int i = 0; i < nheld; i++) forward(&held[i]);
+    if (TOUCH_DEBUG) logf_("flush %d after %lldms", nheld, now_ms() - t_down);
+    enum { NA = ABS_MT_TOOL_Y + 1 };
+    static int tid[MAXSLOT], last[MAXSLOT][NA - ABS_MT_SLOT], has[MAXSLOT][NA - ABS_MT_SLOT], lifted[MAXSLOT], used[MAXSLOT];
+    int gabs[ABS_MT_SLOT], ghas[ABS_MT_SLOT], key[KEY_CNT > 0x2ff ? 0x2ff : KEY_CNT], khas[KEY_CNT > 0x2ff ? 0x2ff : KEY_CNT];
+    int ok = !HELD_REPLAY, s = hw_slot >= 0 && hw_slot < MAXSLOT ? hw_slot : 0, nslots = 0;
+    memset(used, 0, sizeof(used)); memset(lifted, 0, sizeof(lifted)); memset(has, 0, sizeof(has));
+    memset(ghas, 0, sizeof(ghas)); memset(khas, 0, sizeof(khas));
+    for (int i = 0; ok && i < nheld; i++) {
+        const struct input_event *e = &held[i];
+        if (e->type == EV_ABS && e->code == ABS_MT_SLOT) { if (e->value < 0 || e->value >= MAXSLOT) ok = 0; else s = e->value; }
+        else if (e->type == EV_ABS && e->code == ABS_MT_TRACKING_ID) {
+            if (e->value >= 0) {
+                if (used[s] && !lifted[s] && tid[s] == e->value) { /* Kobo Elan repeats same tid on move frames */ }
+                else if (used[s] || out_act[s]) ok = 0;
+                else { used[s] = 1; tid[s] = e->value; nslots++; }
+            } else { if (!used[s] || lifted[s]) ok = 0; lifted[s] = 1; }
+        } else if (e->type == EV_ABS && e->code > ABS_MT_SLOT && e->code < NA) {
+            if (!used[s] || lifted[s]) { if (!lifted[s]) ok = 0; continue; }
+            last[s][e->code - ABS_MT_SLOT] = e->value; has[s][e->code - ABS_MT_SLOT] = 1;
+        } else if (e->type == EV_ABS && e->code < ABS_MT_SLOT) { gabs[e->code] = e->value; ghas[e->code] = 1; }
+        else if (e->type == EV_KEY && e->code < (int)(sizeof(key) / sizeof(key[0]))) {
+            if (!khas[e->code] || e->value) key[e->code] = e->value;
+            khas[e->code] = 1;
+        } else if (e->type == EV_SYN && e->code == SYN_REPORT) { }
+        else if (e->type == EV_SYN || e->type == EV_MSC) { }
+        else ok = 0;
+    }
+    /* A quick flick that already ended and moved more than slop stays raw replayed. */
+    if (ok) {
+        int slop = PASS_PX * (PW ? PW : W) / 1272; if (slop < 8) slop = 8;
+        for (int i = 0; i < MAXSLOT && ok; i++) {
+            if (!used[i] || !lifted[i]) continue;
+            int x0 = -1, y0 = -1, cs = s, seen = 0;
+            for (int k = 0; k < nheld; k++) {
+                const struct input_event *e = &held[k];
+                if (e->type == EV_ABS && e->code == ABS_MT_SLOT) cs = e->value;
+                else if (cs == i && e->type == EV_ABS && e->code == ABS_MT_TRACKING_ID) { if (e->value >= 0) seen = 1; else seen = 0; }
+                else if (cs == i && seen && e->type == EV_ABS && e->code == ABS_MT_POSITION_X) { if (x0 < 0) x0 = e->value; }
+                else if (cs == i && seen && e->type == EV_ABS && e->code == ABS_MT_POSITION_Y) { if (y0 < 0) y0 = e->value; }
+            }
+            int lx = has[i][ABS_MT_POSITION_X - ABS_MT_SLOT] ? last[i][ABS_MT_POSITION_X - ABS_MT_SLOT] : x0;
+            int ly = has[i][ABS_MT_POSITION_Y - ABS_MT_SLOT] ? last[i][ABS_MT_POSITION_Y - ABS_MT_SLOT] : y0;
+            if (x0 >= 0 && y0 >= 0 && (abs(lx - x0) > slop || abs(ly - y0) > slop)) ok = 0;
+        }
+    }
+    if (!ok || !nslots) {
+        for (int i = 0; i < nheld; i++) forward(&held[i]);
+        nheld = 0;
+        return;
+    }
+    n_compact++;
+    struct input_event e;
+    int anylift = 0;
+    for (int i = 0; i < MAXSLOT; i++) {
+        if (!used[i]) continue;
+        anylift |= lifted[i];
+        mkev_(&e, EV_ABS, ABS_MT_SLOT, i); forward(&e);
+        mkev_(&e, EV_ABS, ABS_MT_TRACKING_ID, tid[i]); forward(&e);
+        for (int c = ABS_MT_SLOT + 1; c < NA; c++)
+            if (c != ABS_MT_TRACKING_ID && has[i][c - ABS_MT_SLOT]) { mkev_(&e, EV_ABS, c, last[i][c - ABS_MT_SLOT]); forward(&e); }
+    }
+    for (int c = 0; c < ABS_MT_SLOT; c++) if (ghas[c]) { mkev_(&e, EV_ABS, c, gabs[c]); forward(&e); }
+    for (int c = 0; c < (int)(sizeof(key) / sizeof(key[0])); c++) if (khas[c] && key[c]) { mkev_(&e, EV_KEY, c, key[c]); forward(&e); }
+    if (src_proto == PROTO_B && !anylift) { mkev_(&e, EV_ABS, ABS_MT_SLOT, s); forward(&e); }
+    mkev_(&e, EV_SYN, SYN_REPORT, 0); forward(&e);
+    if (anylift) {
+        for (int i = 0; i < MAXSLOT; i++) {
+            if (!lifted[i]) continue;
+            mkev_(&e, EV_ABS, ABS_MT_SLOT, i); forward(&e);
+            mkev_(&e, EV_ABS, ABS_MT_TRACKING_ID, -1); forward(&e);
+        }
+        for (int c = 0; c < (int)(sizeof(key) / sizeof(key[0])); c++)
+            if (khas[c]) {
+                int v = 0;
+                for (int i = nheld - 1; i >= 0; i--) if (held[i].type == EV_KEY && held[i].code == c) { v = held[i].value; break; }
+                if (v != key[c] || !v) { mkev_(&e, EV_KEY, c, v); forward(&e); }
+            }
+        if (src_proto == PROTO_B) { mkev_(&e, EV_ABS, ABS_MT_SLOT, s); forward(&e); }
+        mkev_(&e, EV_SYN, SYN_REPORT, 0); forward(&e);
+    }
+    if (!anylift && nslots == 1 && TAP_PX > 0) {
+        for (int i = 0; i < MAXSLOT; i++) if (used[i]) {
+            dz_slot = i;
+            dz_x = has[i][ABS_MT_POSITION_X - ABS_MT_SLOT] ? last[i][ABS_MT_POSITION_X - ABS_MT_SLOT] : sl[i].x;
+            dz_y = has[i][ABS_MT_POSITION_Y - ABS_MT_SLOT] ? last[i][ABS_MT_POSITION_Y - ABS_MT_SLOT] : sl[i].y;
+            dz_on = 1;
+        }
+    }
+    if (TOUCH_DEBUG) logf_("flush: %d held events -> one touch-down%s", nheld, anylift ? " + lift" : "");
     nheld = 0;
 }
-/* one command line to the display bridge (never blocks: no reader = dropped) */
+/* one command line to the display bridge (never blocks: persistent FIFO fd avoids per-touch open/close;
+   reopens transparently if the display bridge restarts). */
 static const char *EPDF = "/dev/shm/veradroid/kfb/epd.fifo";   /* --epd-fifo */
+static int epd_fd = -1;
 static void epd_cmd(const char *line)
 {
-    int fd = open(EPDF, O_WRONLY | O_NONBLOCK);
-    if (fd < 0) return;
-    if (write(fd, line, strlen(line)) < 0) { /* bridge not running */ }
-    close(fd);
+    size_t len = strlen(line);
+    if (epd_fd < 0) epd_fd = open(EPDF, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    if (epd_fd < 0) return;
+    if (write(epd_fd, line, len) < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            close(epd_fd);
+            epd_fd = open(EPDF, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+            if (epd_fd >= 0) {
+                if (write(epd_fd, line, len) < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                    close(epd_fd);
+                    epd_fd = -1;
+                }
+            }
+        }
+    }
 }
 /* 给显示桥一个方向提示（下一次大面积变化用哪边滑入），不强制动画 */
 static void epd_dir(int dir)
@@ -593,7 +731,7 @@ static void epd_dir_release(void)
 }
 
 /* ---- touch boost (see the header) ---- */
-static long boost_until = 0;          /* 0 = not boosted */
+static long long boost_until = 0;          /* 0 = not boosted */
 static int boost_on = 0;
 static char boost_orig[24];
 static unsigned long n_boost = 0;
@@ -601,7 +739,7 @@ static char CPUFREQ_MIN[160], CPUFREQ_MAX[160], CPUFREQ_AVAIL[160];   /* empty =
 static int idle_cap_probed = 0, idle_cap_on = 0;
 static char idle_cap_orig[24], idle_cap_target[24];
 static unsigned long n_idle_cap = 0;
-static long last_activity_ms = 0;
+static long long last_activity_ms = 0;
 static int fl_dimmed = 0, fl_saved_br = 0;
 static void el_init(void);
 static int el_read(int side);
@@ -777,7 +915,7 @@ static int in_corner(int x, int y, const char **name)
    EDGE_ARM: the swipe up was seen and the touch is ours; lifting fires the third's action, holding still for G_EB_HOLD_MS
    fires G_EB_HOLD. Moving more than the slop restarts the hold clock (a slow drag is not a hold). */
 static int eb_third = -1, arm_x, arm_y;
-static long arm_t = 0;
+static long long arm_t = 0;
 static int eb_none(int i) { return !strcmp(G_EB[i], "none"); }
 static int eb_slop(void) { int s = 30 * (PW ? PW : W) / 1272; return s < 8 ? 8 : s; }
 static void eb_fire(int i)
@@ -823,7 +961,7 @@ static int el_inv[2] = { 0, 1 };
 static int el_side = 0, el_active = 0;
 static int el_x0 = 0, el_y0 = 0;
 static int el_start_val = 0, el_last_val = 0;
-static long el_t0 = 0, el_last_write = 0;
+static long long el_t0 = 0, el_last_write = 0;
 
 static void el_init(void)
 {
@@ -909,7 +1047,7 @@ static int el_begin(int sx, int sy)
 }
 static void el_apply(int y, int force)
 {
-    long now = now_ms();
+    long long now = now_ms();
     if (!force && now - el_last_write < EL_WRITE_MS) return;
     int span = H * 72 / 100;
     if (span < 300) span = 300;
@@ -943,7 +1081,7 @@ static void el_finish(int y)
 static void two_finger_end(void)
 {
     /* classify by the movement of the first two fingers */
-    long dur = now_ms() - two_t0;
+    long long dur = now_ms() - two_t0;
     int mv[2][2];
     int n = 0;
     for (int i = 0; i < MAXSLOT && n < 2; i++) {
@@ -1107,8 +1245,12 @@ static void handle_frame(struct input_event *fr, int n)
 
     int gest = GESTURES && !(FLAGF && access(FLAGF, F_OK) == 0);
 
+    static int poke_due = 0;
+    if (active == 0 && poke_due) { poke_due = 0; action("poke", NULL); }
+
     switch (md) {
     case IDLE:
+        dz_on = 0;
         if (active >= 1) {
             int sx = sl[cur_slot].sx >= 0 ? sl[cur_slot].sx : sl[cur_slot].x, sy = sl[cur_slot].sy >= 0 ? sl[cur_slot].sy : sl[cur_slot].y;
             gconf_load();
@@ -1118,7 +1260,8 @@ static void handle_frame(struct input_event *fr, int n)
             if (!gest && !eb) { for (int i = 0; i < n; i++) forward(&fr[i]); break; }
             t_down = now_ms();
             for (int i = 0; i < n && nheld < MAXEV; i++) held[nheld++] = fr[i];
-            { static long last_poke = 0; if (t_down - last_poke > 20000) { last_poke = t_down; action("poke", NULL); } }   /* keep the Kindle from sleeping while the screen is being used */
+            /* Keep device from sleeping while screen is used; defer fork/exec until lift so touch-down has 0 delay */
+            { static long long last_poke = 0; if (t_down - last_poke > 20000) { last_poke = t_down; poke_due = 1; } }
             corner_fired = 0;
             two_done = 0;
             eb_third = -1;
@@ -1136,7 +1279,9 @@ static void handle_frame(struct input_event *fr, int n)
             } else if (eb) md = EDGE_B;
             else if (gest && G_EDGE_PANEL && sy < (EDGE_TOP >= 0 ? EDGE_TOP : EDGE)) md = EDGE_T;
             else if (gest && G_EDGE_LIGHT && el_begin(sx, sy)) md = EDGE_L;
-            else md = PENDING;
+            else if (!two_any()) {          /* all two-finger gestures off: zero-wait pass-through to Android */
+                flush_held(); md = PASS;
+            } else md = PENDING;
             (void)sx;
         } else {
             for (int i = 0; i < n; i++) forward(&fr[i]);
@@ -1158,7 +1303,7 @@ static void handle_frame(struct input_event *fr, int n)
         } else if (now_ms() - t_down >= WINDOW_MS || pending_moved()) {
             /* the two-finger window is over - or the finger already moved past the slop: a drag, not the first finger of a
                two-finger tap, so Android gets it now instead of after the window (the drag starts following at once) */
-            if (TOUCH_DEBUG && now_ms() - t_down < WINDOW_MS) logf_("pending: moved, forwarded after %ld ms", now_ms() - t_down);
+            if (TOUCH_DEBUG && now_ms() - t_down < WINDOW_MS) logf_("pending: moved, forwarded after %lld ms", now_ms() - t_down);
             for (int i = 0; i < n && nheld < MAXEV; i++) held[nheld++] = fr[i];
             flush_held(); md = PASS;
         } else {
@@ -1166,7 +1311,7 @@ static void handle_frame(struct input_event *fr, int n)
         }
         break;
     case PASS: {
-        for (int i = 0; i < n; i++) forward(&fr[i]);
+        dz_forward(fr, n);
         if (active >= 2) {                  /* a second finger arriving late: let Android have it (pinch etc.) */
         }
         if (active == 0) {
@@ -1270,7 +1415,7 @@ static void handle_frame(struct input_event *fr, int n)
         int sy = sl[cur_slot].sy >= 0 ? sl[cur_slot].sy : sl[cur_slot].y;
         int dx = sl[cur_slot].x - sx;
         int dy = sl[cur_slot].y - sy;
-        for (int i = 0; i < n; i++) forward(&fr[i]);
+        dz_forward(fr, n);
         if (active == 0) { md = IDLE; break; }
         if (!corner_fired && ((edge_kind == EDGE_B && dy < -EDGE_SWIPE) || (edge_kind == EDGE_T && dy > EDGE_SWIPE)) && abs(dy) > abs(dx)) {
             corner_fired = 1;               /* the swipe turned out to be a gesture after all: take the touch back from Android */
@@ -1306,7 +1451,7 @@ static void handle_frame(struct input_event *fr, int n)
         break;
     }
     /* scroll hint: one finger that Android is getting moved past the slop */
-    if (!scroll_sent && SCROLL_PX > 0 && active == 1 && (md == PASS || md == EDGE_FWD || md == IDLE)) {
+    if (!scroll_sent && !dz_on && SCROLL_PX > 0 && active == 1 && (md == PASS || md == EDGE_FWD || md == IDLE)) {
         int sx = sl[cur_slot].sx, sy = sl[cur_slot].sy;
         int thr = SCROLL_PX * PW / 1272;
         if (thr < 4) thr = 4;
@@ -1431,8 +1576,8 @@ static int normalize_frame(const struct input_event *in, int n, struct input_eve
 
 static int setup_uinput_touch(void)
 {
-    ufd = open("/dev/input/uinput", O_WRONLY | O_NONBLOCK);
-    if (ufd < 0) ufd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+    ufd = open("/dev/input/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    if (ufd < 0) ufd = open("/dev/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
     if (ufd < 0) { perror("uinput"); return -1; }
     ioctl(ufd, UI_SET_EVBIT, EV_SYN);
     ioctl(ufd, UI_SET_EVBIT, EV_KEY);
@@ -1494,8 +1639,8 @@ static int setup_uinput_touch(void)
 
 static int setup_uinput_keys(void)
 {
-    kfd = open("/dev/input/uinput", O_WRONLY | O_NONBLOCK);
-    if (kfd < 0) kfd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+    kfd = open("/dev/input/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    if (kfd < 0) kfd = open("/dev/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
     if (kfd < 0) return -1;
     ioctl(kfd, UI_SET_EVBIT, EV_KEY);
     ioctl(kfd, UI_SET_EVBIT, EV_SYN);
@@ -1538,12 +1683,12 @@ static void touch_reset(const char *why)
     logf_("reset (%s): %d contact(s) lifted in Android, %d finger(s) on the panel%s", why, n, count_active(), md == SWALLOW ? " (swallowed to the lift)" : "");
 }
 /* watchdog (see the header): runs on the poll tick */
-static long wd_last = 0;
+static long long wd_last = 0;
 static void stuck_watchdog(void)
 {
     if (STUCK_MS <= 0 || paused) return;
     if (!out_any() && !count_active()) return;
-    long now = now_ms();
+    long long now = now_ms();
     if (now - last_hw_ms < STUCK_MS || now - wd_last < STUCK_MS) return;
     wd_last = now;
     n_wd++;
@@ -1593,6 +1738,7 @@ static void inject_cmd(int fd)
     char *save = NULL;
     for (char *line = strtok_r(buf, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
         int x1, y1, x2, y2, ms;
+        last_hw_ms = now_ms();
         if (!strncmp(line, "reset", 5) && (line[5] == 0 || line[5] == ' ')) {
             touch_reset(line[5] ? line + 6 : "host");
         } else if (sscanf(line, "gyro %d", &x1) == 1) {
@@ -1722,8 +1868,8 @@ static void handle_page_key(int code)
     epd_cmd("TOUCH\n");
     key_tap(out_key);
     {
-        static long last_key_poke = 0;
-        long t = now_ms();
+        static long long last_key_poke = 0;
+        long long t = now_ms();
         if (t - last_key_poke > 20000) { last_key_poke = t; action("poke", NULL); }
     }
 }
@@ -1731,7 +1877,7 @@ static void handle_page_key(int code)
 static void pk_check(void)
 {
     if (paused || is_sleeping()) { pk_down[0].active = pk_down[1].active = 0; return; }
-    long now = now_ms();
+    long long now = now_ms();
     for (int i = 0; i < 2; i++) {
         if (!pk_down[i].active || pk_down[i].fired) continue;
         if (now - pk_down[i].t0 >= KEY_LONG_MS) {
@@ -1878,10 +2024,10 @@ int main(int argc, char **argv)
         if (ROT != 90 && ROT != 180 && ROT != 270) ROT = 0;
         if (ROT == 90 || ROT == 270) { W = PH; H = VW; }   /* from here on W / H are the logical (Android) size */
     }
-    signal(SIGINT, on_sig); signal(SIGTERM, on_sig); signal(SIGCHLD, SIG_IGN);
+    signal(SIGINT, on_sig); signal(SIGTERM, on_sig); signal(SIGCHLD, SIG_IGN); signal(SIGPIPE, SIG_IGN);
     signal(SIGUSR1, on_usr1); signal(SIGUSR2, on_usr2);
 
-    tfd = open(dev, O_RDONLY);
+    tfd = open(dev, O_RDONLY | O_CLOEXEC);
     if (tfd < 0) { perror("open touch"); return 1; }
     {
         unsigned long keybits[(KEY_MAX / (8 * sizeof(unsigned long))) + 2];
@@ -1901,12 +2047,12 @@ int main(int argc, char **argv)
     if (setup_uinput_keys() < 0) fprintf(stderr, "warning: no keys device\n");
     if (ioctl(tfd, EVIOCGRAB, 1) < 0) perror("EVIOCGRAB");     /* from now on only we see the touches */
     if (TAPDEV && TAPDEV[0]) {
-        tapfd = open(TAPDEV, O_RDONLY | O_NONBLOCK);
+        tapfd = open(TAPDEV, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
         if (tapfd < 0) fprintf(stderr, "tapdev %s: %s\n", TAPDEV, strerror(errno));
         else if (ioctl(tapfd, EVIOCGRAB, 1) < 0) perror("EVIOCGRAB tapdev");
     }
     if (KEYDEV && KEYDEV[0]) {
-        keyfd = open(KEYDEV, O_RDONLY | O_NONBLOCK);
+        keyfd = open(KEYDEV, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
         if (keyfd < 0) fprintf(stderr, "keydev %s: %s\n", KEYDEV, strerror(errno));
         else if (ioctl(keyfd, EVIOCGRAB, 1) < 0) perror("EVIOCGRAB keydev");
     }
@@ -1918,7 +2064,7 @@ int main(int argc, char **argv)
     if (EDGE_TOP < 0) EDGE_TOP = EDGE;
     EDGE_BASE = EDGE; EDGE_TOP_BASE = EDGE_TOP; EDGE_SWIPE_BASE = EDGE_SWIPE;
     int ifd = -1;
-    if (INJECT) { mkfifo(INJECT, 0600); ifd = open(INJECT, O_RDWR | O_NONBLOCK); }
+    if (INJECT) { mkfifo(INJECT, 0600); ifd = open(INJECT, O_RDWR | O_NONBLOCK | O_CLOEXEC); }
     gconf_load();
     logf_("started: dev=%s %dx%d edge=%d window=%dms corner=%d/%dms gestures=%d", dev, W, H, EDGE, WINDOW_MS, CORNER, CORNER_MS, GESTURES);
     rt_setup();
@@ -1947,56 +2093,69 @@ int main(int argc, char **argv)
                 logf_("grabbed again");
             }
         }
-        if (boost_until && now_ms() >= boost_until) boost_end();
-        if (!last_activity_ms) last_activity_ms = now_ms();
+        long long now_t = now_ms();
+        if (boost_until && now_t >= boost_until) boost_end();
+        if (!last_activity_ms) last_activity_ms = now_t;
         if (!paused && !is_sleeping() && !count_active()) {
-            long idle_ms = now_ms() - last_activity_ms;
+            long long idle_ms = now_t - last_activity_ms;
             if (!idle_cap_on && IDLE_CAP_MS > 0 && !boost_on && idle_ms >= IDLE_CAP_MS) idle_cap_begin();
-            if (!fl_dimmed && FL_TIMEOUT > 0 && idle_ms >= (long)FL_TIMEOUT * 1000L) {
+            if (!fl_dimmed && FL_TIMEOUT > 0 && idle_ms >= (long long)FL_TIMEOUT * 1000LL) {
                 el_init();
                 int cur_br = el_read(0);
                 if (cur_br > 0) {
                     fl_saved_br = cur_br;
                     fl_dimmed = 1;
                     char bbuf[16]; snprintf(bbuf, sizeof(bbuf), "%d\n", cur_br);
-                    int bfd = open("/tmp/veradroid/fl.dimmed", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    int bfd = open("/tmp/veradroid/fl.dimmed", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
                     if (bfd >= 0) { if (write(bfd, bbuf, strlen(bbuf)) < 0) {} close(bfd); }
                     el_write(0, 0);
                     logf_("fl_timeout: dimmed %d -> 0 after %ds idle", cur_br, FL_TIMEOUT);
                 } else {
-                    last_activity_ms = now_ms(); /* already off; check again later */
+                    last_activity_ms = now_t; /* already off; check again later */
                 }
             }
         }
         gyro_check();
         pk_check();
         struct pollfd pf[4] = { { tfd, POLLIN, 0 }, { ifd, POLLIN, 0 }, { tapfd, POLLIN, 0 }, { keyfd, POLLIN, 0 } };
-        int pto = md == IDLE ? -1 : 10;
+        /* Exact deadline poll timeout: eliminates 100 Hz wakeups during touch hold and removes jitter */
+        int pto = -1;
+        long long dl = -1;
+        if (md == PENDING) dl = t_down + WINDOW_MS;
+        else if ((md == EDGE_B || md == EDGE_T) && !corner_fired && count_active() == 1) dl = t_down + EDGE_HOLD_MS;
+        else if (md == EDGE_L && !el_active && count_active() == 1) dl = el_t0 + EL_HOLD_MS;
+        else if (md == EDGE_ARM) dl = now_t + 10;
+        else if (md == TWO && !two_done && G_TWO_LONG) dl = two_t0 + 2000;
+        else if ((md == PASS || md == EDGE_FWD) && !corner_fired && CORNER_MS > 0 && count_active() == 1) dl = t_down + CORNER_MS;
+        if (dl >= 0) {
+            long long left = dl - now_t;
+            pto = left > 0 ? (int)(left > 60000 ? 60000 : left) : 1;
+        }
         if (STUCK_MS > 0 && (out_any() || count_active())) { int w = STUCK_MS / 4 > 10 ? STUCK_MS / 4 : 10; if (pto < 0 || w < pto) pto = w; }
-        if (boost_until) { long left = boost_until - now_ms(); if (left < 1) left = 1; if (pto < 0 || left < pto) pto = (int)left; }
+        if (boost_until) { long long left = boost_until - now_t; if (left < 1) left = 1; if (pto < 0 || left < pto) pto = (int)(left > 60000 ? 60000 : left); }
         if (!paused && !is_sleeping() && !count_active()) {
-            long idle_ms = now_ms() - last_activity_ms;
+            long long idle_ms = now_t - last_activity_ms;
             if (!idle_cap_on && IDLE_CAP_MS > 0 && CPUFREQ_MAX[0] && (!idle_cap_probed || idle_cap_target[0])) {
-                long left = IDLE_CAP_MS - idle_ms;
+                long long left = IDLE_CAP_MS - idle_ms;
                 if (left < 10) left = 10;
-                if (pto < 0 || left < pto) pto = (int)left;
+                if (pto < 0 || left < pto) pto = (int)(left > 60000 ? 60000 : left);
             }
             if (!fl_dimmed && FL_TIMEOUT > 0) {
-                long left = (long)FL_TIMEOUT * 1000L - idle_ms;
+                long long left = (long long)FL_TIMEOUT * 1000LL - idle_ms;
                 if (left < 50) left = 50;
-                if (pto < 0 || left < pto) pto = (int)left;
+                if (pto < 0 || left < pto) pto = (int)(left > 60000 ? 60000 : left);
             }
         }
         if (G_AUTO_ROTATE && gyro_want >= 0 && gyro_want != ROT) {
-            long left = GYRO_SETTLE_MS - (now_ms() - gyro_since);
+            long long left = GYRO_SETTLE_MS - (now_t - gyro_since);
             if (left < 1) left = 1;
-            if (pto < 0 || left < pto) pto = (int)left;
+            if (pto < 0 || left < pto) pto = (int)(left > 60000 ? 60000 : left);
         }
         for (int i = 0; i < 2; i++) {
             if (pk_down[i].active && !pk_down[i].fired) {
-                long left = KEY_LONG_MS - (now_ms() - pk_down[i].t0);
+                long long left = KEY_LONG_MS - (now_t - pk_down[i].t0);
                 if (left < 1) left = 1;
-                if (pto < 0 || left < pto) pto = (int)left;
+                if (pto < 0 || left < pto) pto = (int)(left > 60000 ? 60000 : left);
             }
         }
         int pr = poll(pf, 4, pto);   /* a negative fd is skipped by poll */
@@ -2031,9 +2190,11 @@ int main(int argc, char **argv)
                 action("invert", NULL); two_done = 1;
             }
             if (md == PASS && !corner_fired && CORNER_MS > 0 && count_active() == 1 && now_ms() - t_down >= CORNER_MS) {
+                int as = cur_slot;
+                if (!sl[as].active) for (int i = 0; i < MAXSLOT; i++) if (sl[i].active) { as = i; break; }
                 const char *cn;
-                int sx = sl[cur_slot].sx >= 0 ? sl[cur_slot].sx : sl[cur_slot].x, sy = sl[cur_slot].sy >= 0 ? sl[cur_slot].sy : sl[cur_slot].y;
-                if (in_corner(sl[cur_slot].x, sl[cur_slot].y, &cn) && abs(sl[cur_slot].x - sx) < 40 && abs(sl[cur_slot].y - sy) < 40) {
+                int sx = sl[as].sx >= 0 ? sl[as].sx : sl[as].x, sy = sl[as].sy >= 0 ? sl[as].sy : sl[as].y;
+                if (sl[as].active && in_corner(sl[as].x, sl[as].y, &cn) && abs(sl[as].x - sx) < 40 && abs(sl[as].y - sy) < 40) {
                     corner_fired = 1; cancel_to_android(); action(cn, NULL); md = SWALLOW;
                 }
             }
@@ -2114,7 +2275,7 @@ int main(int argc, char **argv)
     if (keyfd >= 0) ioctl(keyfd, EVIOCGRAB, 0);
     ioctl(ufd, UI_DEV_DESTROY);
     if (kfd >= 0) ioctl(kfd, UI_DEV_DESTROY);
-    logf_("boost: %lu times, scroll hints: %lu, idle thaws: %lu", n_boost, n_scroll, n_thaw);
+    logf_("boost: %lu times, scroll hints: %lu, idle thaws: %lu, compacted: %lu, dz_taps: %lu, dz_drops: %lu", n_boost, n_scroll, n_thaw, n_compact, n_dz_taps, n_dz_drops);
     logf_("stuck contacts: %lu lifted in Android, %lu tracking id changes, %lu watchdog checks, %lu resets", n_released, n_tidchg, n_wd, n_reset);
     logf_("stopped, forwarded %lu events, %lu drops, %lu stuck fingers lifted, %lu BTN_TOUCH fixed, %lu pressure fixed", fwd_count, drops, resync_lifts, btn_fixes, pres_fixes);
     return 0;
