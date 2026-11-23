@@ -37,7 +37,8 @@
 
 ### （三）关键实机硬件 Bug 修复
 
-- **Elan 触摸屏重复 `ABS_MT_TRACKING_ID` 与唤醒幽灵触摸死锁**：修复 Elan 驱动每帧重复上报相同 `TRACKING_ID` 导致手势起点被重置的问题，以及深度休眠唤醒后内核残留槽位触发幽灵触摸锁死与 10 分钟无效 RTC 唤醒。
+- **Elan 触摸屏重复 `ABS_MT_TRACKING_ID` 与唤醒幽灵触摸死锁**：修复 Elan 驱动每帧重复上报相同 `TRACKING_ID` 导致手势起点被重置的问题，以及深度休眠唤醒后内核残留槽位触发幽灵触摸锁死。
+- **自动休眠 10 分钟定时误唤醒、充电不休眠与超时不即时生效**：Linux 4.1 内核 `alarmtimer_suspend()` 在挂起时重设 `rtc_ricoh619` 硬件闹钟（Android `healthd`/闹钟每 10 分钟唤醒一次）；现通过对比 `/proc/interrupts` 物理按键/霍尔传感器中断（`Power` / `Hall` / `PageUp` / `PageDown`）精准区分真人唤醒与伪唤醒，伪唤醒保持黑屏冻结并在 1 秒内静默重进 `mem` 深度休眠；移除 `sleep_watch` 的 `kobo_is_charging && continue` 限制使充电时正常息灯进屏保（拔线后 15 秒内自动升级为 `mem` 深度休眠），并改为每次动态读取 `SLEEP_TIMEOUT` 与校对时钟回跳。
 - **EPDC v2 局部刷新边缘裁切与切页全黑闪帧**：修复 Kobo EPDC v2 局刷边界裁切错位，并过滤 Activity 切换瞬间的 >85% 纯黑未就绪过渡帧。
 - **单核 Cortex-A9 MS GC 优先级反转**：修复后台低优先级线程持锁执行 Stop-The-World GC 被 `:seg` 抢占导致数秒卡顿与 ANR 的根因。
 - **大书跨章热门想法风暴卡顿**：按书籍维度限流 `LoadBookChapterReviewList` 并关闭 30s 连续分页拉取窗口，彻底消除大书跨章返回书架卡在「加载中...」的问题。
