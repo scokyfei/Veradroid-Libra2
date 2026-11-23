@@ -2231,7 +2231,7 @@ public class HomeActivity extends Activity {
             }
             localSwitch(list, "书库", "主页底部的“书库”标签和顶上的搜索框。只用来开应用的话可以关掉：书库页不再显示，也不再读书的索引、不扫描书的文件夹。", "library", true);
             if (!bs) localSwitch(list, "12 小时制", "时间显示成 上午 / 下午 几点。默认 24 小时制。", "clock12", false);
-            localSwitch(list, "单手模式", "主页的顶栏和应用挪到下半屏，上面多一个大的“下拉面板”按钮。", OneHand.KEY, false);
+            if (!bs) localSwitch(list, "单手模式", "主页的顶栏和应用挪到下半屏，上面多一个大的“下拉面板”按钮。", OneHand.KEY, false);
             localSwitch(list, "状态栏", "在别的应用顶部显示时间和电量，点它打开下拉面板。桌面自己已经有顶栏，所以桌面不重复显示。", "statusbar", true);
             if (!bs) {
                 section(list, "下拉面板");

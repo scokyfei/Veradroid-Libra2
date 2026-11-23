@@ -65,7 +65,6 @@ final class BlocksSettings {
     static final String[] DNS_V = { "auto", "aliyun", "tencent", "google" };
     static final String[] XFER_IDLE_L = { "15 分钟", "30 分钟", "1 小时" };
     static final int[] XFER_IDLE_V = { 15, 30, 60 };
-    static final String[] UI_SIZE_L = { "小", "中", "大" };
     static final String[] GCN_L = { "关", "20 次", "30 次", "50 次" };
     static final String[] GCN_V = { "0", "20", "30", "50" };
     static final String[] FONT_L = { "小", "标准", "大", "特大" };
@@ -89,9 +88,9 @@ final class BlocksSettings {
         case BlocksHome.S_DISPLAY: return cfg + AppFont.user(a) + st.get("light") + st.get("warmth") + st.get("lightmax") + st.get("haslight") + st.get("haswarmth");
         case BlocksHome.S_DISPLAY_ADV: return cfg + "|" + prefs.getBoolean("flashui", false) + "|" + prefs.getString("system_font_name", "") + "|" + prefs.getBoolean("system_font_all", true);
         case BlocksHome.S_CONTROLS: return cfg;
-        case BlocksHome.S_POWER: return cfg + st.get("sleep") + prefs.getBoolean("clock12", false) + "|" + java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR);
-        case BlocksHome.S_STORAGE: return cfg + "|" + st.get("wifi") + "|" + Transfer.get(a).running() + "|" + prefs.getInt("xfer_idle", 30) + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
-        case BlocksHome.S_UI: return prefs.getString("name", "VeraDroid") + "|" + prefs.getString("quick", "") + "|" + prefs.getString("panelname", "") + "|" + Fonts.weight(a) + "|" + prefs.getInt("size", 1) + "|" + Blocks.caps(a) + "|" + Blocks.anim(a) + "|" + Blocks.on(a);
+        case BlocksHome.S_POWER: return cfg + st.get("sleep") + prefs.getBoolean("clock12", false) + "|" + prefs.getInt(Cleaner.LIMIT_KEY, Cleaner.defaultLimit()) + "|" + java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR);
+        case BlocksHome.S_STORAGE: return cfg + "|" + st.get("wifi") + "|" + st.get("lanip") + "|" + Transfer.get(a).running() + "|" + prefs.getInt("xfer_idle", 30) + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
+        case BlocksHome.S_UI: return prefs.getString("name", "VeraDroid") + "|" + prefs.getString("quick", "") + "|" + prefs.getString("panelname", "") + "|" + Fonts.weight(a) + "|" + Blocks.caps(a) + "|" + Blocks.anim(a) + "|" + Blocks.on(a);
         case BlocksHome.S_CARDS: return prefs.getString(BlocksCards.KEY, BlocksCards.DEFAULT) + prefs.getString("blk_quick", "") + prefs.getString("wx_city", "") + prefs.getString("blk_readers", "") + a.appsVersion();
         default: return prefs.getString("name", "VeraDroid") + "|" + (System.currentTimeMillis() / 60000);
         }
@@ -361,8 +360,6 @@ final class BlocksSettings {
             @Override public void onStep(final int i) { if (i == 0) a.setStyle("classic"); } }).wrap()));
         add(ui, Blocks.row(a, "界面字重", "UI font weight", new Blocks.Stepper(a, Fonts.WEIGHT_L, Fonts.weight(a), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { prefs.edit().putInt(Fonts.WEIGHT_KEY, i).commit(); a.reloadBlocks(BlocksHome.S_UI); } })));
-        add(ui, Blocks.row(a, "文字与图标大小", "Launcher & settings UI scale", new Blocks.Stepper(a, UI_SIZE_L, Math.max(0, Math.min(2, prefs.getInt("size", 1))), new Blocks.Stepper.Listener() {
-            @Override public void onStep(int i) { prefs.edit().putInt("size", i).commit(); a.reloadBlocks(BlocksHome.S_UI); } })));
         add(ui, Blocks.row(a, "英文小字", "English captions", toggle(Blocks.caps(a), new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { prefs.edit().putBoolean(Blocks.CAPS_KEY, on).commit(); h.show(BlocksHome.S_UI); a.changed(); } })));
         add(ui, Blocks.row(a, "桌面动画", "E-ink animation", new Blocks.Stepper(a, Blocks.ANIM_L, Blocks.anim(a), new Blocks.Stepper.Listener() {
