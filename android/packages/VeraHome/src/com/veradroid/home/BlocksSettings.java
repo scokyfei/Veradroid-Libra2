@@ -75,7 +75,7 @@ final class BlocksSettings {
 
     private int dp(int v) { return Ui.dp(a, v); }
 
-    static final String[] CAT_EN = { "Wi-Fi & Bluetooth", "Display & refresh", "Gestures", "Apps & home", "Transfer", "Device & update", "About" };
+    static final String[] CAT_EN = { "Wi-Fi & Bluetooth", "Display & refresh", "Gestures", "Apps & home", "Transfer", "Device & manage", "About" };
 
     String sig(int key) {
         if (BlocksHome.isCat(key)) {

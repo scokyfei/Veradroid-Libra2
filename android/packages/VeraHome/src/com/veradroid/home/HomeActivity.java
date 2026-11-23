@@ -537,7 +537,7 @@ public class HomeActivity extends Activity {
     }
 
     /** 经典设置的分类名（方块风格的设置页标题用）。 */
-    static String catName(int t) { return t < 0 ? "全部设置" : t == 0 && !BluetoothActivity.supported() ? "Wi-Fi" : CATS[Math.min(CATS.length - 1, t)]; }
+    static String catName(int t) { return t < 0 ? "全部设置" : t == 0 && !BluetoothActivity.supported() ? "Wi-Fi" : t == 5 && HostLink.isKobo() ? "设备与管理" : CATS[Math.min(CATS.length - 1, t)]; }
     static final int CAT_COUNT = 7, CAT_XFER_ = 4, CAT_ABOUT_ = 6;
 
     /** 方块风格：这时正在搭方块样子的设置内容（下面的 section / row / action… 都按方块画），bGroup 是当前的分组框。 */
