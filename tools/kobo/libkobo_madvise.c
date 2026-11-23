@@ -980,34 +980,15 @@ static void configure_weread_art_heap(const char *proc, int (*say)(int, const ch
         (heap[0x58 / 4] == 1u || heap[0x58 / 4] == 2u) &&
         (heap[0x5c / 4] == 1u || heap[0x5c / 4] == 2u) &&
         heap[0x2d8 / 4] >= (512u << 10) && heap[0x2d8 / 4] <= (32u << 20)) {
-        /* Switch the 3 MarkSweep collectors (full, partial, sticky) in garbage_collectors_
-           (std::vector at heap + 0x300) from concurrent CMS (is_concurrent_ @ +0x1d0 == 1)
-           to non-concurrent MS (is_concurrent_ @ +0x1d0 == 0) before updating collector_type_. */
-        uintptr_t *gc_begin = (uintptr_t *)heap[0x300 / 4];
-        uintptr_t *gc_end   = (uintptr_t *)heap[0x304 / 4];
-        int switched = 0;
-        if (gc_begin && gc_end && gc_end > gc_begin && (gc_end - gc_begin) <= 8) {
-            for (uintptr_t *p = gc_begin; p < gc_end && switched < 3; p++) {
-                uint8_t *c = (uint8_t *)(*p);
-                if (!c) continue;
-                int (*get_ct)(void *) = *(int (**)(void *))(*(uintptr_t *)c + 0x14u);
-                int ct = get_ct ? get_ct(c) : 0;
-                if ((ct == 1 || ct == 2) && (c[0x1d0] == 0 || c[0x1d0] == 1)) {
-                    c[0x1d0] = 0;
-                    switched++;
-                }
-            }
-        }
-        if (switched == 3) {
-            heap[0x58 / 4] = 1u;          /* collector_type_ = kCollectorTypeMS */
-            heap[0x5c / 4] = 1u;          /* foreground_collector_type_ = kCollectorTypeMS */
-            heap[0x100 / 4] = 0xffffffffu;/* concurrent_start_bytes_ = UINT32_MAX */
-        }
+        /* Keep Concurrent Mark-Sweep (CMS) active on Kobo Libra 2 single-core Cortex-A9!
+           Forcing non-concurrent stop-the-world MS GC with 8 MB max_free caused 2-4s UI freezes
+           and InputDispatcher ANRs whenever GC overlapped with eMMC page faults / typesetting.
+           With CMS + 4m-12m free window (0.75 util), heap stays lean (~42 MB) while UI pauses
+           stay under ~30 ms. */
         heap[0x2d8 / 4] = 4u << 20;       /* min_free_ = 4 MB */
-        heap[0x2dc / 4] = 8u << 20;       /* max_free_ = 8 MB (Koboweread 1.9.7) */
+        heap[0x2dc / 4] = 12u << 20;      /* max_free_ = 12 MB */
         if (set_util) set_util(heap, 0.75f);
-        if (say) say(4, "KoboWeRead", "ART_HEAP proc=%s gctype=%s(collectors=%d) minfree=4m maxfree=8m growth=96m",
-                     proc, switched == 3 ? "MS" : "CMS", switched);
+        if (say) say(4, "KoboWeRead", "ART_HEAP proc=%s gctype=CMS minfree=4m maxfree=12m growth=96m", proc);
     } else if (say) {
         say(4, "KoboWeRead", "ART_HEAP proc=%s skipped cap=%u growth=%u fg=%u",
             proc, heap[0xec / 4], heap[0xf0 / 4], heap[0x5c / 4]);
@@ -1045,7 +1026,7 @@ static void *weread_opt_thread(void *unused)
     int (*say)(int, const char *, const char *, ...) =
         log ? (int (*)(int, const char *, const char *, ...))dlsym(log, "__android_log_print") : NULL;
 
-    /* 0. Apply WeRead-only ART Heap (4m-8m, 0.75) + non-concurrent MS GC */
+    /* 0. Apply WeRead-only ART Heap (4m-12m, 0.75) keeping concurrent CMS GC */
     configure_weread_art_heap("main", say);
 
     /* 1. Install NEON Skia blitters (byte-for-byte self-verified) + 16 MB Skia glyph cache */

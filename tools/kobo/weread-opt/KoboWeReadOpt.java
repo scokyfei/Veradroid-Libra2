@@ -1102,8 +1102,9 @@ public final class KoboWeReadOpt {
     private static final class ChapterPrefetch implements Runnable {
         private static final String BOOK_FRAGMENT = "com.tencent.weread.book.fragment.BookFragment";
         private static final long TICK_MS = 10000, FAST_TICK_MS = 1000;
-        private static final long SETTLE_MS = 30000, PENDING_MS = 120000, STAY_MS = 45000, BOOK_IDLE_MS = 120000;
-        private static final int RANGE = 3;
+        private static final long SETTLE_MS = 30000, PENDING_MS = 120000, STAY_MS = 45000, PAGE_QUIET_MS = 25000, BOOK_IDLE_MS = 120000;
+        private static final int RANGE = 1;
+        private static final int MIN_AVAIL_KB = 130 * 1024;
         private static final String[] POWER_PATHS = {
             "/sys/class/power_supply/mc13892_bat/status",
             "/sys/class/power_supply/battery/status",
@@ -1214,6 +1215,10 @@ public final class KoboWeReadOpt {
             if (visible == null || visible.length == 0) return;
             if (visible[0] != lastAt) { lastAt = visible[0]; movedAt = now; }
             if (now - movedAt < STAY_MS) return;
+            /* Never launch heavy EPUB unzip/typesetting while the user is actively turning pages or low on RAM. */
+            if (now - pageAt < PAGE_QUIET_MS) return;
+            int availKb = readMemAvailableKb();
+            if (availKb > 0 && availKb < MIN_AVAIL_KB) return;
             List<?> list = (List<?>) chapters.invoke(cursor);
             if (list == null || list.isEmpty()) return;
             List<Integer> uids = new ArrayList<Integer>(list.size());
@@ -1221,22 +1226,22 @@ public final class KoboWeReadOpt {
             int at0 = uids.indexOf(visible[0]);
             if (at0 < 0) return;
             Collection<Integer> preload = (Collection<Integer>) preloadSetField.get(f);
-            if (startNearest(f, cursor, uids, at0, 1, RANGE, preload, false)) return;
+            if (startNearest(f, cursor, uids, at0, 1, RANGE, preload, false, true)) return;
             if (bookComplete || now - pageAt < BOOK_IDLE_MS || now - movedAt < BOOK_IDLE_MS || !charging()) return;
             if (!bookActive) {
                 bookActive = true;
                 Log.i(TAG, "BOOK_PREFETCH start chapters=" + uids.size() + " current=" + visible[0]);
             }
-            if (startNearest(f, cursor, uids, at0, RANGE + 1, uids.size(), preload, true)) return;
+            if (startNearest(f, cursor, uids, at0, RANGE + 1, uids.size(), preload, true, false)) return;
             bookActive = false;
             bookComplete = true;
             Log.i(TAG, "BOOK_PREFETCH complete book_done=" + bookDone + " prepared=" + prepared.size());
         }
 
         private boolean startNearest(Object f, Object cursor, List<Integer> uids, int at0, int from, int to,
-                                     Collection<Integer> preload, boolean book) throws Exception {
+                                     Collection<Integer> preload, boolean book, boolean forwardOnly) throws Exception {
             for (int d = from; d <= to; d++) {
-                for (int sign = 1; sign >= -1; sign -= 2) {
+                for (int sign = 1; sign >= (forwardOnly ? 1 : -1); sign -= 2) {
                     int i = at0 + sign * d;
                     if (i < 0 || i >= uids.size()) continue;
                     int uid = uids.get(i);
@@ -1320,8 +1325,8 @@ public final class KoboWeReadOpt {
         private static final long PERIOD_MS = 30000;
         private static final long HEAP_EVERY_MS = 120000;
         private static final long APP_EVERY_MS = 300000;
-        private static final int HEAP_BELOW_KB = 160 * 1024;
-        private static final int APP_BELOW_KB = 120 * 1024;
+        private static final int HEAP_BELOW_KB = 110 * 1024;
+        private static final int APP_BELOW_KB = 85 * 1024;
         private static final int TRIM_MEMORY_RUNNING_CRITICAL = 15;
 
         private final boolean mainProc;

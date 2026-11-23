@@ -131,14 +131,15 @@ grep -q 'SYSTEM_FONT=' "$TOP/host/kobo/boot/lib/settings.sh" \
 grep -q '^HEAP_TARGET_UTIL=' "$TOP/host/kobo/models/libra2.conf" \
     && grep -q '^HEAP_MINFREE=2m' "$TOP/host/kobo/models/libra2.conf" \
     && grep -q '^SQUEEZE_MB=64' "$TOP/host/kobo/models/libra2.conf" \
-    && grep -q '^WEREAD_GCTYPE=MS' "$TOP/host/kobo/models/libra2.conf" \
-    && grep -q '^WEREAD_HEAP_MAXFREE=8m' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q '^WEREAD_GCTYPE=CMS' "$TOP/host/kobo/models/libra2.conf" \
+    && grep -q '^WEREAD_HEAP_MAXFREE=12m' "$TOP/host/kobo/models/libra2.conf" \
     && grep -q 'heaptargetutilization' "$TOP/host/kobo/boot/lib/memory.sh" \
     && grep -q 'vdsqueeze' "$TOP/host/kobo/boot/lib/memory.sh" \
     && [ -f "$TOP/tools/src/vdsqueeze.c" ] \
     && grep -q 'configure_weread_art_heap' "$TOP/tools/kobo/libkobo_madvise.c" \
+    && grep -q 'PAGE_QUIET_MS' "$TOP/tools/kobo/weread-opt/KoboWeReadOpt.java" \
     && grep -q '__system_property_get' "$TOP/tools/kobo/libkobo_madvise.c" \
-    && ok "Per-process WeRead ART heap (4m-8m, 0.75) + MS GC + boot-time vdsqueeze wired" || fail "ART heap/GC/vdsqueeze tuning missing"
+    && ok "Per-process WeRead ART heap (4m-12m, 0.75, CMS) + quiet ChapterPrefetch + boot-time vdsqueeze wired" || fail "ART heap/GC/vdsqueeze tuning missing"
 grep -q 'cpufreq.interactive.state' "$TOP/host/kobo/boot/lib/memory.sh" \
     && grep -q 'io_is_busy' "$TOP/host/kobo/boot/lib/memory.sh" \
     && ok "interactive governor tuning saved/restored" || fail "interactive governor tuning missing"
