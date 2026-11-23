@@ -53,12 +53,12 @@ final class BlocksSettings {
     static final String[] ROTATE_V = { "0", "180", "90", "270" };
     static final String[] REAGL_L = { "三成", "翻页（默认）", "一半", "七成", "接近整屏" };
     static final String[] REAGL_V = { "30", "35", "50", "70", "85" };
-    static final String[] SETTLE_L = { "关", "快 40ms", "标准 120ms", "强 250ms" };
-    static final String[] SETTLE_V = { "0", "40", "120", "250" };
-    static final String[] ANIMSTEP_L = { "快（6 步）", "标准（12 步）", "慢（24 步）" };
-    static final String[] ANIMSTEP_V = { "6", "12", "24" };
-    static final String[] ANIMDIR_L = { "关", "跟随手势", "左滑", "右滑", "上滑", "下滑" };
-    static final String[] ANIMDIR_V = { "0", "1", "2", "3", "4", "5" };
+    static final String[] SETTLE_L = { "关", "快 50ms", "标准 120ms", "强 250ms" };
+    static final String[] SETTLE_V = { "0", "50", "120", "250" };
+    static final String[] ANIMSTEP_L = { "极速（4 步）", "快（6 步）", "标准（8 步）", "细腻（12 步）", "慢（24 步）" };
+    static final String[] ANIMSTEP_V = { "4", "6", "8", "12", "24" };
+    static final String[] ANIMDIR_L = { "跟随手势", "左滑", "右滑", "上滑", "下滑" };
+    static final String[] ANIMDIR_V = { "1", "2", "3", "4", "5" };
     static final String[] DITHER_L = { "关", "Floyd", "Atkinson", "有序点阵" };
     static final String[] DITHER_V = { "0", "1", "2", "3" };
     static final String[] DNS_L = { "自动", "阿里 DNS", "腾讯 DNS", "Google DNS" };
@@ -255,8 +255,8 @@ final class BlocksSettings {
                 @Override public void onStep(int i) { host("KFB_GCN=" + GCN_V[i]); } })));
             add(ng, Blocks.row(a, "切换应用首屏全刷", "Full refresh on app switch", toggle("1".equals(cfg.get("KFB_NEWWIN")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("KFB_NEWWIN=" + (on ? 1 : 0)); } })));
-            add(ng, Blocks.row(a, "全局 NEON 文字与字形加速", "Skia NEON & glyph cache for all apps", toggle(!"0".equals(cfg.get("KFB_SKIA_OPT")), new Icons.Toggle.Listener() {
-                @Override public void onToggle(boolean on) { host("KFB_SKIA_OPT=" + (on ? 1 : 0)); } })));
+            add(ng, Blocks.row(a, "换页后整屏刷新", "Full flash on launcher page flip", toggle(prefs.getBoolean("flashui", false), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { prefs.edit().putBoolean("flashui", on).commit(); } })));
         }
         LinearLayout wf = group(c, "画面与波形细节");
         add(wf, Blocks.row(a, "局部刷新方式", "Partial update", new Blocks.Stepper(a, MODE_L, idx(MODE_V, cfg.get("KFB_MODE"), 0), new Blocks.Stepper.Listener() {
@@ -271,7 +271,7 @@ final class BlocksSettings {
             @Override public void onStep(int i) { host("KFB_SETTLE=" + SETTLE_V[i]); } })));
         add(wf, Blocks.row(a, "翻页动画方向", "Page-turn wipe direction (reading only)", new Blocks.Stepper(a, ANIMDIR_L, idx(ANIMDIR_V, cfg.get("KFB_ANIM_MODE"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_ANIM_MODE=" + ANIMDIR_V[i]); } })));
-        add(wf, Blocks.row(a, "翻页动画速度", "Page-turn wipe steps", new Blocks.Stepper(a, ANIMSTEP_L, idx(ANIMSTEP_V, cfg.get("KFB_ANIM_STEPS"), 1), new Blocks.Stepper.Listener() {
+        add(wf, Blocks.row(a, "翻页动画速度", "Page-turn wipe steps", new Blocks.Stepper(a, ANIMSTEP_L, idx(ANIMSTEP_V, cfg.get("KFB_ANIM_STEPS"), 2), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_ANIM_STEPS=" + ANIMSTEP_V[i]); } })));
         add(wf, Blocks.row(a, "全局灰度抖动", "Global dithering (off = smart image dither)", new Blocks.Stepper(a, DITHER_L, idx(DITHER_V, cfg.get("KFB_DITHER"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_DITHER=" + DITHER_V[i]); } })));
@@ -279,9 +279,11 @@ final class BlocksSettings {
             @Override public void onStep(int i) { host("KFB_LIGHTF=" + Panel.LIGHTF_V[i]); } })));
         add(wf, Blocks.row(a, "深色加深", "Darken light text", toggle("1".equals(cfg.get("KFB_DARKEN")), new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { host("KFB_DARKEN=" + (on ? 1 : 0)); } })));
-        add(wf, Blocks.row(a, "换页后整屏刷新", "Full flash on launcher page flip", toggle(prefs.getBoolean("flashui", false), new Icons.Toggle.Listener() {
-            @Override public void onToggle(boolean on) { prefs.edit().putBoolean("flashui", on).commit(); } })));
-        LinearLayout sf = group(c, "系统字体");
+        LinearLayout sf = group(c, "文字渲染与系统字体");
+        if (HostLink.isKobo()) {
+            add(sf, Blocks.row(a, "全局 NEON 文字与字形加速", "Skia NEON & glyph cache for all apps", toggle(!"0".equals(cfg.get("KFB_SKIA_OPT")), new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("KFB_SKIA_OPT=" + (on ? 1 : 0)); } })));
+        }
         add(sf, Blocks.navRow(a, "系统字体", "当前：" + prefs.getString("system_font_name", "系统默认") + "（桌面、设置、阅读器一起换）", new View.OnClickListener() {
             @Override public void onClick(View v) { a.fontDialog(); } }));
         add(sf, Blocks.row(a, "应用到所有应用", "Apply system font to all apps (restart)", toggle(prefs.getBoolean("system_font_all", true), new Icons.Toggle.Listener() {
@@ -302,8 +304,15 @@ final class BlocksSettings {
         LinearLayout c = content();
         final Map<String, String> cfg = HostLink.kv(HostLink.KFB + "settings");
         LinearLayout kr = group(c, "方向与实体按键");
-        add(kr, Blocks.row(a, "屏幕方向", "Screen rotation (90°/270° restarts)", new Blocks.Stepper(a, ROTATE_L, idx(ROTATE_V, cfg.get("KFB_ROTATE"), 0), new Blocks.Stepper.Listener() {
-            @Override public void onStep(int i) { host("KFB_ROTATE=" + ROTATE_V[i]); } })));
+        final android.os.Handler rotH = a.handler();
+        final Runnable[] rotRun = { null };
+        add(kr, Blocks.row(a, "屏幕方向", "Screen rotation (2.5s delay; 90°/270° restarts)", new Blocks.Stepper(a, ROTATE_L, idx(ROTATE_V, cfg.get("KFB_ROTATE"), 0), new Blocks.Stepper.Listener() {
+            @Override public void onStep(final int i) {
+                if (rotRun[0] != null) rotH.removeCallbacks(rotRun[0]);
+                rotRun[0] = new Runnable() { @Override public void run() { host("KFB_ROTATE=" + ROTATE_V[i]); } };
+                rotH.postDelayed(rotRun[0], 2500);
+                VeraToast.show(a, "2.5 秒后应用：" + ROTATE_L[i]);
+            } })));
         if (HostLink.isKobo()) {
             add(kr, Blocks.row(a, "重力感应自动旋转", "Auto rotate (0° / 180°, keys follow)", toggle("1".equals(cfg.get("KFB_AUTO_ROTATE")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("KFB_AUTO_ROTATE=" + (on ? 1 : 0)); } })));
