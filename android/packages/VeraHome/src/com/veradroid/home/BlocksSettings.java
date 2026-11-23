@@ -451,10 +451,14 @@ final class BlocksSettings {
         LinearLayout n = group(c, "连接");
         final Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
         final Map<String, String> cfg = HostLink.kv(HostLink.KFB + "settings");
-        add(n, Blocks.row(a, "Wi-Fi", "Wireless", toggle(HostLink.num(st, "wifi", 1) == 1, new Icons.Toggle.Listener() {
+        boolean wifiOn = HostLink.num(st, "wifi", 1) == 1;
+        String ip = st.get("lanip");
+        add(n, Blocks.row(a, "Wi-Fi", "Wireless", toggle(wifiOn, new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { HostLink.cmd("wifi " + (on ? 1 : 0)); HostLink.cmd("status"); } })));
         add(n, Blocks.navRow(a, "Wi-Fi 网络", "切换已保存的网络，或连接附近的新网络", new View.OnClickListener() {
             @Override public void onClick(View v) { WifiActivity.open(a); } }));
+        String ipText = !wifiOn ? "未连接（Wi-Fi 已关）" : (ip == null || ip.trim().length() == 0 ? "未连接" : ip.trim());
+        add(n, Blocks.row(a, "当前 IP", "IP address", Ui.text(a, ipText, 15, false)));
         if (BluetoothActivity.supported()) add(n, Blocks.navRow(a, "蓝牙翻页器", "扫描、配对、连接", new View.OnClickListener() {
             @Override public void onClick(View v) { BluetoothActivity.open(a); } }));
         add(n, Blocks.row(a, "DNS", "Domain name resolver", new Blocks.Stepper(a, DNS_L, idx(DNS_V, cfg.get("DNS_MODE"), 0), new Blocks.Stepper.Listener() {
@@ -473,7 +477,6 @@ final class BlocksSettings {
         for (int i = 0; i < XFER_IDLE_V.length; i++) if (XFER_IDLE_V[i] == prefs.getInt("xfer_idle", 30)) xi = i;
         add(w, Blocks.row(a, "自动关闭", "Stop web transfer after idle", new Blocks.Stepper(a, XFER_IDLE_L, xi, new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { prefs.edit().putInt("xfer_idle", XFER_IDLE_V[i]).commit(); t.setIdleMinutes(XFER_IDLE_V[i]); } })));
-        String ip = st.get("lanip");
         TextView addr = Ui.text(a, t.running() ? (ip == null || ip.length() == 0 ? "正在获取地址…" : "http://" + ip + ":" + t.port()) + "\nPIN  " + t.pin()
             : "打开后，手机和 Kobo 连同一个 Wi-Fi，在浏览器里输入这里显示的地址和 PIN。", t.running() ? 20 : 13, t.running());
         addr.setPadding(dp(12), dp(8), dp(12), dp(10));

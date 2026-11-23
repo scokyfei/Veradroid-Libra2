@@ -380,7 +380,11 @@ public class HomeActivity extends Activity {
             statusWatch = new CtlWatch.Listener() {
                 @Override public void onCtl(String path) {
                     if (!"status".equals(path)) return;
-                    handler.post(new Runnable() { @Override public void run() { if (resumed && !isFinishing()) refreshStatus(); } });
+                    handler.post(new Runnable() { @Override public void run() {
+                        if (!resumed || isFinishing()) return;
+                        refreshStatus();
+                        if (blocks != null && Blocks.on(HomeActivity.this) && blocks.current() == BlocksHome.S_STORAGE) blocks.dataChanged();
+                    } });
                 }
             };
             CtlWatch.add(statusWatch);
