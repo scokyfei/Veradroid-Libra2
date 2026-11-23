@@ -259,6 +259,12 @@ final class BlocksSettings {
                 @Override public void onToggle(boolean on) { prefs.edit().putBoolean("flashui", on).commit(); } })));
         }
         LinearLayout wf = group(c, "画面与波形细节");
+        int smNow = HostLink.num(cfg, "KFB_SMOOTH", 0);
+        if (smNow > 0) {
+            TextView smn = Ui.text(a, "提示：当前「刷新档位」处于预设模式（非“跟随”），局部刷新方式与整页阈值由档位接管；如需单独微调，请先到上一页将刷新档位设为“跟随”。", 12, false);
+            smn.setPadding(dp(12), dp(8), dp(12), dp(8));
+            add(wf, smn);
+        }
         add(wf, Blocks.row(a, "局部刷新方式", "Partial update", new Blocks.Stepper(a, MODE_L, idx(MODE_V, cfg.get("KFB_MODE"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_MODE=" + MODE_V[i]); } })));
         add(wf, Blocks.row(a, "快速滑动", "Scroll with DU then clean up", toggle(!"0".equals(cfg.get("KFB_SCROLLDU")) && cfg.get("KFB_SCROLLDU") != null, new Icons.Toggle.Listener() {
