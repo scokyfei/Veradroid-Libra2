@@ -243,6 +243,7 @@ grep -q 'kobo_smart_img_dither' "$TOP/display/legacy/epd.c" \
     && grep -q 'FL_TIMEOUT' "$TOP/input/legacy/vinput.c" \
     && grep -q 'wrmaint_cmd' "$TOP/host/kobo/boot/lib/cmd.sh" \
     && grep -q 'wrMaintDialog' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
+    && ! grep -q 'AlertDialog' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
     && grep -q 'KFB_IMG_DITHER' "$TOP/host/kobo/boot/lib/settings.sh" \
     && grep -q 'KFB_IMG_DITHER' "$TOP/host/kobo/boot/lib/appprof.sh" \
     && grep -q '\[!0-9A-Za-z\._,+-\]' "$TOP/host/kobo/boot/lib/settings.sh" \

@@ -611,34 +611,43 @@ final class BlocksSettings {
         return shell("Device / about", "系统维护与关于", c);
     }
 
+    private static String readWrMaint() {
+        try {
+            java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(HostLink.KFB + "wrmaint.txt"));
+            StringBuilder sb = new StringBuilder();
+            String ln;
+            while ((ln = r.readLine()) != null) { if (sb.length() > 0) sb.append('\n'); sb.append(ln); }
+            r.close();
+            return sb.toString();
+        } catch (Throwable ignored) { return ""; }
+    }
+
     private void wrMaintDialog() {
         HostLink.cmd("wrmaint status");
-        final android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(a);
-        b.setTitle("微信读书维护与状态看板");
         LinearLayout box = new LinearLayout(a);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(18), dp(12), dp(18), dp(8));
-        final TextView info = Ui.text(a, "正在读取系统与微信读书运行状态…", 15, false);
-        box.addView(info);
-        LinearLayout row = new LinearLayout(a);
-        row.setPadding(0, dp(14), 0, 0);
+        box.setPadding(0, dp(4), 0, 0);
+        String init = readWrMaint();
+        final TextView info = Ui.text(a, init.length() > 0 ? init : "正在读取系统与微信读书运行状态…", 15, false);
+        info.setMinLines(6);
+        info.setLineSpacing(dp(4), 1.0f);
+        info.setPadding(dp(12), dp(10), dp(12), dp(10));
+        info.setBackground(Blocks.plain(a));
+        box.addView(info, Blocks.match());
         final android.os.Handler hd = new android.os.Handler(android.os.Looper.getMainLooper());
         final Runnable readStatus = new Runnable() {
             @Override public void run() {
-                try {
-                    java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(HostLink.KFB + "wrmaint.txt"));
-                    StringBuilder sb = new StringBuilder();
-                    String ln;
-                    while ((ln = r.readLine()) != null) { if (sb.length() > 0) sb.append('\n'); sb.append(ln); }
-                    r.close();
-                    if (sb.length() > 0) info.setText(sb.toString());
-                } catch (Throwable ignored) { }
+                String s = readWrMaint();
+                if (s.length() > 0 && !s.contentEquals(info.getText())) info.setText(s);
             }
         };
+        LinearLayout row = new LinearLayout(a);
+        row.setPadding(0, dp(12), 0, 0);
         row.addView(Blocks.button(a, "清理日志 / 压库", false, new View.OnClickListener() {
             @Override public void onClick(View v) {
-                info.setText("正在清理微信读书日志并压缩数据库 WAL…");
+                info.setText("正在清理微信读书日志、残包并压缩数据库 WAL…");
                 HostLink.cmd("wrmaint wal");
+                hd.removeCallbacks(readStatus);
                 hd.postDelayed(readStatus, 1800);
                 hd.postDelayed(readStatus, 4000);
             }
@@ -648,21 +657,32 @@ final class BlocksSettings {
             @Override public void onClick(View v) {
                 info.setText("已提交后台热点编译任务（约 1–2 分钟，完成后弹出提示）…");
                 HostLink.cmd("wrmaint profile");
+                hd.removeCallbacks(readStatus);
                 hd.postDelayed(readStatus, 1500);
             }
         }), Blocks.weight(1));
-        box.addView(row);
-        b.setView(box);
-        b.setNeutralButton("刷新状态", null);
-        b.setPositiveButton("关闭", null);
-        final android.app.AlertDialog d = b.create();
-        d.show();
-        android.widget.Button nb = d.getButton(android.app.AlertDialog.BUTTON_NEUTRAL);
-        if (nb != null) nb.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { HostLink.cmd("wrmaint status"); hd.postDelayed(readStatus, 600); }
+        box.addView(row, Blocks.match());
+        LinearLayout row2 = new LinearLayout(a);
+        row2.setPadding(0, dp(8), 0, 0);
+        row2.addView(Blocks.button(a, "刷新状态", false, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                HostLink.cmd("wrmaint status");
+                hd.removeCallbacks(readStatus);
+                hd.postDelayed(readStatus, 600);
+            }
+        }), Blocks.weight(1));
+        box.addView(row2, Blocks.match());
+        android.app.Dialog d = new VeraDialog.Builder(a)
+            .title("微信读书维护与状态看板")
+            .view(box)
+            .positive("关闭", null)
+            .show();
+        d.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
+            @Override public void onDismiss(android.content.DialogInterface dialog) {
+                hd.removeCallbacks(readStatus);
+            }
         });
-        hd.postDelayed(readStatus, 500);
-        hd.postDelayed(readStatus, 1500);
+        hd.postDelayed(readStatus, 700);
     }
 
     // ------------------------------------------------------------------ 首页卡片
