@@ -2291,6 +2291,10 @@ public class HomeActivity extends Activity {
                 section(list, "设备");
                 localChoice(list, "后台保留应用", "前台以外最多留几个自己装的应用在后台，多出来的（最久没用的）在换应用 3 秒后停掉，省内存。应用长按 → 保持后台 的不算。",
                     Cleaner.LIMIT_KEY, Cleaner.LIMIT_L, 0, Cleaner.defaultLimit());
+                if (kobo) {
+                    hostChoice(list, host, "无操作自动息灯", "独立于整机休眠的前光超时：长时间未操作先熄灭前光省电，触摸或按翻页键瞬间自动恢复原亮度。", "FL_TIMEOUT", BlocksSettings.FLTO_L, BlocksSettings.FLTO_V, "0");
+                    hostChoice(list, host, "阅读静止期 CPU 限频", "无输入超过设定时间后自动将 CPU 最高频柔和限制在 792 MHz，触屏或按翻页键瞬间恢复满频。", "IDLE_CAP_MS", BlocksSettings.IDLECAP_L, BlocksSettings.IDLECAP_V, "10000");
+                }
                 if (!kobo) {
                     hostChoice(list, host, "插上 USB 线时询问", "Android 在前台时插上数据线：问要不要切到 USB 传输（退回 Kobo，电脑上就能看到 Kobo 盘）。"
                         + "只用充电器充电、不想被问就选“不询问”。", "USB_ASK", new String[] { "询问", "不询问" }, new String[] { "1", "0" }, "1");
