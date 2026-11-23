@@ -123,7 +123,7 @@ do_exit() {
             cpu_gov_restore 2>/dev/null || true
             input_release
             wifi_ps_restore 2>/dev/null || true
-            for f in sleep lipc watchdog; do kill $(cat $W/$f.pid 2>/dev/null) 2>/dev/null; done
+            for f in sleep lipc guard watchdog; do kill $(cat $W/$f.pid 2>/dev/null) 2>/dev/null; done
             type usb_watch_stop >/dev/null 2>&1 && usb_watch_stop
             framework_start
             userstore_check freeze
@@ -187,6 +187,47 @@ helpers_supervise() {
     fi
 }
 
+# Watchdog self-guard: restarts watchdog up to 5 times if killed/crashed while Android is awake.
+wd_guard() {
+    wg_n=0
+    while :; do
+        sleep ${WD_GUARD_S:-30}
+        kill -0 "$P" 2>/dev/null || break
+        [ -f $W/frozen ] || [ -f $W/restarting ] && break
+        wg_s=$(cat /tmp/veradroid-stop.pid 2>/dev/null); [ -n "$wg_s" ] && kill -0 "$wg_s" 2>/dev/null && break
+        alive $W/watchdog.pid && continue
+        [ $wg_n -ge 5 ] && { t "guard: watchdog gone again after $wg_n restarts, giving up"; break; }
+        wg_n=$((wg_n + 1))
+        t "guard: watchdog (pid $(cat $W/watchdog.pid 2>/dev/null)) is gone, restarting it ($wg_n/5)"
+        watchdog &
+        echo $! > $W/watchdog.pid
+    done
+}
+
+# Battery uevent poke: after vdnocap strips CAP_WAKE_ALARM from healthd, healthd stops arming
+# 10-min CLOCK_BOOTTIME_ALARM wakeups and relies solely on uevents. Poke change every 60s while
+# awake (and right after thaw) so Android's BatteryService stays fresh without wakeup alarms.
+bat_poke_tick() {
+    bp_now=$(cut -d. -f1 ${BAT_UPTIME:-/proc/uptime})
+    [ $((bp_now - ${BAT_POKE_T:-0})) -ge ${BAT_POKE_S:-60} ] || return 0
+    BAT_POKE_T=$bp_now
+    for bp_d in ${BAT_PS_DIR:-/sys/class/power_supply}/*; do
+        [ "$(cat $bp_d/type 2>/dev/null)" = Battery ] && [ -w $bp_d/uevent ] && echo change > $bp_d/uevent 2>/dev/null
+    done
+    return 0
+}
+
+# Protect tiny host daemon processes from being picked by OOM/LMK alongside Android foreground apps.
+host_oom_protect() {
+    [ -n "${HOST_OOM_ADJ--800}" ] || return 0
+    for ho_n in cmd watchdog guard sleep input epd; do
+        ho_p=$(cat $W/$ho_n.pid 2>/dev/null)
+        case "$ho_p" in ''|*[!0-9]*) continue ;; esac
+        [ "$(cat /proc/$ho_p/oom_score_adj 2>/dev/null)" = "${HOST_OOM_ADJ--800}" ] || echo "${HOST_OOM_ADJ--800}" > /proc/$ho_p/oom_score_adj 2>/dev/null
+    done
+    return 0
+}
+
 watchdog() {
     # PERF: poll every 60s while frozen to cut host wakeups. FIFO cmd.sh still handles UI.
     # MEM: re-apply kernel LMK each tick (lab126 can reset minfree).
@@ -198,6 +239,7 @@ watchdog() {
         sleep $sleep_for
         kill -0 $P 2>/dev/null || { t "system exited"; log_release; sh $VD/boot/stop.sh >/dev/null 2>&1; break; }
         lmk_kernel_tune 2>/dev/null || true
+        host_oom_protect
         var_guard
         log_cap $W/epd.log 262144; log_cap $W/input.log 131072; log_cap $W/input.err 65536
         if [ ! -f $W/saver_frozen ] && [ ! -f $W/frozen ]; then
@@ -230,6 +272,7 @@ watchdog() {
             fi
         fi
         type bat_log >/dev/null 2>&1 && bat_log
+        if [ -f $W/saver_frozen ] || [ -f $W/frozen ]; then BAT_POKE_T=0; else bat_poke_tick; fi
         # 系统盘快满了就自动扩（storage.sh）。冻结时不做。
         [ -f $W/saver_frozen ] || [ -f $W/frozen ] || { type st_auto_tick >/dev/null 2>&1 && st_auto_tick; }
         if [ -f $X/ctl/diag ]; then rm -f $X/ctl/diag; ( diag_save; touch $X/ctl/diag.done ) & fi

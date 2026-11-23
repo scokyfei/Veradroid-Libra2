@@ -28,7 +28,7 @@ fi
 android_thaw 2>/dev/null || true
 
 ps=
-for f in watchdog sleep cmd boot afterboot compile diagboot; do
+for f in watchdog guard sleep cmd boot afterboot compile diagboot; do
     p=$(cat "$W/$f.pid" 2>/dev/null)
     [ -n "$p" ] || continue
     [ "$p" = "$PPID" ] || [ "$p" = "$$" ] && continue
@@ -44,7 +44,7 @@ while [ -n "$ps" ] && [ $i -lt 10 ]; do
     usleep 100000; i=$((i + 1))
 done
 for p in $ps; do kill -9 "$p" 2>/dev/null || true; done
-for f in watchdog sleep cmd boot afterboot compile diagboot; do rm -f "$W/$f.pid"; done
+for f in watchdog guard sleep cmd boot afterboot compile diagboot; do rm -f "$W/$f.pid"; done
 rm -rf "$W/compile.quit" "$W/compile.guard" "$W/compile.lock" "$W/compile.queue" "$W/booted" "$W/pkglist.stamp" "$W/wifi.rx" "$W/wifi.busy"
 
 croot=$(chroot_root)

@@ -54,13 +54,16 @@ APP=${1:-$SYSTEM_APP}
 open_app() { echo "$APP" > "$X/ctl/app.tmp" && mv -f "$X/ctl/app.tmp" "$X/ctl/app"; t "open: $APP"; }
 
 start_helpers() {
-    kill "$(cat "$W/cmd.pid" 2>/dev/null)" 2>/dev/null || true
+    kill "$(cat "$W/cmd.pid" 2>/dev/null)" "$(cat "$W/guard.pid" 2>/dev/null)" 2>/dev/null || true
     watchdog &
     echo $! > "$W/watchdog.pid"
+    wd_guard &
+    echo $! > "$W/guard.pid"
     sleep_watch &
     echo $! > "$W/sleep.pid"
     cmd_listen &
     echo $! > "$W/cmd.pid"
+    host_oom_protect
 }
 
 P=$(cat "$W/pid" 2>/dev/null)

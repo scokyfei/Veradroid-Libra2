@@ -35,10 +35,11 @@ $CC -pthread \
 echo "[2/5] veradroid-input"
 $CC "$TOP/input/legacy/vinput.c" -lm -o "$OUT/veradroid-input"
 
-echo "[3/5] pivot_init, vdlmk, vdloopdio, vdmkswap, vdsqueeze"
+echo "[3/5] pivot_init, vdlmk, vdloopdio, vdmkswap, vdsqueeze, vdnocap"
 for p in pivot_init vdlmk vdloopdio vdmkswap vdsqueeze; do
     $CC "$TOP/tools/src/$p.c" -o "$OUT/$p"
 done
+$CC "$TOP/tools/vdnocap/vdnocap.c" -o "$OUT/vdnocap"
 
 if [ -n "${BIONIC_LIBC:-}" ] && [ -f "$BIONIC_LIBC" ]; then
     echo "[3b/5] libkobo_madvise.so (Bionic LD_PRELOAD shim)"

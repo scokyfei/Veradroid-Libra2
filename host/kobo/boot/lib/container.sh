@@ -177,7 +177,59 @@ sysfont_mount() {
     return 0
 }
 
+# AlarmManager timerfd patch (without CAP_WAKE_ALARM, Android 7.1 falls back to uptime Handler
+# causing TIME_TICK drift; EPOLLWAKEUP also holds kernel wakeup sources while frozen).
+# Only patches when exact byte signatures match; ALARM_FIX=0 disables.
+ALARMFIX_LIB=system/lib/libandroid_servers.so
+ALARMFIX_TAB=154856; ALARMFIX_TAB_OLD=080000000000000009000000070000000100000000000000; ALARMFIX_TAB_NEW=000000000000000007000000070000000100000000000000
+ALARMFIX_EPW=52736;  ALARMFIX_EPW_OLD=c2f20005; ALARMFIX_EPW_NEW=aff30080
+alarmfix_hex() { dd if="$1" bs=1 skip="$2" count="$3" 2>/dev/null | od -An -v -tx1 | tr -d ' \n'; }
+alarmfix_put() { printf "$(printf '%s' "$3" | sed 's/../\\x&/g')" | dd of="$1" bs=1 seek="$2" conv=notrunc 2>/dev/null; }
+alarmfix_prepare() {
+    rm -rf "$W/alarmfix"
+    [ "${ALARM_FIX:-1}" = 0 ] && return 0
+    af_src=$R/$ALARMFIX_LIB; [ -f "$af_src" ] || return 0
+    [ "$(alarmfix_hex "$af_src" $ALARMFIX_TAB 24)" = $ALARMFIX_TAB_OLD ] && [ "$(alarmfix_hex "$af_src" $ALARMFIX_EPW 4)" = $ALARMFIX_EPW_OLD ] || return 0
+    mkdir -p "$W/alarmfix" && cp "$af_src" "$W/alarmfix/lib.so" || { rm -rf "$W/alarmfix"; return 0; }
+    alarmfix_put "$W/alarmfix/lib.so" $ALARMFIX_TAB $ALARMFIX_TAB_NEW
+    alarmfix_put "$W/alarmfix/lib.so" $ALARMFIX_EPW $ALARMFIX_EPW_NEW
+    if [ "$(alarmfix_hex "$W/alarmfix/lib.so" $ALARMFIX_TAB 24)" = $ALARMFIX_TAB_NEW ] && [ "$(alarmfix_hex "$W/alarmfix/lib.so" $ALARMFIX_EPW 4)" = $ALARMFIX_EPW_NEW ] &&
+       [ "$(wc -c < "$W/alarmfix/lib.so")" = "$(wc -c < "$af_src")" ]; then
+        chmod 644 "$W/alarmfix/lib.so"; t "alarmfix: AlarmManager timerfd clocks without CAP_WAKE_ALARM"
+    else
+        rm -rf "$W/alarmfix"; t "alarmfix: patching copy failed, AlarmManager left as is"
+    fi
+    return 0
+}
+alarmfix_mount() {
+    [ -s "$W/alarmfix/lib.so" ] || return 0
+    mkdir -p "$R/dev/vdlib" && cp "$W/alarmfix/lib.so" "$R/dev/vdlib/libandroid_servers.so" && chmod 644 "$R/dev/vdlib/libandroid_servers.so" &&
+        mount --bind "$R/dev/vdlib/libandroid_servers.so" "$R/$ALARMFIX_LIB"
+    [ "$(alarmfix_hex "$R/$ALARMFIX_LIB" $ALARMFIX_TAB 24)" = $ALARMFIX_TAB_NEW ] && return 0
+    umount "$R/$ALARMFIX_LIB" 2>/dev/null; rm -f "$R/dev/vdlib/libandroid_servers.so"
+    echo "veradroid: AlarmManager fix not mounted" >&2
+    return 0
+}
+
+# Drop CAP_BLOCK_SUSPEND and CAP_WAKE_ALARM from healthd so it cannot arm 10-min CLOCK_BOOTTIME_ALARM
+# wakeups or hold EPOLLWAKEUP wakeup sources while frozen. NOCAP_FIX=0 disables.
+nocap_mount() {
+    [ "${NOCAP_FIX:-1}" = 0 ] && return 0
+    [ -f "$VD/bin/vdnocap" ] && [ -f "$R/sbin/healthd" ] && [ ! -L "$R/sbin/healthd" ] || return 0
+    mkdir -p "$R/dev/vdlib" && cp "$VD/bin/vdnocap" "$R/dev/vdlib/vdnocap" && chmod 755 "$R/dev/vdlib/vdnocap" &&
+        : > "$R/dev/vdlib/healthd.real" && mount --bind "$R/sbin/healthd" "$R/dev/vdlib/healthd.real" || {
+        umount "$R/dev/vdlib/healthd.real" 2>/dev/null; rm -f "$R/dev/vdlib/vdnocap" "$R/dev/vdlib/healthd.real"; return 0; }
+    if "$R/dev/vdlib/vdnocap" /bin/sh -c 'exit 0' 2>/dev/null; then
+        mount --bind "$R/dev/vdlib/vdnocap" "$R/sbin/healthd" && return 0
+    fi
+    umount "$R/dev/vdlib/healthd.real" 2>/dev/null; rm -f "$R/dev/vdlib/vdnocap" "$R/dev/vdlib/healthd.real"
+    echo "veradroid: healthd capability wrapper not mounted" >&2
+    return 0
+}
+
 container_start() {
+    # Reset oom_score_adj to 0 so restarted Android container never inherits -800 from watchdog/cmd.
+    echo 0 > /proc/self/oom_score_adj 2>/dev/null || true
     # Prevent Android init.rc `mount rootfs rootfs / ro remount` from flipping the
     # shared ext4 loop superblock (/dev/loop0 holding both rootfs and /data) read-only!
     if [ -w "$R/init.rc" ] && grep -q '^[[:space:]]*mount rootfs rootfs / ro remount' "$R/init.rc" 2>/dev/null; then
@@ -229,6 +281,17 @@ container_start() {
                 && t "container: installed kobo-weread-opt.jar"
         fi
     fi
+    # Declare unavailable hardware features (camera/GPS/NFC/telephony) so apps skip probing them
+    if [ -f "$VD/boot/veradroid_eink_unavailable_features.xml" ] && [ -d "$R/system/etc/permissions" ]; then
+        uf_dst="$R/system/etc/permissions/veradroid_eink_unavailable_features.xml"
+        if ! cmp -s "$VD/boot/veradroid_eink_unavailable_features.xml" "$uf_dst" 2>/dev/null; then
+            cp "$VD/boot/veradroid_eink_unavailable_features.xml" "$uf_dst.new" \
+                && chmod 644 "$uf_dst.new" \
+                && mv -f "$uf_dst.new" "$uf_dst" \
+                && t "container: installed veradroid_eink_unavailable_features.xml"
+        fi
+    fi
+    alarmfix_prepare
     sysfont_prepare
     type skia_opt_sync >/dev/null 2>&1 && skia_opt_sync
     fstrim_defuse
@@ -414,6 +477,13 @@ run_in_ns() {
     for d in sys/fs/selinux sys/fs/bpf sys/fs/pstore sys/kernel/tracing sys/kernel/debug; do
         [ -d "$R/$d" ] && mount -t tmpfs -o ro,size=4k tmpfs "$R/$d" 2>/dev/null || true
     done
+    # Provide an empty read-only /sys/kernel/debug/wakeup_sources so BatteryStatsService's
+    # KernelWakelockReader stops flooding /data/system/dropbox with Slog.wtf stack traces.
+    if [ ! -e /proc/wakelocks ] && [ -d "$R/sys/kernel/debug" ]; then
+        mount -o remount,rw "$R/sys/kernel/debug" 2>/dev/null && \
+            : > "$R/sys/kernel/debug/wakeup_sources" && chmod 444 "$R/sys/kernel/debug/wakeup_sources" && \
+            mount -o remount,ro "$R/sys/kernel/debug" 2>/dev/null || true
+    fi
 
     mkdir -p "$SYS/data" && mount --bind "$SYS/data" "$R/data" && mount -o remount,bind,nosuid,nodev,noatime "$R/data" 2>/dev/null || true
     mkdir -p "$R/data/cache" "$R/data/media/0/Books" "$R/data/local/tmp"
@@ -440,6 +510,8 @@ run_in_ns() {
     chmod 777 "$R/data/media/0/Fonts" 2>/dev/null || true
 
     sysfont_mount
+    alarmfix_mount
+    nocap_mount
 
     # Optional rebuilt non-debuggable boot image (tools/kobo/compile-boot-nodebug.sh):
     # bind-mount over /system/framework/arm/boot*.{art,oat} unless disabled.
