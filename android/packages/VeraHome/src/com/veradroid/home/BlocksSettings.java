@@ -57,8 +57,14 @@ final class BlocksSettings {
     static final String[] SETTLE_V = { "0", "40", "120", "250" };
     static final String[] ANIMSTEP_L = { "快（6 步）", "标准（12 步）", "慢（24 步）" };
     static final String[] ANIMSTEP_V = { "6", "12", "24" };
+    static final String[] ANIMDIR_L = { "关", "跟随手势", "左滑", "右滑", "上滑", "下滑" };
+    static final String[] ANIMDIR_V = { "0", "1", "2", "3", "4", "5" };
     static final String[] DITHER_L = { "关", "Floyd", "Atkinson", "有序点阵" };
     static final String[] DITHER_V = { "0", "1", "2", "3" };
+    static final String[] DNS_L = { "自动", "阿里 DNS", "腾讯 DNS", "Google DNS" };
+    static final String[] DNS_V = { "auto", "aliyun", "tencent", "google" };
+    static final String[] XFER_IDLE_L = { "15 分钟", "30 分钟", "1 小时" };
+    static final int[] XFER_IDLE_V = { 15, 30, 60 };
     static final String[] UI_SIZE_L = { "小", "中", "大" };
     static final String[] GCN_L = { "关", "20 次", "30 次", "50 次" };
     static final String[] GCN_V = { "0", "20", "30", "50" };
@@ -84,7 +90,7 @@ final class BlocksSettings {
         case BlocksHome.S_DISPLAY_ADV: return cfg + "|" + prefs.getBoolean("flashui", false) + "|" + prefs.getString("system_font_name", "") + "|" + prefs.getBoolean("system_font_all", true);
         case BlocksHome.S_CONTROLS: return cfg;
         case BlocksHome.S_POWER: return cfg + st.get("sleep") + prefs.getBoolean("clock12", false) + "|" + java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR);
-        case BlocksHome.S_STORAGE: return st.get("wifi") + "|" + Transfer.get(a).running() + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
+        case BlocksHome.S_STORAGE: return cfg + "|" + st.get("wifi") + "|" + Transfer.get(a).running() + "|" + prefs.getInt("xfer_idle", 30) + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
         case BlocksHome.S_UI: return prefs.getString("name", "VeraDroid") + "|" + prefs.getString("quick", "") + "|" + prefs.getString("panelname", "") + "|" + Fonts.weight(a) + "|" + prefs.getInt("size", 1) + "|" + Blocks.caps(a) + "|" + Blocks.anim(a) + "|" + Blocks.on(a);
         case BlocksHome.S_CARDS: return prefs.getString(BlocksCards.KEY, BlocksCards.DEFAULT) + prefs.getString("blk_quick", "") + prefs.getString("wx_city", "") + prefs.getString("blk_readers", "") + a.appsVersion();
         default: return prefs.getString("name", "VeraDroid") + "|" + (System.currentTimeMillis() / 60000);
@@ -263,6 +269,8 @@ final class BlocksSettings {
             @Override public void onStep(int i) { host("KFB_REAGL_MIN=" + REAGL_V[i]); } })));
         add(wf, Blocks.row(a, "滑动刷新合并", "Frame settle coalescing", new Blocks.Stepper(a, SETTLE_L, idx(SETTLE_V, cfg.get("KFB_SETTLE"), 1), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_SETTLE=" + SETTLE_V[i]); } })));
+        add(wf, Blocks.row(a, "翻页动画方向", "Page-turn wipe direction (reading only)", new Blocks.Stepper(a, ANIMDIR_L, idx(ANIMDIR_V, cfg.get("KFB_ANIM_MODE"), 0), new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { host("KFB_ANIM_MODE=" + ANIMDIR_V[i]); } })));
         add(wf, Blocks.row(a, "翻页动画速度", "Page-turn wipe steps", new Blocks.Stepper(a, ANIMSTEP_L, idx(ANIMSTEP_V, cfg.get("KFB_ANIM_STEPS"), 1), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_ANIM_STEPS=" + ANIMSTEP_V[i]); } })));
         add(wf, Blocks.row(a, "全局灰度抖动", "Global dithering (off = smart image dither)", new Blocks.Stepper(a, DITHER_L, idx(DITHER_V, cfg.get("KFB_DITHER"), 0), new Blocks.Stepper.Listener() {
@@ -349,13 +357,13 @@ final class BlocksSettings {
         return shell("System / appearance", "桌面与外观", c);
     }
 
-    // ------------------------------------------------------------------ 电源与时间
+    // ------------------------------------------------------------------ 3. 电源与省电
 
     private View power() {
         LinearLayout c = content();
         Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
         Map<String, String> cfg = HostLink.kv(HostLink.KFB + "settings");
-        LinearLayout g = group(c, "电源");
+        LinearLayout g = group(c, "休眠与省电");
         if (HostLink.num(st, "hassleeptime", 1) == 1) {
             int sl = HostLink.num(st, "sleep", 600), bi = 1;
             for (int i = 0; i < SLEEP_S.length; i++) if (Math.abs(SLEEP_S[i] - sl) < Math.abs(SLEEP_S[bi] - sl)) bi = i;
@@ -380,6 +388,7 @@ final class BlocksSettings {
         View s2 = new View(a); btns.addView(s2, Blocks.lp(dp(8), 1));
         btns.addView(Blocks.button(a, "关机…", true, new View.OnClickListener() { @Override public void onClick(View v) { a.powerMenu(); } }), Blocks.weight(1));
         add(g, btns);
+        LinearLayout bg = group(c, "后台与安全");
         LinearLayout tools = new LinearLayout(a);
         tools.setPadding(dp(10), dp(10), dp(10), dp(10));
         tools.addView(Blocks.button(a, "切换应用", false, new View.OnClickListener() { @Override public void onClick(View v) {
@@ -391,7 +400,7 @@ final class BlocksSettings {
             Cleaner.run(a, null, new Cleaner.Done() { @Override public void done(int stopped, long freedMb) { clean.setText(stopped == 0 ? "没有后台应用" : "已清理 " + stopped + " 个 · 约 " + freedMb + " MB"); } });
         } });
         tools.addView(clean, Blocks.weight(1));
-        add(g, tools);
+        add(bg, tools);
         LinearLayout bk = new LinearLayout(a);
         bk.setOrientation(LinearLayout.VERTICAL);
         bk.addView(Blocks.row(a, "后台保留应用", "Background apps", new Blocks.Stepper(a, Cleaner.LIMIT_L, Math.max(0, Math.min(4, prefs.getInt(Cleaner.LIMIT_KEY, Cleaner.defaultLimit()))), new Blocks.Stepper.Listener() {
@@ -399,10 +408,10 @@ final class BlocksSettings {
         TextView bkHint = Ui.text(a, "前台以外最多留几个自己装的应用在后台，多出来的（最久没用的）在换应用 3 秒后停掉，省内存。应用长按 → 保持后台 的不算。", 12, false);
         bkHint.setPadding(dp(12), 0, dp(12), dp(10));
         bk.addView(bkHint);
-        add(g, bk);
-        add(g, Blocks.navRow(a, "锁屏密码", "开机 / 唤醒时输入 PIN", new View.OnClickListener() {
+        add(bg, bk);
+        add(bg, Blocks.navRow(a, "锁屏密码", "开机 / 唤醒时输入 PIN", new View.OnClickListener() {
             @Override public void onClick(View v) { a.startActivity(new Intent(a, LockSettingsActivity.class)); } }));
-        add(g, Blocks.navRow(a, "屏保", "休眠时显示的图片", new View.OnClickListener() {
+        add(bg, Blocks.navRow(a, "屏保", "休眠时显示的图片", new View.OnClickListener() {
             @Override public void onClick(View v) { a.startActivity(new Intent(a, ScreensaverActivity.class)); } }));
         LinearLayout t = group(c, "时间与日期");
         add(t, Blocks.row(a, "制式", "Format", new Blocks.Stepper(a, TIME_L, idx(TIME_V, cfg.get("TIME_12_24"), 0), new Blocks.Stepper.Listener() {
@@ -428,14 +437,15 @@ final class BlocksSettings {
         LinearLayout c = content();
         LinearLayout n = group(c, "连接");
         final Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
+        final Map<String, String> cfg = HostLink.kv(HostLink.KFB + "settings");
         add(n, Blocks.row(a, "Wi-Fi", "Wireless", toggle(HostLink.num(st, "wifi", 1) == 1, new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { HostLink.cmd("wifi " + (on ? 1 : 0)); HostLink.cmd("status"); } })));
         add(n, Blocks.navRow(a, "Wi-Fi 网络", "切换已保存的网络，或连接附近的新网络", new View.OnClickListener() {
             @Override public void onClick(View v) { WifiActivity.open(a); } }));
         if (BluetoothActivity.supported()) add(n, Blocks.navRow(a, "蓝牙翻页器", "扫描、配对、连接", new View.OnClickListener() {
             @Override public void onClick(View v) { BluetoothActivity.open(a); } }));
-        add(n, Blocks.navRow(a, "DNS 等更多连接设置", "Wi-Fi 与蓝牙的全部设置", new View.OnClickListener() {
-            @Override public void onClick(View v) { h.openCat(0); } }));
+        add(n, Blocks.row(a, "DNS", "Domain name resolver", new Blocks.Stepper(a, DNS_L, idx(DNS_V, cfg.get("DNS_MODE"), 0), new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { host("DNS_MODE=" + DNS_V[i]); } })));
         // 网络诊断：Wi-Fi / 域名解析 / 服务器 / 下载速度（宿主 netdiag 命令，结果 ctl/netdiag.status）
         c.addView(new TaskCards.Net(a), Blocks.gap(a, 14));
         LinearLayout w = group(c, "Web 文件管理");
@@ -446,6 +456,10 @@ final class BlocksSettings {
                 HostLink.cmd("status");
                 a.handler().postDelayed(new Runnable() { @Override public void run() { if (h.current() == BlocksHome.S_STORAGE) { h.show(BlocksHome.S_STORAGE); a.changed(); } } }, 900);
             } })));
+        int xi = 1;
+        for (int i = 0; i < XFER_IDLE_V.length; i++) if (XFER_IDLE_V[i] == prefs.getInt("xfer_idle", 30)) xi = i;
+        add(w, Blocks.row(a, "自动关闭", "Stop web transfer after idle", new Blocks.Stepper(a, XFER_IDLE_L, xi, new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { prefs.edit().putInt("xfer_idle", XFER_IDLE_V[i]).commit(); t.setIdleMinutes(XFER_IDLE_V[i]); } })));
         String ip = st.get("lanip");
         TextView addr = Ui.text(a, t.running() ? (ip == null || ip.length() == 0 ? "正在获取地址…" : "http://" + ip + ":" + t.port()) + "\nPIN  " + t.pin()
             : "打开后，手机和 Kobo 连同一个 Wi-Fi，在浏览器里输入这里显示的地址和 PIN。", t.running() ? 20 : 13, t.running());
@@ -453,8 +467,6 @@ final class BlocksSettings {
         add(w, addr);
         add(w, Blocks.navRow(a, "传书页面", "大字显示地址和 PIN", new View.OnClickListener() {
             @Override public void onClick(View v) { a.startActivity(new Intent(a, TransferActivity.class).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)); a.overridePendingTransition(0, 0); } }));
-        add(w, Blocks.navRow(a, "更多传书设置", "传输地址 · 自动关闭时间", new View.OnClickListener() {
-            @Override public void onClick(View v) { h.openCat(4); } }));
         if (!HostLink.isKobo()) {
             // 无线调试（adb）：需要内核 IPv6 支持，Kobo 4.1.15 内核未启用 IPv6 故隐藏
             add(w, Blocks.row(a, "无线调试 (adb)", "adb over Wi-Fi", toggle(AdbWifi.on(), new Icons.Toggle.Listener() {
@@ -557,8 +569,7 @@ final class BlocksSettings {
             { "检查系统更新", "有新版本优先下载增量补丁" },
             { "使用统计", "电量和阅读时长，只在本机" },
             { "问题反馈", "连同系统日志一起上传" },
-            { "设备与管理", "导出完整系统日志 · 恢复默认设置" },
-            { "全部设置（分类总览）", "按经典分类浏览所有设置项" } };
+            { "设备与管理", "导出完整系统日志 · 恢复默认设置" } };
         for (int i = 0; i < rows.length; i++) {
             if (kobo && (i == 1 || i == 3)) continue;
             final int k = i;
@@ -568,8 +579,7 @@ final class BlocksSettings {
                 case 1: a.fullUpdateDialog(); break;
                 case 2: a.startActivity(new Intent(a, StatsActivity.class)); a.overridePendingTransition(0, 0); break;
                 case 3: a.feedbackDialog(); break;
-                case 4: h.openCat(5); break;
-                default: h.openCat(-1); break;
+                default: h.openCat(5); break;
                 }
             } }));
         }
