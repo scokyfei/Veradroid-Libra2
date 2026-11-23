@@ -51,6 +51,15 @@ final class BlocksSettings {
     static final String[] IDLECAP_V = { "0", "10000", "20000", "30000" };
     static final String[] ROTATE_L = { "竖屏 0°", "倒过来 180°", "横屏 90°", "横屏 270°" };
     static final String[] ROTATE_V = { "0", "180", "90", "270" };
+    static final String[] REAGL_L = { "三成", "翻页（默认）", "一半", "七成", "接近整屏" };
+    static final String[] REAGL_V = { "30", "35", "50", "70", "85" };
+    static final String[] SETTLE_L = { "关", "快 40ms", "标准 120ms", "强 250ms" };
+    static final String[] SETTLE_V = { "0", "40", "120", "250" };
+    static final String[] ANIMSTEP_L = { "快（6 步）", "标准（12 步）", "慢（24 步）" };
+    static final String[] ANIMSTEP_V = { "6", "12", "24" };
+    static final String[] DITHER_L = { "关", "Floyd", "Atkinson", "有序点阵" };
+    static final String[] DITHER_V = { "0", "1", "2", "3" };
+    static final String[] UI_SIZE_L = { "小", "中", "大" };
     static final String[] GCN_L = { "关", "20 次", "30 次", "50 次" };
     static final String[] GCN_V = { "0", "20", "30", "50" };
     static final String[] FONT_L = { "小", "标准", "大", "特大" };
@@ -72,11 +81,11 @@ final class BlocksSettings {
         String cfg = new java.util.TreeMap<String, String>(HostLink.kv(HostLink.KFB + "settings")).toString();
         switch (key) {
         case BlocksHome.S_DISPLAY: return cfg + AppFont.user(a) + st.get("light") + st.get("warmth") + st.get("lightmax") + st.get("haslight") + st.get("haswarmth");
-        case BlocksHome.S_DISPLAY_ADV: return cfg;
+        case BlocksHome.S_DISPLAY_ADV: return cfg + "|" + prefs.getBoolean("flashui", false) + "|" + prefs.getString("system_font_name", "") + "|" + prefs.getBoolean("system_font_all", true);
         case BlocksHome.S_CONTROLS: return cfg;
         case BlocksHome.S_POWER: return cfg + st.get("sleep") + prefs.getBoolean("clock12", false) + "|" + java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR);
         case BlocksHome.S_STORAGE: return st.get("wifi") + "|" + Transfer.get(a).running() + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
-        case BlocksHome.S_UI: return prefs.getString("name", "VeraDroid") + "|" + prefs.getString("quick", "") + "|" + prefs.getString("panelname", "") + "|" + Fonts.weight(a) + "|" + Blocks.caps(a) + "|" + Blocks.anim(a) + "|" + Blocks.on(a);
+        case BlocksHome.S_UI: return prefs.getString("name", "VeraDroid") + "|" + prefs.getString("quick", "") + "|" + prefs.getString("panelname", "") + "|" + Fonts.weight(a) + "|" + prefs.getInt("size", 1) + "|" + Blocks.caps(a) + "|" + Blocks.anim(a) + "|" + Blocks.on(a);
         case BlocksHome.S_CARDS: return prefs.getString(BlocksCards.KEY, BlocksCards.DEFAULT) + prefs.getString("blk_quick", "") + prefs.getString("wx_city", "") + prefs.getString("blk_readers", "") + a.appsVersion();
         default: return prefs.getString("name", "VeraDroid") + "|" + (System.currentTimeMillis() / 60000);
         }
@@ -246,15 +255,36 @@ final class BlocksSettings {
         LinearLayout wf = group(c, "画面与波形细节");
         add(wf, Blocks.row(a, "局部刷新方式", "Partial update", new Blocks.Stepper(a, MODE_L, idx(MODE_V, cfg.get("KFB_MODE"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_MODE=" + MODE_V[i]); } })));
+        add(wf, Blocks.row(a, "快速滑动", "Scroll with DU then clean up", toggle(!"0".equals(cfg.get("KFB_SCROLLDU")) && cfg.get("KFB_SCROLLDU") != null, new Icons.Toggle.Listener() {
+            @Override public void onToggle(boolean on) { host("KFB_SCROLLDU=" + (on ? 300 : 0)); } })));
+        add(wf, Blocks.row(a, "图片灰度", "16-level gray for partial image regions", toggle(!"0".equals(cfg.get("KFB_IMG")) && cfg.get("KFB_IMG") != null, new Icons.Toggle.Listener() {
+            @Override public void onToggle(boolean on) { host("KFB_IMG=" + (on ? 25 : 0)); } })));
+        add(wf, Blocks.row(a, "多大算整页", "REAGL full-page threshold", new Blocks.Stepper(a, REAGL_L, idx(REAGL_V, cfg.get("KFB_REAGL_MIN"), 1), new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { host("KFB_REAGL_MIN=" + REAGL_V[i]); } })));
+        add(wf, Blocks.row(a, "滑动刷新合并", "Frame settle coalescing", new Blocks.Stepper(a, SETTLE_L, idx(SETTLE_V, cfg.get("KFB_SETTLE"), 1), new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { host("KFB_SETTLE=" + SETTLE_V[i]); } })));
+        add(wf, Blocks.row(a, "翻页动画速度", "Page-turn wipe steps", new Blocks.Stepper(a, ANIMSTEP_L, idx(ANIMSTEP_V, cfg.get("KFB_ANIM_STEPS"), 1), new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { host("KFB_ANIM_STEPS=" + ANIMSTEP_V[i]); } })));
+        add(wf, Blocks.row(a, "全局灰度抖动", "Global dithering (off = smart image dither)", new Blocks.Stepper(a, DITHER_L, idx(DITHER_V, cfg.get("KFB_DITHER"), 0), new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { host("KFB_DITHER=" + DITHER_V[i]); } })));
         add(wf, Blocks.row(a, "浅色过滤", "Light-colour filter", new Blocks.Stepper(a, Panel.LIGHTF_L, idx(Panel.LIGHTF_V, cfg.get("KFB_LIGHTF"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_LIGHTF=" + Panel.LIGHTF_V[i]); } })));
         add(wf, Blocks.row(a, "深色加深", "Darken light text", toggle("1".equals(cfg.get("KFB_DARKEN")), new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { host("KFB_DARKEN=" + (on ? 1 : 0)); } })));
-        LinearLayout more = group(c, "底层显示参数");
-        add(more, Blocks.navRow(a, "宿主显示步进器", "快速滑动 · 图片灰度 · REAGL 整页阈值", new View.OnClickListener() {
-            @Override public void onClick(View v) { HostSettingsActivity.open(a, "display"); } }));
-        add(more, Blocks.navRow(a, "系统字体与动画细节", "系统字体 · 滑动合并 · 翻页动画速度 · 灰度抖动 · 桌面大小", new View.OnClickListener() {
-            @Override public void onClick(View v) { h.openCat(1); } }));
+        add(wf, Blocks.row(a, "换页后整屏刷新", "Full flash on launcher page flip", toggle(prefs.getBoolean("flashui", false), new Icons.Toggle.Listener() {
+            @Override public void onToggle(boolean on) { prefs.edit().putBoolean("flashui", on).commit(); } })));
+        LinearLayout sf = group(c, "系统字体");
+        add(sf, Blocks.navRow(a, "系统字体", "当前：" + prefs.getString("system_font_name", "系统默认") + "（桌面、设置、阅读器一起换）", new View.OnClickListener() {
+            @Override public void onClick(View v) { a.fontDialog(); } }));
+        add(sf, Blocks.row(a, "应用到所有应用", "Apply system font to all apps (restart)", toggle(prefs.getBoolean("system_font_all", true), new Icons.Toggle.Listener() {
+            @Override public void onToggle(boolean on) {
+                prefs.edit().putBoolean("system_font_all", on).commit();
+                a.systemFontAll(on ? prefs.getString("system_font_path", null) : null);
+            } })));
+        add(sf, Blocks.navRow(a, "字体商店", "下载或管理共享字体", new View.OnClickListener() {
+            @Override public void onClick(View v) { FontStoreActivity.open(a); } }));
+        add(sf, Blocks.navRow(a, "导入字体", "在传输网页上传 .ttf / .otf 自动进入字体库", new View.OnClickListener() {
+            @Override public void onClick(View v) { a.startActivity(new Intent(a, TransferActivity.class)); } }));
         return shell("Display / advanced", "高级显示设置", c);
     }
 
@@ -308,6 +338,8 @@ final class BlocksSettings {
             @Override public void onStep(final int i) { if (i == 0) a.setStyle("classic"); } }).wrap()));
         add(ui, Blocks.row(a, "界面字重", "UI font weight", new Blocks.Stepper(a, Fonts.WEIGHT_L, Fonts.weight(a), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { prefs.edit().putInt(Fonts.WEIGHT_KEY, i).commit(); a.reloadBlocks(BlocksHome.S_UI); } })));
+        add(ui, Blocks.row(a, "文字与图标大小", "Launcher & settings UI scale", new Blocks.Stepper(a, UI_SIZE_L, Math.max(0, Math.min(2, prefs.getInt("size", 1))), new Blocks.Stepper.Listener() {
+            @Override public void onStep(int i) { prefs.edit().putInt("size", i).commit(); a.reloadBlocks(BlocksHome.S_UI); } })));
         add(ui, Blocks.row(a, "英文小字", "English captions", toggle(Blocks.caps(a), new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) { prefs.edit().putBoolean(Blocks.CAPS_KEY, on).commit(); h.show(BlocksHome.S_UI); a.changed(); } })));
         add(ui, Blocks.row(a, "桌面动画", "E-ink animation", new Blocks.Stepper(a, Blocks.ANIM_L, Blocks.anim(a), new Blocks.Stepper.Listener() {
@@ -525,7 +557,7 @@ final class BlocksSettings {
             { "检查系统更新", "有新版本优先下载增量补丁" },
             { "使用统计", "电量和阅读时长，只在本机" },
             { "问题反馈", "连同系统日志一起上传" },
-            { "设备与管理", "导出日志 · 重启 · 恢复默认设置" },
+            { "设备与管理", "导出完整系统日志 · 恢复默认设置" },
             { "全部设置（分类总览）", "按经典分类浏览所有设置项" } };
         for (int i = 0; i < rows.length; i++) {
             if (kobo && (i == 1 || i == 3)) continue;

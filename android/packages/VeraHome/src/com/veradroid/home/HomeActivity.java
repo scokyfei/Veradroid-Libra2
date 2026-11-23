@@ -57,7 +57,8 @@ import java.util.Map;
 public class HomeActivity extends Activity {
     // “恢复默认设置”交给宿主恢复默认的设置项（显示、手势、返回方式）
     static final String[] RESET_KEYS = { "KFB_SETTLE", "KFB_MODE", "KFB_FLASH", "KFB_CONTRAST", "KFB_DITHER", "KFB_INVERT", "KFB_LIGHTF", "KFB_DARKEN", "KFB_GESTURES",
-        "KFB_AUTO_ROTATE", "PAGE_KEYS_SWAP",
+        "KFB_ECLIPSE", "KFB_DARKCRUSH", "KFB_HEAVY_FLASH", "KFB_GCN", "KFB_NEWWIN", "KFB_SKIA_OPT", "KFB_FONT_GAMMA", "KFB_IMG_DITHER", "KFB_SCROLLDU", "KFB_IMG",
+        "KFB_AUTO_ROTATE", "PAGE_KEYS_SWAP", "KEY_NEXT_LONG", "KEY_PREV_LONG", "KEY_LONG_MS", "IDLE_CAP_MS", "FL_TIMEOUT",
         "RETURN_MODE", "KFB_ANIM_MODE", "KFB_ANIM_STEPS", "KFB_ANIM_DIR", "KFB_ANIM_MIN", "KFB_SMOOTH", "KFB_PACE", "KFB_HOLD", "KFB_CLEAN", "KFB_REAGL_MIN",
         "G_TL", "G_TR", "G_BL", "G_BR", "G_EDGE_BACK", "G_EDGE_PANEL", "G_EDGE_LIGHT", "G_EDGE_LIGHT_SWAP", "G_TWO_TAP", "G_TWO_LONG", "G_TWO_BACK", "G_TWO_SLIDE", "G_BACK_EXCLUDE",
         "G_EDGE_THIRDS", "G_EB_L", "G_EB_M", "G_EB_R", "G_EB_HOLD", "G_EB_HOLD_MS" };
@@ -1552,7 +1553,7 @@ public class HomeActivity extends Activity {
     /** 检查系统更新：先列出新版本的更新内容，用户选“更新”才开始（SysUpdate）。 */
     void fullUpdateDialog() { SysUpdate.check(this); }
 
-    private void fontDialog() {
+    void fontDialog() {
         final java.util.List<Books.Font> fonts = Books.fonts();
         final String[] names = new String[fonts.size()];
         int selected = 0;
@@ -1582,7 +1583,7 @@ public class HomeActivity extends Activity {
      * 系统字体也给其他应用用（宿主的 SYSTEM_FONT：开机前把改过的 fonts.xml 和字体文件绑进系统，见 host 的 container.sh）。
      * path = null：其他应用回到原样字体。zygote 开机时预载字体，要重启 Android 才生效：和宿主现在用着的不一样就问一下。
      */
-    private void systemFontAll(String path) {
+    void systemFontAll(String path) {
         HostLink.settings("SYSTEM_FONT=" + (path == null ? "default" : path) + "\n");
         String live = HostLink.kv(HostLink.KFB + "settings").get("SYSTEM_FONT_LIVE");
         if ((path == null ? "" : path).equals(live == null ? "" : live)) return;
@@ -2126,7 +2127,7 @@ public class HomeActivity extends Activity {
                 @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, TransferActivity.class)); }
             });
             localChoice(list, "文字与图标大小", "桌面和设置页的大小，不影响其他应用。", "size", SIZES, 0, 1);
-            action(list, "显示与刷新", "屏幕旋转、显示档位（流畅 / 均衡 / 画质），局部刷新和整页刷新分开设。", "打开", new View.OnClickListener() {
+            action(list, "显示与刷新", "显示档位（流畅 / 均衡 / 画质），局部刷新、整页刷新、夜间与残影。", "打开", new View.OnClickListener() {
                 @Override public void onClick(View v) { HostSettingsActivity.open(HomeActivity.this, "display"); }
             });
             section(list, "刷新");
@@ -2155,10 +2156,14 @@ public class HomeActivity extends Activity {
             hostChoice(list, host, "手势提示", "识别到手势时在屏幕边上闪一下提示；应用卡住、2 秒没反应时提示怎么回到 Kobo。", "GESTURE_HINT",
                 new String[] { "全部", "只在没响应时", "关" }, new String[] { "all", "stuck", "off" }, "all");
             hostChoice(list, host, "启用手势", "下面所有手势的总开关。关掉后它们都不起作用，单指点按的反应也会快一点；“从最下边往上划：返回”只看它自己的开关。", "KFB_GESTURES", ONOFF_L, ONOFF_V, "1");
-            if (HostLink.isKobo()) {
+            if (HostLink.isKobo() && !bs) {
                 section(list, "实体翻页键与方向");
+                hostChoice(list, host, "屏幕方向", "0° / 180° 立即生效；90° / 270° 横屏需自动重启 Android。", "KFB_ROTATE", BlocksSettings.ROTATE_L, BlocksSettings.ROTATE_V, "0");
                 hostChoice(list, host, "重力感应自动旋转", "倒拿设备自动在 0° / 180° 间实时旋转，触摸与物理翻页键自动随动。", "KFB_AUTO_ROTATE", ONOFF_L, ONOFF_V, "0");
                 hostChoice(list, host, "翻页键功能互换", "对调上下两个实体翻页键的上一页 / 下一页功能，立即生效且随屏幕旋转同步调整。", "PAGE_KEYS_SWAP", ONOFF_L, ONOFF_V, "0");
+                hostChoice(list, host, "下一页键长按", "长按实体下一页键触发快捷功能。", "KEY_NEXT_LONG", BlocksSettings.KEYLONG_L, BlocksSettings.KEYLONG_V, "clear");
+                hostChoice(list, host, "上一页键长按", "长按实体上一页键触发快捷功能。", "KEY_PREV_LONG", BlocksSettings.KEYLONG_L, BlocksSettings.KEYLONG_V, "back");
+                hostChoice(list, host, "翻页键长按时长", "按住翻页键超过此时长即触发长按功能。", "KEY_LONG_MS", BlocksSettings.KEYLONG_MS_L, BlocksSettings.KEYLONG_MS_V, "500");
             }
             section(list, "单个手势（每个都能单独关，立即生效）");
             hostChoice(list, host, "从最下边往上划：返回", "从屏幕最下边一小条往上划，相当于返回键。和应用自己的上划冲突时可以关掉，或者用下一项只在某些应用里关掉。", "G_EDGE_BACK", ONOFF_L, ONOFF_V, "1");
@@ -2171,8 +2176,10 @@ public class HomeActivity extends Activity {
             hostChoice(list, host, "　上划后停住", "往上划，手指停住不动一会儿再松开。默认：切换应用（最近任务）。选“不做操作”时三段一划到就生效，不用等松手。", "G_EB_HOLD", ACT_L, ACT_V, "switch");
             hostChoice(list, host, "　停住多久", "停住不动这么久算“上划停住”。", "G_EB_HOLD_MS", HOLD_MS_L, HOLD_MS_V, "500");
             hostChoice(list, host, "从最上边往下划：打开面板", "亮度、色温、通知、关机。", "G_EDGE_PANEL", ONOFF_L, ONOFF_V, "1");
-            hostChoice(list, host, "左右边缘上下滑：亮度 / 色温", "靠近实体翻页键一侧调亮度，另一侧调色温（旋转后上下方向自动随动，轻点边缘仍可正常翻页）。", "G_EDGE_LIGHT", ONOFF_L, ONOFF_V, "1");
-            hostChoice(list, host, "　边缘调光 / 色温互换", "关闭：按键侧调亮度、另一侧调色温；开启：按键侧调色温、另一侧调亮度。", "G_EDGE_LIGHT_SWAP", ONOFF_L, ONOFF_V, "0");
+            if (!bs) {
+                hostChoice(list, host, "左右边缘上下滑：亮度 / 色温", "靠近实体翻页键一侧调亮度，另一侧调色温（旋转后上下方向自动随动，轻点边缘仍可正常翻页）。", "G_EDGE_LIGHT", ONOFF_L, ONOFF_V, "1");
+                hostChoice(list, host, "　边缘调光 / 色温互换", "关闭：按键侧调亮度、另一侧调色温；开启：按键侧调色温、另一侧调亮度。", "G_EDGE_LIGHT_SWAP", ONOFF_L, ONOFF_V, "0");
+            }
             hostChoice(list, host, "两根手指轻点：清除残影", "整屏刷新一次。", "G_TWO_TAP", ONOFF_L, ONOFF_V, "1");
             hostChoice(list, host, "两根手指长按 2 秒：反色", "白字黑底 / 黑字白底切换。", "G_TWO_LONG", ONOFF_L, ONOFF_V, "1");
             hostChoice(list, host, "两根手指左右滑：返回", "相当于返回键。", "G_TWO_BACK", ONOFF_L, ONOFF_V, "1");
@@ -2211,24 +2218,28 @@ public class HomeActivity extends Activity {
             }
             localChoice(list, "图标样式", "原样：应用自己的图标；黑白描框：转成灰度，外面加一圈黑色圆角框，桌面更整齐。单个应用的图标可以长按它换。", "iconstyle", ICONSTYLE_L, 0, 0);
             section(list, "外观");
-            String devName = prefs.getString("name", "VeraDroid");
-            if (devName.length() == 0) devName = "VeraDroid";
-            action(list, "阅读器名称", "显示在桌面左上角，替换默认的 VeraDroid。当前：" + devName + "。", "修改", new View.OnClickListener() {
-                @Override public void onClick(View v) { titleDialog(); }
-            });
-            styleChoice(list);
-            localSwitch(list, "英文小字", "方块风格里每个中文标题上面那行小号英文（CONTINUE、THIS WEEK…）。", Blocks.CAPS_KEY, true);
+            if (!bs) {
+                String devName = prefs.getString("name", "VeraDroid");
+                if (devName.length() == 0) devName = "VeraDroid";
+                action(list, "阅读器名称", "显示在桌面左上角，替换默认的 VeraDroid。当前：" + devName + "。", "修改", new View.OnClickListener() {
+                    @Override public void onClick(View v) { titleDialog(); }
+                });
+                styleChoice(list);
+                localSwitch(list, "英文小字", "方块风格里每个中文标题上面那行小号英文（CONTINUE、THIS WEEK…）。", Blocks.CAPS_KEY, true);
+            }
             localSwitch(list, "书库", "主页底部的“书库”标签和顶上的搜索框。只用来开应用的话可以关掉：书库页不再显示，也不再读书的索引、不扫描书的文件夹。", "library", true);
-            localSwitch(list, "12 小时制", "时间显示成 上午 / 下午 几点。默认 24 小时制。", "clock12", false);
+            if (!bs) localSwitch(list, "12 小时制", "时间显示成 上午 / 下午 几点。默认 24 小时制。", "clock12", false);
             localSwitch(list, "单手模式", "主页的顶栏和应用挪到下半屏，上面多一个大的“下拉面板”按钮。", OneHand.KEY, false);
             localSwitch(list, "状态栏", "在别的应用顶部显示时间和电量，点它打开下拉面板。桌面自己已经有顶栏，所以桌面不重复显示。", "statusbar", true);
-            section(list, "下拉面板");
-            action(list, "面板名称", "下拉面板顶部显示的名字，比如“某某的 Kobo”。当前：" + (prefs.getString("panelname", "").length() == 0 ? "（不显示）" : prefs.getString("panelname", "")) + "。", "修改", new View.OnClickListener() {
-                @Override public void onClick(View v) { textDialog("面板名称", "最多 16 个字；留空就不显示。", "panelname", "", 16); }
-            });
-            action(list, "面板快捷按钮", "下拉面板最上面一排圆形开关放哪几个、什么顺序。当前 " + prefs.getString("quick", Panel.QUICK_DEFAULT).split(",").length + " 个。", "选择", new View.OnClickListener() {
-                @Override public void onClick(View v) { quickDialog(); }
-            });
+            if (!bs) {
+                section(list, "下拉面板");
+                action(list, "面板名称", "下拉面板顶部显示的名字，比如“某某的 Kobo”。当前：" + (prefs.getString("panelname", "").length() == 0 ? "（不显示）" : prefs.getString("panelname", "")) + "。", "修改", new View.OnClickListener() {
+                    @Override public void onClick(View v) { textDialog("面板名称", "最多 16 个字；留空就不显示。", "panelname", "", 16); }
+                });
+                action(list, "面板快捷按钮", "下拉面板最上面一排圆形开关放哪几个、什么顺序。当前 " + prefs.getString("quick", Panel.QUICK_DEFAULT).split(",").length + " 个。", "选择", new View.OnClickListener() {
+                    @Override public void onClick(View v) { quickDialog(); }
+                });
+            }
             section(list, "输入");
             action(list, "输入法", "启用并切换到 Vera 输入法：中文拼音、英文、候选词。安装好输入法后点这里一次即可；以后点输入框会自动弹出。", "启用", new View.OnClickListener() {
                 @Override public void onClick(View v) {
@@ -2274,36 +2285,38 @@ public class HomeActivity extends Activity {
                     @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, BackupActivity.class)); }
                 });
             }
-            section(list, "设备");
-            localChoice(list, "后台保留应用", "前台以外最多留几个自己装的应用在后台，多出来的（最久没用的）在换应用 3 秒后停掉，省内存。应用长按 → 保持后台 的不算。",
-                Cleaner.LIMIT_KEY, Cleaner.LIMIT_L, 0, Cleaner.defaultLimit());
-            if (!kobo) {
-                hostChoice(list, host, "插上 USB 线时询问", "Android 在前台时插上数据线：问要不要切到 USB 传输（退回 Kobo，电脑上就能看到 Kobo 盘）。"
-                    + "只用充电器充电、不想被问就选“不询问”。", "USB_ASK", new String[] { "询问", "不询问" }, new String[] { "1", "0" }, "1");
-                hostChoice(list, host, "回到 Kobo 的方式", "挂起：系统暂停在后台，再打开几秒就回到现在的界面，但 Kobo 可用内存会少一些。关闭：系统完全退出，内存全部还给 Kobo。", "RETURN_MODE", RETURN_L, RETURN_V, "freeze");
-            }
-            action(list, "系统与性能", kobo
-                    ? "小内存模式、应用预编译（进度和“全部优化”）。"
-                    : "Wi-Fi 省电、小内存模式、Kobo 界面怎么处置、应用预编译（进度和“全部优化”）。", "打开", new View.OnClickListener() {
-                @Override public void onClick(View v) { HostSettingsActivity.open(HomeActivity.this, "system"); }
-            });
-            action(list, "锁屏密码", "开机和从 Kobo 屏保醒来时要输入 4–6 位数字密码。忘了可以用 USB 重置。", "设置", new View.OnClickListener() {
-                @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, LockSettingsActivity.class)); }
-            });
-            action(list, "屏保", "休眠时显示什么：Kobo 自带的、轮换你的图片，或者只用一张。", "选择", new View.OnClickListener() {
-                @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, ScreensaverActivity.class)); }
-            });
-            action(list, "存储空间", "Android 用的空间有多大、用了多少；可以调大调小，快满时自动扩大。", "查看", new View.OnClickListener() {
-                @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, StorageActivity.class)); }
-            });
-            action(list, "使用统计", "本机记录电量和阅读时长，不上传。", "查看", new View.OnClickListener() {
-                @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, StatsActivity.class)); }
-            });
-            action(list, "重启系统", "只重启系统，大约 20 秒后回到桌面，Kobo 界面不会出来。应用卡住、反应异常时可以试试。", "重启", new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    confirm("重启系统？", "正在运行的应用会被关闭。", new Runnable() { @Override public void run() { HostLink.cmd("restart"); } });
+            if (!bs) {
+                section(list, "设备");
+                localChoice(list, "后台保留应用", "前台以外最多留几个自己装的应用在后台，多出来的（最久没用的）在换应用 3 秒后停掉，省内存。应用长按 → 保持后台 的不算。",
+                    Cleaner.LIMIT_KEY, Cleaner.LIMIT_L, 0, Cleaner.defaultLimit());
+                if (!kobo) {
+                    hostChoice(list, host, "插上 USB 线时询问", "Android 在前台时插上数据线：问要不要切到 USB 传输（退回 Kobo，电脑上就能看到 Kobo 盘）。"
+                        + "只用充电器充电、不想被问就选“不询问”。", "USB_ASK", new String[] { "询问", "不询问" }, new String[] { "1", "0" }, "1");
+                    hostChoice(list, host, "回到 Kobo 的方式", "挂起：系统暂停在后台，再打开几秒就回到现在的界面，但 Kobo 可用内存会少一些。关闭：系统完全退出，内存全部还给 Kobo。", "RETURN_MODE", RETURN_L, RETURN_V, "freeze");
                 }
-            });
+                action(list, "系统与性能", kobo
+                        ? "小内存模式、应用预编译（进度和“全部优化”）。"
+                        : "Wi-Fi 省电、小内存模式、Kobo 界面怎么处置、应用预编译（进度和“全部优化”）。", "打开", new View.OnClickListener() {
+                    @Override public void onClick(View v) { HostSettingsActivity.open(HomeActivity.this, "system"); }
+                });
+                action(list, "锁屏密码", "开机和从 Kobo 屏保醒来时要输入 4–6 位数字密码。忘了可以用 USB 重置。", "设置", new View.OnClickListener() {
+                    @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, LockSettingsActivity.class)); }
+                });
+                action(list, "屏保", "休眠时显示什么：Kobo 自带的、轮换你的图片，或者只用一张。", "选择", new View.OnClickListener() {
+                    @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, ScreensaverActivity.class)); }
+                });
+                action(list, "存储空间", "Android 用的空间有多大、用了多少；可以调大调小，快满时自动扩大。", "查看", new View.OnClickListener() {
+                    @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, StorageActivity.class)); }
+                });
+                action(list, "使用统计", "本机记录电量和阅读时长，不上传。", "查看", new View.OnClickListener() {
+                    @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, StatsActivity.class)); }
+                });
+                action(list, "重启系统", "只重启系统，大约 20 秒后回到桌面，Kobo 界面不会出来。应用卡住、反应异常时可以试试。", "重启", new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        confirm("重启系统？", "正在运行的应用会被关闭。", new Runnable() { @Override public void run() { HostLink.cmd("restart"); } });
+                    }
+                });
+            }
             section(list, "日志");
             action(list, "保存完整系统日志", "保存 Kobo dmesg、Android 全部 logcat buffer、所有 dumpsys、getprop、settings、网络、进程和挂载信息到 Diagnostics。日志里可能有打开过的网址和书名。", "保存", new View.OnClickListener() {
                 @Override public void onClick(View v) { HostLink.cmd("diag"); ((TextView) v).setText("已保存"); }

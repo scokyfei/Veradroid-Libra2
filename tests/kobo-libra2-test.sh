@@ -220,9 +220,9 @@ grep -q 'G_EDGE_LIGHT' "$TOP/input/legacy/vinput.c" \
     && grep -q '^G_EDGE_LIGHT=1' "$TOP/host/kobo/models/libra2.conf" \
     && grep -q '^G_EDGE_LIGHT_SWAP=0' "$TOP/host/kobo/models/libra2.conf" \
     && grep -q 'G_EDGE_LIGHT_SWAP' "$TOP/android/packages/VeraHome/src/com/veradroid/home/BlocksSettings.java" \
-    && grep -q 'G_EDGE_LIGHT_SWAP' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HostSettingsActivity.java" \
     && grep -q 'G_EDGE_LIGHT_SWAP' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HomeActivity.java" \
-    && ok "Left/right edge swipe brightness & warmth (G_EDGE_LIGHT + G_EDGE_LIGHT_SWAP, rotation-aware) wired end-to-end" \
+    && ! grep -q 'G_EDGE_LIGHT\|KEY_NEXT_LONG' "$TOP/android/packages/VeraHome/src/com/veradroid/home/HostSettingsActivity.java" \
+    && ok "Left/right edge swipe brightness & warmth (G_EDGE_LIGHT + G_EDGE_LIGHT_SWAP, rotation-aware, cleanly separated from display) wired end-to-end" \
     || fail "missing G_EDGE_LIGHT wiring"
 grep -q 'g_reader_mode' "$TOP/display/legacy/epd.c" \
     && grep -q 'READER' "$TOP/display/legacy/epd.c" \

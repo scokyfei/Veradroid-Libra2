@@ -150,26 +150,6 @@ public class HostSettingsActivity extends Activity {
     // ---- 显示与刷新 ----------------------------------------------------------------------------------------------
 
     private void buildDisplay() {
-        section("方向");
-        stepper("屏幕旋转", "画面顺时针转。倒过来（180°）立即生效；横屏（90° / 270°）要重启 Android（约 20 秒，自动进行）。停手 2.5 秒后才生效。",
-            "KFB_ROTATE", new String[] { "竖屏（0°）", "倒过来（180°）", "横屏（90°，会重启）", "横屏（270°，会重启）" },
-            new String[] { "0", "180", "90", "270" }, "0", null);
-        if (HostLink.isKobo()) {
-            stepper("重力感应自动旋转", "开启后倒拿设备自动在 0° / 180° 间实时旋转，触摸坐标、手势与实体翻页键自动随动；横屏模式下在 90° / 270° 间随动。",
-                "KFB_AUTO_ROTATE", new String[] { "关（默认）", "开" }, new String[] { "0", "1" }, "0", null);
-            stepper("翻页键功能互换", "交换上下实体翻页键的上一页 / 下一页功能，立即生效，且自动跟随屏幕旋转。",
-                "PAGE_KEYS_SWAP", new String[] { "关（默认）", "开" }, new String[] { "0", "1" }, "0", null);
-            stepper("下一页键长按", "长按实体下一页键触发快捷功能（选“关”时按下瞬间即翻页；自动跟随旋转与互换设置）。",
-                "KEY_NEXT_LONG", BlocksSettings.KEYLONG_L, BlocksSettings.KEYLONG_V, "clear", null);
-            stepper("上一页键长按", "长按实体上一页键触发快捷功能（默认“返回”，单手看书即可一键返回书架或关闭目录）。",
-                "KEY_PREV_LONG", BlocksSettings.KEYLONG_L, BlocksSettings.KEYLONG_V, "back", null);
-            stepper("翻页键长按时长", "按住实体翻页键超过此时长即触发长按功能，短于此时长松开则正常翻页。",
-                "KEY_LONG_MS", BlocksSettings.KEYLONG_MS_L, BlocksSettings.KEYLONG_MS_V, "500", null);
-            stepper("左右边缘滑动调光 / 色温", "靠近实体翻页键一侧边缘上下滑调亮度，另一侧边缘上下滑调色温（旋转后上下方向自动随动，边缘轻点与横滑翻页不受影响）。",
-                "G_EDGE_LIGHT", new String[] { "关", "开（默认）" }, new String[] { "0", "1" }, "1", null);
-            stepper("边缘调光 / 色温互换", "互换左右边缘的亮度与色温调节功能：关闭时靠近实体翻页键一侧调亮度、另一侧调色温；开启后靠近按键一侧调色温、另一侧调亮度（立即生效）。",
-                "G_EDGE_LIGHT_SWAP", new String[] { "关（按键侧亮度）", "开（按键侧色温）" }, new String[] { "0", "1" }, "0", null);
-        }
         section("档位");
         stepper("显示档位", "一次定好下面的刷新方式：流畅（先快刷、停下再补灰度）、均衡、画质（驱动自动选波形，合并中间帧）。选“自定义”时按下面几项单独设。",
             "KFB_SMOOTH", new String[] { "自定义", "流畅", "均衡", "画质" }, new String[] { "0", "1", "2", "3" }, "0",
@@ -244,12 +224,6 @@ public class HostSettingsActivity extends Activity {
         if (!kobo) {
             stepper("Android 运行时 Kobo 界面", "只暂停：回 Kobo 最快；冻结：再把 Kobo 的后台程序冻住；停掉：腾出最多内存，回 Kobo 约一分钟。自动：小内存模式用“停掉”，否则“冻结”。下次启动 Android 生效。",
                 "KINDLE_UI", new String[] { "自动", "只暂停", "冻结", "停掉" }, new String[] { "auto", "keep", "freeze", "stop" }, "auto", null);
-        } else {
-            section("省电与息灯（Libra 2）");
-            stepper("阅读静止期 CPU 限频", "无触摸/按键超过设定时间后，自动将 CPU 最高频率柔和限制在 792 MHz 压低后台毛刺功耗；下次触屏或按翻页键瞬间立即恢复 1 GHz 满频。",
-                "IDLE_CAP_MS", BlocksSettings.IDLECAP_L, BlocksSettings.IDLECAP_V, "10000", null);
-            stepper("无操作自动息灯", "独立于整机休眠的前光超时：长时间未操作先熄灭前光省电，触摸或按翻页键瞬间自动恢复原亮度。",
-                "FL_TIMEOUT", BlocksSettings.FLTO_L, BlocksSettings.FLTO_V, "0", null);
         }
         section("应用预编译");
         stepper("自动优化新装的应用", "装好后在后台把应用编译成机器码，打开更快（微信读书冷启动约快一倍）。自动优化等你 5 分钟不碰屏幕才开始；"
