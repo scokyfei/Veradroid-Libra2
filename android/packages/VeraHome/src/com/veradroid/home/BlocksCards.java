@@ -89,6 +89,18 @@ final class BlocksCards {
      */
     private static byte[][] homeSample;
     private static int sampleW, sampleH;
+    private static java.nio.MappedByteBuffer fbMap;
+    private static long fbMapLen;
+
+    private static synchronized java.nio.MappedByteBuffer getFbMap(File f, long mapLen) throws java.io.IOException {
+        if (fbMap != null && fbMapLen == mapLen) return fbMap;
+        java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r");
+        try {
+            fbMap = raf.getChannel().map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, mapLen);
+            fbMapLen = mapLen;
+            return fbMap;
+        } finally { raf.close(); }
+    }
 
     private static byte[][] sampleFb(Context c) {
         try {
@@ -102,14 +114,14 @@ final class BlocksCards {
             // the tmpfs file; reading it through a mapping would allocate it (about half a page of RAM with this sampling), so
             // leave it alone: its sample stays all zero, the same on leaving and on coming back, and page 0 is picked.
             int pages = new File(HostLink.KFB + "onepage").exists() ? 1 : 2;
-            java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r");
-            try {
-                java.nio.MappedByteBuffer mb = raf.getChannel().map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, page * pages);
-                int step = Math.max(2, w / 260);
-                sampleW = w / step; sampleH = h / step;
-                byte[][] out = new byte[2][sampleW * sampleH];
-                // 一行一次整块拷出来再取点：以前每个点三次 get()（两页共五十多万次），单核的 PW4 上离开 / 回到主页各卡一两秒
-                byte[] line = new byte[(sampleW - 1) * step * 4 + 3];
+            java.nio.MappedByteBuffer mb = getFbMap(f, page * pages);
+            if (mb == null) return null;
+            int step = Math.max(2, w / 260);
+            sampleW = w / step; sampleH = h / step;
+            byte[][] out = new byte[2][sampleW * sampleH];
+            // 一行一次整块拷出来再取点：以前每个点三次 get()（两页共五十多万次），单核的 PW4 上离开 / 回到主页各卡一两秒
+            byte[] line = new byte[(sampleW - 1) * step * 4 + 3];
+            synchronized (BlocksCards.class) {
                 for (int pg = 0; pg < pages; pg++) {
                     for (int y = 0; y < sampleH; y++) {
                         mb.position((int) (pg * page + (long) (y * step) * w * 4));
@@ -121,8 +133,8 @@ final class BlocksCards {
                         }
                     }
                 }
-                return out;
-            } finally { raf.close(); }
+            }
+            return out;
         } catch (Throwable t) { return null; }
     }
 
@@ -163,10 +175,14 @@ final class BlocksCards {
             if (Math.max(d0, d1) == 0) return;   // 两页都还是主页的画面：应用没画过东西
         }
         final int w = sampleW, h = sampleH;
-        int[] px = new int[w * h];
+        short[] px565 = new short[w * h];
         byte[] src = now[pick];
-        for (int i = 0; i < px.length; i++) { int v = src[i] & 255; px[i] = 0xff000000 | (v << 16) | (v << 8) | v; }
-        final Bitmap bm = Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888);
+        for (int i = 0; i < px565.length; i++) {
+            int v = src[i] & 255;
+            px565[i] = (short) (((v & 0xF8) << 8) | ((v & 0xFC) << 3) | ((v & 0xF8) >>> 3));
+        }
+        final Bitmap bm = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565);
+        bm.copyPixelsFromBuffer(java.nio.ShortBuffer.wrap(px565));
         thumb = bm; thumbPkg = pkg;
         Store.prefs(a, "home").edit().putString("la_pkg", pkg).putLong("la_time", System.currentTimeMillis()).apply();
         final File out = new File(Store.cache("lastapp"), "thumb.png");

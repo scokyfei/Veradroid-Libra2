@@ -373,21 +373,41 @@ final class Panel {
         return r;
     }
 
+    private static final long LEVEL_GUARD_MS = 1500L;
+    private long lightGuardUntil = 0L, warmGuardUntil = 0L;
+
+    private void commitLevel(String cmd, int v) {
+        long until = android.os.SystemClock.uptimeMillis() + LEVEL_GUARD_MS;
+        if ("warmth".equals(cmd)) warmGuardUntil = until;
+        else lightGuardUntil = until;
+        seenStatus = null;
+        seenStamp = -1;
+        HostLink.cmd(cmd + " " + v);
+    }
+
     private LevelBar slider(LinearLayout parent, Icons.Kind lo, Icons.Kind hi, final String cmd) {
         LinearLayout r = row();
         final LevelBar bar = new LevelBar(ctx);
         bar.setListener(new LevelBar.Listener() {
-            @Override public void onCommit(int v) { HostLink.cmd(cmd + " " + v); }
+            @Override public void onCommit(int v) { commitLevel(cmd, v); }
         });
         // 两端的小 / 大图标就是 − / +：点一下走一格
         r.addView(Icons.bar(ctx, lo, 26, new View.OnClickListener() {
-            @Override public void onClick(View v) { bar.setValue(bar.getValue() - 1); HostLink.cmd(cmd + " " + bar.getValue()); }
+            @Override public void onClick(View v) {
+                int unit = bar.getMax() <= 24 ? 1 : Math.max(1, Math.round(bar.getMax() / 24f));
+                bar.setValue(bar.getValue() - unit);
+                commitLevel(cmd, bar.getValue());
+            }
         }));
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, dp(34), 1);
         bp.leftMargin = dp(4); bp.rightMargin = dp(4);
         r.addView(bar, bp);
         r.addView(Icons.bar(ctx, hi, 30, new View.OnClickListener() {
-            @Override public void onClick(View v) { bar.setValue(bar.getValue() + 1); HostLink.cmd(cmd + " " + bar.getValue()); }
+            @Override public void onClick(View v) {
+                int unit = bar.getMax() <= 24 ? 1 : Math.max(1, Math.round(bar.getMax() / 24f));
+                bar.setValue(bar.getValue() + unit);
+                commitLevel(cmd, bar.getValue());
+            }
         }));
         parent.addView(r);
         return bar;
@@ -783,7 +803,7 @@ final class Panel {
         seenStatus = key;
         StringBuilder sb = new StringBuilder(new SimpleDateFormat("M月d日 EEE", Locale.CHINA).format(new Date()));
         if (st.get("battery") != null) {
-            sb.append("  电量 ").append(st.get("battery")).append("%");
+            sb.append("  电量 ").append(Ui.clampBat(st.get("battery"))).append("%");
             if ("1".equals(st.get("charging"))) sb.append("（充电中）");
         }
         set(info, (panelName.length() > 0 ? panelName + "  ·  " : "") + sb.toString());
@@ -793,10 +813,11 @@ final class Panel {
         vis(warmRow, HostLink.num(st, "haswarmth", 1) == 1);
         vis((View) autoLight.getTag(), HostLink.num(st, "haslightauto", 0) == 1);
         autoLight.set(HostLink.num(st, "lightauto", 0) == 1);
+        long nowUptime = android.os.SystemClock.uptimeMillis();
         if (light.getMax() != max) light.setMax(max);
-        if (light.getValue() != HostLink.num(st, "light", 0)) light.setValue(HostLink.num(st, "light", 0));
-        if (warm.getMax() != max) warm.setMax(max);
-        if (warm.getValue() != HostLink.num(st, "warmth", 0)) warm.setValue(HostLink.num(st, "warmth", 0));
+        if (nowUptime >= lightGuardUntil && light.getValue() != HostLink.num(st, "light", 0)) light.setValue(HostLink.num(st, "light", 0));
+        if (warm.getMax() != 24) warm.setMax(24);
+        if (nowUptime >= warmGuardUntil && warm.getValue() != HostLink.num(st, "warmth", 0)) warm.setValue(HostLink.num(st, "warmth", 0));
         wifiOn = HostLink.num(st, "wifi", 1);
         invertOn = HostLink.num(st, "invert", 0);
         btOn = HostLink.num(st, "bton", 0);

@@ -830,13 +830,15 @@ final class Blocks {
     // ------------------------------------------------------------------ block bar（方块级别条）
 
     /**
-     * 一排方块表示级别（亮度之类）：点哪一格就是哪一级，抬手时生效；最左边一格之前点一下 = 0。
-     * 手指拖动时不跟着画（墨水屏上会一路刷），只在抬手时画一次。右边显示百分比。
+     * 一排方块表示级别（亮度 / 色温）：支持点按与按住左右拖动实时预览，抬手（或轻偏移触发 cancel）时生效；
+     * 点当前最后一格亮着的方块可退一格（能点回 0），点右侧百分比区域映射为满格。
      */
     static final class BlockBar extends View {
         interface Listener { void onCommit(int level); }
         private final Paint p = new Paint();
-        private int blocks = 10, level, max = 10;
+        private int blocks = 10, level, max = 10, shown = -1;
+        private float downX;
+        private boolean dragging;
         private Listener listener;
         private boolean showPct = true;
 
@@ -850,9 +852,9 @@ final class Blocks {
         }
 
         void setListener(Listener l) { listener = l; setClickable(l != null); }
-        /** 真实值的范围（亮度 0..24 之类）；格子数不变，按比例换算。 */
+        /** 真实值的范围（亮度 0..100 / 色温 0..24）；格子数不变，按比例换算。 */
         void setMax(int m) { max = Math.max(1, m); invalidate(); }
-        void setValue(int v) { int nv = Math.max(0, Math.min(max, v)); if (nv != level) { level = nv; invalidate(); } }
+        void setValue(int v) { int nv = Math.max(0, Math.min(max, v)); if (nv != level || shown >= 0) { level = nv; shown = -1; invalidate(); } }
         int value() { return level; }
         void noPercent() { showPct = false; }
 
@@ -864,35 +866,79 @@ final class Blocks {
 
         @Override protected void onDraw(Canvas c) {
             int w = getWidth() - labelW(), h = getHeight();
-            int g = dp(getContext(), 3);
+            int cur = shown >= 0 ? shown : level;
+            int g = blocks >= 20 ? Math.max(1, dp(getContext(), 2)) : dp(getContext(), 3);
             float bw = (w - g * (blocks - 1)) / (float) blocks;
-            int filled = Math.round(level * blocks / (float) max);
+            int filled = Math.round(cur * blocks / (float) max);
+            float sw = blocks >= 20 ? Math.max(1.5f, dp(getContext(), 1)) : 2f;
             for (int i = 0; i < blocks; i++) {
                 float x = i * (bw + g);
                 p.setColor(Color.BLACK);
                 if (i < filled) { p.setStyle(Paint.Style.FILL); c.drawRect(x, 2, x + bw, h - 2, p); }
-                else { p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2); c.drawRect(x + 1, 3, x + bw - 1, h - 3, p); }
+                else { p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(sw); c.drawRect(x + 1, 3, x + bw - 1, h - 3, p); }
             }
             if (showPct) {
                 p.setStyle(Paint.Style.FILL);
-                String s = (level * 100 / max) + "%";
+                String s = Math.round(cur * 100f / max) + "%";
                 p.setTextAlign(Paint.Align.RIGHT);
                 c.drawText(s, getWidth(), h / 2f + p.getTextSize() / 2.8f, p);
             }
         }
 
-        @Override public boolean onTouchEvent(MotionEvent e) {
-            if (listener == null) return false;
-            if (e.getActionMasked() == MotionEvent.ACTION_DOWN) { getParent().requestDisallowInterceptTouchEvent(true); Perf.touch(e); return true; }
-            if (e.getActionMasked() != MotionEvent.ACTION_UP) return true;
-            int w = getWidth() - labelW();
-            if (e.getX() > w) return true;
-            int cell = (int) (Math.max(0, e.getX()) * blocks / Math.max(1, w));
-            // 点已经是最后一格亮着的那一格：退一格（这样能点回 0）
+        private int xToDragValue(float x, int w) {
+            if (x <= 0) return 0;
+            if (x >= w) return max;
+            int nb = Math.round(x * blocks / Math.max(1f, w));
+            return Math.max(0, Math.min(max, Math.round(nb * max / (float) blocks)));
+        }
+
+        private int xToTapValue(float x, int w) {
+            if (x <= 0) return 0;
+            if (x >= w) return max;   // 右侧百分比区域映射到满格，不再丢触控
+            int cell = Math.min(blocks - 1, (int) (x * blocks / Math.max(1, w)));
             int filled = Math.round(level * blocks / (float) max);
             int nb = cell + 1 == filled ? cell : cell + 1;
-            int nv = Math.round(nb * max / (float) blocks);
-            if (nv != level) { level = nv; invalidate(); listener.onCommit(level); }
+            return Math.max(0, Math.min(max, Math.round(nb * max / (float) blocks)));
+        }
+
+        @Override public boolean onTouchEvent(MotionEvent e) {
+            if (listener == null) return false;
+            int w = Math.max(1, getWidth() - labelW());
+            switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                getParent().requestDisallowInterceptTouchEvent(true);
+                Perf.touch(e);
+                downX = e.getX();
+                dragging = false;
+                shown = -1;
+                return true;
+            case MotionEvent.ACTION_MOVE: {
+                if (!dragging && Math.abs(e.getX() - downX) > dp(getContext(), 6)) dragging = true;
+                if (dragging) {
+                    int nv = xToDragValue(e.getX(), w);
+                    if (nv != shown) { shown = nv; invalidate(); }
+                }
+                return true;
+            }
+            case MotionEvent.ACTION_UP: {
+                int nv = dragging && shown >= 0 ? shown : xToTapValue(e.getX(), w);
+                boolean hadPreview = shown >= 0;
+                shown = -1;
+                dragging = false;
+                if (nv != level) { level = nv; invalidate(); listener.onCommit(level); }
+                else if (hadPreview) invalidate();
+                return true;
+            }
+            case MotionEvent.ACTION_CANCEL: {
+                // 手指轻偏移被父容器取消时，如果已经拖出有效预览值就提交，避免误取消回弹
+                int nv = dragging && shown >= 0 ? shown : -1;
+                shown = -1;
+                dragging = false;
+                if (nv >= 0 && nv != level) { level = nv; invalidate(); listener.onCommit(level); }
+                else invalidate();
+                return true;
+            }
+            }
             return true;
         }
     }

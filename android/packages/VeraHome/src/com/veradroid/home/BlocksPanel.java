@@ -191,11 +191,11 @@ final class BlocksPanel {
 
         // 屏幕光：一个分组，亮度一行（− 方块条 +），有暖光再一行，有光线传感器再加“自动”
         LinearLayout g = group("屏幕光");
-        light = new Blocks.BlockBar(ctx, 12);
-        light.setListener(new Blocks.BlockBar.Listener() { @Override public void onCommit(int v) { HostLink.cmd("light " + v); } });
+        light = new Blocks.BlockBar(ctx, 24);
+        light.setListener(new Blocks.BlockBar.Listener() { @Override public void onCommit(int v) { commitLevel("light", v); } });
         g.addView(levelRow(Icons.Kind.SUN_S, Icons.Kind.SUN_L, light, "light"), Blocks.match());
-        warm = new Blocks.BlockBar(ctx, 12);
-        warm.setListener(new Blocks.BlockBar.Listener() { @Override public void onCommit(int v) { HostLink.cmd("warmth " + v); } });
+        warm = new Blocks.BlockBar(ctx, 24);
+        warm.setListener(new Blocks.BlockBar.Listener() { @Override public void onCommit(int v) { commitLevel("warmth", v); } });
         warmRow = levelRow(Icons.Kind.WARM, Icons.Kind.WARM, warm, "warmth");
         View h1 = Blocks.hair(ctx);
         g.addView(h1);
@@ -395,17 +395,29 @@ final class BlocksPanel {
         return f;
     }
 
-    private void step(Blocks.BlockBar bar, String cmd, int dir) {
-        int max = Math.max(1, barMax(bar));
-        int unit = Math.max(1, Math.round(max / 12f));
-        int v = Math.max(0, Math.min(max, bar.value() + dir * unit));
-        if (v == bar.value()) return;
-        bar.setValue(v);
+    private static final long LEVEL_GUARD_MS = 1500L;
+    private long lightGuardUntil = 0L, warmGuardUntil = 0L;
+
+    private void commitLevel(String cmd, int v) {
+        long until = android.os.SystemClock.uptimeMillis() + LEVEL_GUARD_MS;
+        if ("warmth".equals(cmd)) warmGuardUntil = until;
+        else lightGuardUntil = until;
+        seen = null;
+        seenStamp = -1;
         HostLink.cmd(cmd + " " + v);
     }
 
+    private void step(Blocks.BlockBar bar, String cmd, int dir) {
+        int max = Math.max(1, barMax(bar));
+        int unit = max <= 24 ? 1 : Math.max(1, Math.round(max / 24f));
+        int v = Math.max(0, Math.min(max, bar.value() + dir * unit));
+        if (v == bar.value()) return;
+        bar.setValue(v);
+        commitLevel(cmd, v);
+    }
+
     private int lightMax = 24;
-    private int barMax(Blocks.BlockBar b) { return lightMax; }
+    private int barMax(Blocks.BlockBar b) { return b == warm ? 24 : lightMax; }
 
     private static Icons.Kind icon(String id) {
         if ("wifi".equals(id)) return Icons.Kind.WIFI;
@@ -560,7 +572,7 @@ final class BlocksPanel {
         if (panelName.length() > 0) sb.append(panelName).append("  ·  ");
         sb.append(new SimpleDateFormat("M月d日 EEE", Locale.CHINA).format(new Date()));
         if (st.get("battery") != null) {
-            sb.append("  ·  电量 ").append(st.get("battery")).append("%");
+            sb.append("  ·  电量 ").append(Ui.clampBat(st.get("battery"))).append("%");
             if ("1".equals(st.get("charging"))) sb.append(" 充电中");
         }
         set(info, sb.toString());
@@ -569,9 +581,10 @@ final class BlocksPanel {
         vis(lightBox, hasLight);
         vis(warmRow, hasWarm); vis((View) warmRow.getTag(), hasWarm);
         vis(autoRow, hasAuto); vis((View) autoRow.getTag(), hasAuto);
-        light.setMax(lightMax); warm.setMax(lightMax);
-        light.setValue(HostLink.num(st, "light", 0));
-        warm.setValue(HostLink.num(st, "warmth", 0));
+        light.setMax(lightMax); warm.setMax(24);
+        long nowUptime = android.os.SystemClock.uptimeMillis();
+        if (nowUptime >= lightGuardUntil) light.setValue(HostLink.num(st, "light", 0));
+        if (nowUptime >= warmGuardUntil) warm.setValue(HostLink.num(st, "warmth", 0));
         if (hasAuto && autoSwitch.isOn() != (HostLink.num(st, "lightauto", 0) == 1)) autoSwitch.set(HostLink.num(st, "lightauto", 0) == 1);
         wifiOn = HostLink.num(st, "wifi", 1);
         invertOn = HostLink.num(st, "invert", 0);

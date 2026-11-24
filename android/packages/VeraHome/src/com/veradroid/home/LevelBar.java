@@ -48,13 +48,20 @@ class LevelBar extends View {
             getParent().requestDisallowInterceptTouchEvent(true);
             return true;
         case MotionEvent.ACTION_MOVE:
-            shown = v; invalidate(); return true;
+            if (shown != v) { shown = v; invalidate(); }
+            return true;
         case MotionEvent.ACTION_UP:
             value = v; shown = -1; invalidate();
             if (listener != null) listener.onCommit(v);
             return true;
         case MotionEvent.ACTION_CANCEL:
-            shown = -1; invalidate(); return true;
+            if (shown >= 0 && shown != value) {
+                value = shown; shown = -1; invalidate();
+                if (listener != null) listener.onCommit(value);
+            } else {
+                shown = -1; invalidate();
+            }
+            return true;
         }
         return true;
     }

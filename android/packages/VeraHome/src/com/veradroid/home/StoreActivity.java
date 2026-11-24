@@ -85,12 +85,12 @@ public class StoreActivity extends Activity {
         tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setPadding(0, dp(2), 0, dp(4));
-        page.addView(tabs);
+        page.addView(tabs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         tagBar = new LinearLayout(this);
         tagBar.setOrientation(LinearLayout.VERTICAL);
         tagBar.setPadding(0, dp(2), 0, dp(6));
-        page.addView(tagBar);
+        page.addView(tagBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // 整页翻（PageScrollView + 翻页条），不跟手滚动：墨水屏上一次只换一次画面
         list = new LinearLayout(this);
@@ -126,6 +126,15 @@ public class StoreActivity extends Activity {
         tagBar.removeAllViews();
         if (cat != 0) { tagBar.setVisibility(View.GONE); return; }
         tagBar.setVisibility(View.VISIBLE);
+        int[] tagCnt = new int[TAGS.length];
+        if (!apps.isEmpty()) {
+            tagCnt[0] = apps.size();
+            for (App a : apps) {
+                for (int k = 1; k < TAGS.length; k++) {
+                    if (TAGS[k].equals(a.tag)) { tagCnt[k]++; break; }
+                }
+            }
+        }
         int[][] rows = { { 0, 1, 2, 3 }, { 4, 5, 6 } };
         for (int r = 0; r < rows.length; r++) {
             LinearLayout row = new LinearLayout(this);
@@ -133,7 +142,8 @@ public class StoreActivity extends Activity {
             if (r > 0) row.setPadding(0, dp(4), 0, 0);
             for (int c = 0; c < rows[r].length; c++) {
                 final int idx = rows[r][c];
-                android.widget.Button b = Ui.button(this, TAG_L[idx], 13, idx == tagIdx, new View.OnClickListener() {
+                String label = !apps.isEmpty() ? TAG_L[idx] + " " + tagCnt[idx] : TAG_L[idx];
+                android.widget.Button b = Ui.button(this, label, 13, idx == tagIdx, new View.OnClickListener() {
                     @Override public void onClick(View v) {
                         if (tagIdx == idx) return;
                         tagIdx = idx;
@@ -147,7 +157,7 @@ public class StoreActivity extends Activity {
                 lp.leftMargin = c == 0 ? 0 : dp(6);
                 row.addView(b, lp);
             }
-            tagBar.addView(row);
+            tagBar.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
     }
 
@@ -246,6 +256,7 @@ public class StoreActivity extends Activity {
                     apps.clear(); apps.addAll(got);
                     batches = cnt[2];
                     if (cnt[0] != counts[0] || cnt[1] != counts[1]) { counts[0] = cnt[0]; counts[1] = cnt[1]; tabsRender(); }
+                    tagBarRender();
                     render();
                     icons(got);
                 } });

@@ -1191,7 +1191,7 @@ final class BlocksHome {
         LinearLayout r1 = new LinearLayout(a);
         Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
         int[] live = Ui.liveBattery(a);
-        String initBat = live != null ? String.valueOf(live[0]) : st.get("battery");
+        String initBat = live != null ? String.valueOf(live[0]) : Ui.clampBat(st.get("battery"));
         boolean initChg = live != null ? (live[1] == 1) : "1".equals(st.get("charging"));
         String[][] cells = { { (initBat == null ? "—" : initBat) + "%", initChg ? "充电中" : "剩余电量", "Battery" },
             { storageUsed() + "%", "存储已用", "Storage" }, { version(), "桌面版本", "Version" } };
@@ -1309,7 +1309,7 @@ final class BlocksHome {
         if (meBattery == null) return;
         int[] live = Ui.liveBattery(a);
         Map<String, String> st = live == null ? HostLink.kv(HostLink.CTL + "status") : null;
-        String b = live != null ? String.valueOf(live[0]) : st.get("battery");
+        String b = live != null ? String.valueOf(live[0]) : Ui.clampBat(st.get("battery"));
         boolean chg = live != null ? (live[1] == 1) : "1".equals(st.get("charging"));
         String s = (b == null ? "—" : b) + "%";
         if (!s.contentEquals(meBattery.getText())) meBattery.setText(s);

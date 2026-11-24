@@ -150,6 +150,7 @@ public class StatusBarService extends Service {
                     }
                 } catch (Throwable ignored) { }
             }
+            if (p > 100) p = 100;
             String battText = p >= 0 ? (charging ? "充电中 " + p + "%" : p + "%") : "";
             if (!battText.equals(String.valueOf(batt.getText()))) batt.setText(battText);
             Stats.sampleBattery(this, p, charging);

@@ -35,12 +35,26 @@ final class Ui {
             int status = bi.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1);
             int plugged = bi.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0);
             int pct = (level >= 0 && scale > 0) ? (level * 100 / scale) : -1;
+            if (pct > 100) pct = 100;
             int chg = (status == android.os.BatteryManager.BATTERY_STATUS_CHARGING
                     || status == android.os.BatteryManager.BATTERY_STATUS_FULL
                     || plugged > 0) ? 1 : 0;
             if (pct >= 0) return new int[] { pct, chg };
         } catch (Throwable ignored) { }
         return null;
+    }
+
+    /** 电量百分比钳位至 0..100（防止满电/驱动异常时显示 105% 等越界值）。 */
+    static String clampBat(String raw) {
+        if (raw == null) return null;
+        try {
+            int v = Integer.parseInt(raw.trim());
+            if (v < 0) v = 0;
+            if (v > 100) v = 100;
+            return String.valueOf(v);
+        } catch (Throwable ignored) {
+            return raw;
+        }
     }
 
     private Ui() { }

@@ -24,6 +24,16 @@ final class Perf {
 
     static void begin() { start = SystemClock.uptimeMillis(); }
 
+    /** 每个 View 最多挂一个待触发的 OnDrawListener，防止快速切页时未绘制即重复注册或 detach 导致监听累积泄漏。 */
+    private static final java.util.WeakHashMap<View, Runnable> pending = new java.util.WeakHashMap<View, Runnable>();
+
+    private static void cancelPending(View root) {
+        Runnable prev = pending.remove(root);
+        if (prev != null) {
+            try { prev.run(); } catch (Throwable ignored) { }
+        }
+    }
+
     /**
      * 冷启动（开机后进程第一次起来）：从进程创建到主页第一次真正画出来（图标都在）用了多久。
      * 只在进程刚起来的那一次 onCreate 里有意义；进程活着时 Activity 重建不算。
@@ -33,19 +43,10 @@ final class Perf {
         final long created = SystemClock.uptimeMillis();
         if (created - proc > 60000) return;
         whenAttached(root, new Runnable() { @Override public void run() {
-        root.getViewTreeObserver().addOnDrawListener(new ViewTreeObserver.OnDrawListener() {
-            private boolean done;
-            @Override public void onDraw() {
-                if (done) return;
-                done = true;
+            attachOneShot(root, new Runnable() { @Override public void run() {
                 long now = SystemClock.uptimeMillis();
                 Log.i("VeraPerf", "home cold start: process->first draw " + (now - proc) + " ms, onCreate->first draw " + (now - created) + " ms");
-                final ViewTreeObserver.OnDrawListener self = this;
-                root.post(new Runnable() { @Override public void run() {
-                    try { root.getViewTreeObserver().removeOnDrawListener(self); } catch (Throwable ignored) { }
-                } });
-            }
-        });
+            } });
         } });
     }
 
@@ -54,7 +55,7 @@ final class Perf {
         if (v.isAttachedToWindow()) { r.run(); return; }
         v.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View x) { x.removeOnAttachStateChangeListener(this); r.run(); }
-            @Override public void onViewDetachedFromWindow(View x) { }
+            @Override public void onViewDetachedFromWindow(View x) { x.removeOnAttachStateChangeListener(this); }
         });
     }
 
@@ -63,31 +64,76 @@ final class Perf {
         if (root == null) return;
         final long built = SystemClock.uptimeMillis();
         final long from = start;
+        cancelPending(root);
         if (!root.isAttachedToWindow()) {
             // 还没挂到窗口上（Activity 刚 setContentView）：这时的 ViewTreeObserver 是临时的，挂上时不会带上 OnDrawListener
-            root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-                @Override public void onViewAttachedToWindow(View v) { v.removeOnAttachStateChangeListener(this); listen(root, what, built, from); }
-                @Override public void onViewDetachedFromWindow(View v) { }
-            });
+            final View.OnAttachStateChangeListener al = new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(View v) {
+                    v.removeOnAttachStateChangeListener(this);
+                    pending.remove(root);
+                    listen(root, what, built, from);
+                }
+                @Override public void onViewDetachedFromWindow(View v) {
+                    v.removeOnAttachStateChangeListener(this);
+                    pending.remove(root);
+                }
+            };
+            pending.put(root, new Runnable() { @Override public void run() { root.removeOnAttachStateChangeListener(al); } });
+            root.addOnAttachStateChangeListener(al);
             return;
         }
         listen(root, what, built, from);
     }
 
     private static void listen(final View root, final String what, final long built, final long from) {
-        root.getViewTreeObserver().addOnDrawListener(new ViewTreeObserver.OnDrawListener() {
-            private boolean done;
+        attachOneShot(root, new Runnable() { @Override public void run() {
+            long now = SystemClock.uptimeMillis();
+            Log.i("VeraPerf", what + ": build->draw " + (now - built) + " ms"
+                + (from > 0 && now - from < 10000 ? ", input->draw " + (now - from) + " ms" : ""));
+        } });
+    }
+
+    private static void attachOneShot(final View root, final Runnable onFirstDraw) {
+        cancelPending(root);
+        final boolean[] done = { false };
+        final ViewTreeObserver vto = root.getViewTreeObserver();
+        final View.OnAttachStateChangeListener[] detachRef = new View.OnAttachStateChangeListener[1];
+        final ViewTreeObserver.OnDrawListener dl = new ViewTreeObserver.OnDrawListener() {
             @Override public void onDraw() {
-                if (done) return;
-                done = true;
-                long now = SystemClock.uptimeMillis();
-                Log.i("VeraPerf", what + ": build->draw " + (now - built) + " ms"
-                    + (from > 0 && now - from < 10000 ? ", input->draw " + (now - from) + " ms" : ""));
+                if (done[0]) return;
+                done[0] = true;
+                pending.remove(root);
+                if (detachRef[0] != null) root.removeOnAttachStateChangeListener(detachRef[0]);
+                onFirstDraw.run();
                 final ViewTreeObserver.OnDrawListener self = this;
                 root.post(new Runnable() { @Override public void run() {
-                    try { root.getViewTreeObserver().removeOnDrawListener(self); } catch (Throwable ignored) { }
+                    try {
+                        ViewTreeObserver cur = root.getViewTreeObserver();
+                        if (cur.isAlive()) cur.removeOnDrawListener(self);
+                        if (vto != cur && vto.isAlive()) vto.removeOnDrawListener(self);
+                    } catch (Throwable ignored) { }
                 } });
             }
-        });
+        };
+        final Runnable cleanup = new Runnable() { @Override public void run() {
+            if (done[0]) return;
+            done[0] = true;
+            if (detachRef[0] != null) root.removeOnAttachStateChangeListener(detachRef[0]);
+            try {
+                ViewTreeObserver cur = root.getViewTreeObserver();
+                if (cur.isAlive()) cur.removeOnDrawListener(dl);
+                if (vto != cur && vto.isAlive()) vto.removeOnDrawListener(dl);
+            } catch (Throwable ignored) { }
+        } };
+        detachRef[0] = new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View v) { }
+            @Override public void onViewDetachedFromWindow(View v) {
+                pending.remove(root);
+                cleanup.run();
+            }
+        };
+        pending.put(root, cleanup);
+        root.addOnAttachStateChangeListener(detachRef[0]);
+        vto.addOnDrawListener(dl);
     }
 }

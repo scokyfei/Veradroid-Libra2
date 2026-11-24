@@ -1339,7 +1339,7 @@ public class HomeActivity extends Activity {
         String clock = name + "    " + Ui.clock(this);
         Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
         int[] live = Ui.liveBattery(this);
-        String batStr = live != null ? String.valueOf(live[0]) : st.get("battery");
+        String batStr = live != null ? String.valueOf(live[0]) : Ui.clampBat(st.get("battery"));
         boolean chg = live != null ? (live[1] == 1) : "1".equals(st.get("charging"));
         String lanip = st.get("lanip");
         boolean wifiConnected = "1".equals(st.get("wifi")) && lanip != null && lanip.trim().length() > 0;
