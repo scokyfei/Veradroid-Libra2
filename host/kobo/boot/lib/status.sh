@@ -10,6 +10,7 @@ status_write() {
     slp=$(sed -n 's/^SLEEP_TIMEOUT=//p' "$SYS/settings.conf" 2>/dev/null | tail -n 1)
     case "$slp" in ''|*[!0-9]*) slp=${SLEEP_TIMEOUT:-600} ;; esac
     lan=$(kobo_wifi_ip)
+    sshp=$(kobo_ssh_port)
     inv=$(sed -n 's/^KFB_INVERT=//p' "$X/settings" 2>/dev/null)
     {
         echo "battery=${bat:-0}"
@@ -21,6 +22,7 @@ status_write() {
         echo "invert=${inv:-0}"
         echo "sleep=${slp:-600}"
         echo "lanip=$lan"
+        echo "ssh=${sshp:-0}"
         lowmem && echo "lowmem=1" || echo "lowmem=0"
         echo "lowmem_setting=${LOWMEM:-auto}"
         echo "kindleui=$(kindle_ui_mode)"

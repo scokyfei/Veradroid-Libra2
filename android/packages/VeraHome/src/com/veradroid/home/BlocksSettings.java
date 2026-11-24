@@ -89,7 +89,7 @@ final class BlocksSettings {
         case BlocksHome.S_DISPLAY_ADV: return cfg + "|" + prefs.getBoolean("flashui", false) + "|" + prefs.getString("system_font_name", "") + "|" + prefs.getBoolean("system_font_all", true);
         case BlocksHome.S_CONTROLS: return cfg;
         case BlocksHome.S_POWER: return cfg + st.get("sleep") + prefs.getBoolean("clock12", false) + "|" + prefs.getInt(Cleaner.LIMIT_KEY, Cleaner.defaultLimit()) + "|" + java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR);
-        case BlocksHome.S_STORAGE: return cfg + "|" + st.get("wifi") + "|" + st.get("lanip") + "|" + Transfer.get(a).running() + "|" + prefs.getInt("xfer_idle", 30) + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
+        case BlocksHome.S_STORAGE: return cfg + "|" + st.get("wifi") + "|" + st.get("lanip") + "|" + st.get("ssh") + "|" + Transfer.get(a).running() + "|" + prefs.getInt("xfer_idle", 30) + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
         case BlocksHome.S_UI: return prefs.getString("name", "VeraDroid") + "|" + prefs.getString("quick", "") + "|" + prefs.getString("panelname", "") + "|" + Fonts.weight(a) + "|" + Blocks.caps(a) + "|" + Blocks.anim(a) + "|" + Blocks.on(a);
         case BlocksHome.S_CARDS: return prefs.getString(BlocksCards.KEY, BlocksCards.DEFAULT) + prefs.getString("blk_quick", "") + prefs.getString("wx_city", "") + prefs.getString("blk_readers", "") + a.appsVersion();
         default: return prefs.getString("name", "VeraDroid") + "|" + (System.currentTimeMillis() / 60000);
@@ -457,8 +457,10 @@ final class BlocksSettings {
             @Override public void onToggle(boolean on) { HostLink.cmd("wifi " + (on ? 1 : 0)); HostLink.cmd("status"); } })));
         add(n, Blocks.navRow(a, "Wi-Fi 网络", "切换已保存的网络，或连接附近的新网络", new View.OnClickListener() {
             @Override public void onClick(View v) { WifiActivity.open(a); } }));
-        String ipText = !wifiOn ? "未连接（Wi-Fi 已关）" : (ip == null || ip.trim().length() == 0 ? "未连接" : ip.trim());
-        add(n, Blocks.row(a, "当前 IP", "IP address", Ui.text(a, ipText, 15, false)));
+        int sshPort = HostLink.num(st, "ssh", 0);
+        String ipPart = !wifiOn ? "未连接（Wi-Fi 已关）" : (ip == null || ip.trim().length() == 0 ? "未连接" : ip.trim());
+        String sshPart = sshPort > 0 ? "SSH 运行中 (:" + sshPort + ")" : "SSH 未运行";
+        add(n, Blocks.row(a, "当前 IP / SSH", "IP address · SSH", Ui.text(a, ipPart + "  ·  " + sshPart, 14, false)));
         if (BluetoothActivity.supported()) add(n, Blocks.navRow(a, "蓝牙翻页器", "扫描、配对、连接", new View.OnClickListener() {
             @Override public void onClick(View v) { BluetoothActivity.open(a); } }));
         add(n, Blocks.row(a, "DNS", "Domain name resolver", new Blocks.Stepper(a, DNS_L, idx(DNS_V, cfg.get("DNS_MODE"), 0), new Blocks.Stepper.Listener() {

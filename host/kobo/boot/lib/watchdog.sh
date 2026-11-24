@@ -145,6 +145,21 @@ do_restart() {
     sh $VD/boot/veradroid.sh </dev/null >/dev/null 2>&1 &
     exit 0
 }
+do_reboot() {
+    t "device reboot requested"; touch "$W/restarting"
+    log_release; sh "$VD/boot/stop.sh" >/dev/null 2>&1
+    sync
+    /sbin/reboot 2>/dev/null || reboot
+    exit 0
+}
+do_poweroff() {
+    t "device poweroff requested"; touch "$W/restarting"
+    log_release; sh "$VD/boot/stop.sh" >/dev/null 2>&1
+    kobo_light_set 0 2>/dev/null || true
+    sync
+    /sbin/poweroff 2>/dev/null || poweroff
+    exit 0
+}
 
 # /tmp tmpfs 日志限额：显示桥每刷一次写一行，超过上限就留后一半
 log_cap() {   # log_cap <文件> <字节>

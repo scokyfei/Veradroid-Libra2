@@ -269,6 +269,20 @@ final class BlocksPanel {
         }), kp);
         body.addView(go, Blocks.gap(ctx, 12));
 
+        // 重启机器 | 关机：点两次确认，防误触
+        LinearLayout pwr = new LinearLayout(ctx);
+        rebootBtn = Blocks.button(ctx, "重启机器", false, new View.OnClickListener() {
+            @Override public void onClick(View v) { onPowerAction(true); }
+        });
+        pwr.addView(rebootBtn, Blocks.weight(1));
+        LinearLayout.LayoutParams pp = Blocks.weight(1);
+        pp.leftMargin = dp(8);
+        powerBtn = Blocks.button(ctx, "关机", false, new View.OnClickListener() {
+            @Override public void onClick(View v) { onPowerAction(false); }
+        });
+        pwr.addView(powerBtn, pp);
+        body.addView(pwr, Blocks.gap(ctx, 8));
+
         // 通知：有才显示
         notesBox = group("通知");
         notesHead = (TextView) notesBox.getChildAt(0);
@@ -281,8 +295,45 @@ final class BlocksPanel {
     }
 
     private LinearLayout optBar, optCard, appBar;
-    private TextView appHint;
+    private TextView appHint, rebootBtn, powerBtn;
+    private int powerArmed = 0;   // 0 = 未确认，1 = 待确认重启，2 = 待确认关机
     private String appPkg;
+
+    private final Runnable disarmPower = new Runnable() { @Override public void run() { resetPowerConfirm(); } };
+
+    private void resetPowerConfirm() {
+        handler.removeCallbacks(disarmPower);
+        powerArmed = 0;
+        if (rebootBtn != null) {
+            rebootBtn.setText("重启机器");
+            rebootBtn.setTextColor(Color.BLACK);
+            rebootBtn.setBackground(Blocks.plain(ctx));
+        }
+        if (powerBtn != null) {
+            powerBtn.setText("关机");
+            powerBtn.setTextColor(Color.BLACK);
+            powerBtn.setBackground(Blocks.plain(ctx));
+        }
+    }
+
+    private void onPowerAction(boolean reboot) {
+        int want = reboot ? 1 : 2;
+        if (powerArmed != want) {
+            resetPowerConfirm();
+            powerArmed = want;
+            TextView b = reboot ? rebootBtn : powerBtn;
+            if (b != null) {
+                b.setText(reboot ? "再点一次重启" : "再点一次关机");
+                b.setTextColor(Color.WHITE);
+                b.setBackground(Blocks.plainFilled(ctx));
+            }
+            handler.postDelayed(disarmPower, 4000);
+            return;
+        }
+        resetPowerConfirm();
+        HostLink.cmd(reboot ? "reboot" : "poweroff");
+        finish();
+    }
 
     /** 面板底下那个应用（HostService 记的“按哪个应用算显示设置”）；桌面在前台 = null */
     private void syncApp() {
@@ -533,6 +584,7 @@ final class BlocksPanel {
         if (!showing) return;
         showing = false;
         handler.removeCallbacks(recheck);
+        resetPowerConfirm();
         if (battReceiverOn) { try { ctx.unregisterReceiver(battReceiver); } catch (Throwable ignored) { } battReceiverOn = false; }
         HostLink.epdHint(Panel.PANEL_HINT_MS, Panel.PANEL_HINT_PCT);
         root.setVisibility(View.GONE);

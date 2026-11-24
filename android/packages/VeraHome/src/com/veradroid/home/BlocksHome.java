@@ -130,11 +130,13 @@ final class BlocksHome {
             int vis = c == v ? View.VISIBLE : View.GONE;
             if (c.getVisibility() != vis) c.setVisibility(vis);
         }
+        int prevCur = cur;
         cur = key;
         a.blocksWall(key);
         nav.setActive(key == S_LIBRARY ? HOME : key >= 10 ? ME : key);
         if (key == HOME) { tickClock(); BlocksCards.maybeFetchWeather(a, new BlocksCards.Changed() { @Override public void changed() { if (cur == HOME) { dataChanged(); a.changed(); } } }); }
         if (key == ME) refreshMe();
+        if (key == S_STORAGE && prevCur != S_STORAGE) HostLink.cmd("status");
         if (key == catKey(HomeActivity.CAT_XFER_)) a.updateTransferInfo();
     }
 

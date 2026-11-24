@@ -99,6 +99,21 @@ kobo_wifi_enabled() {
     esac
 }
 
+# Report active SSH server listening port (e.g. 2222 for KOReader dropbear, 22 for sshd), or 0 if not running.
+kobo_ssh_port() {
+    if pidof dropbear >/dev/null 2>&1 || pidof sshd >/dev/null 2>&1; then
+        if awk 'NR>1 && $4=="0A" && $2 ~ /:08AE$/ { found=1; exit } END { exit !found }' /proc/net/tcp 2>/dev/null; then
+            echo 2222; return 0
+        fi
+        if awk 'NR>1 && $4=="0A" && $2 ~ /:0016$/ { found=1; exit } END { exit !found }' /proc/net/tcp 2>/dev/null; then
+            echo 22; return 0
+        fi
+        p=$(netstat -tln 2>/dev/null | awk '$6=="LISTEN" && $4 ~ /:[0-9]+$/ { sub(/.*:/, "", $4); if ($4==2222 || $4==22) { print $4; exit } }')
+        [ -n "$p" ] && { echo "$p"; return 0; }
+    fi
+    echo 0
+}
+
 kobo_wifi_set() { # $1 = 0|1
     wdir=/drivers/mx6sll-ntx/wifi
     if [ "$1" = 0 ]; then
