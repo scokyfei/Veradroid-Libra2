@@ -94,7 +94,7 @@ final class Panel {
 
     private final Handler handler = new Handler();
     private LinearLayout root, notes;
-    private TextView clock, info, title, contrastValue, xferLine, cleanLabel, rebootLabel, offLabel;
+    private TextView clock, info, title, contrastValue, xferLine, cleanLabel, restartLabel, rebootLabel, offLabel;
     private View backBtn, bellBtn;
     private LevelBar light, warm;
     private View lightRow, warmRow, sleepRow;
@@ -130,7 +130,7 @@ final class Panel {
     private int animOn = 0;          // 宿主的 KFB_ANIM_MODE：0 = 关，1–5 = 开（跟随手势 / 左右上下滑）
     private int animLast = 1;        // 上次打开时用的模式，重新打开时恢复它（不再一律改成 1）
     private String seenStatus = null;  // 上次画面板时 status + settings 的原文：没变就不再画一遍（墨水屏）
-    private boolean offArmed, rebootArmed;
+    private int powerArmed;   // 0 = 未确认，1 = 重启安卓，2 = 重启机器，3 = 关机
 
     private static final String[] CONTRAST = { "1.0", "1.3", "1.6", "1.9", "2.2" };
     private static final String[] MODE_V = { "0", "1", "2" };
@@ -251,6 +251,7 @@ final class Panel {
         if (!showing) return;
         showing = false;
         handler.removeCallbacks(recheck);
+        resetPowerBtns();
         if (battReceiverOn) { try { ctx.unregisterReceiver(battReceiver); } catch (Throwable ignored) { } battReceiverOn = false; }
         HostLink.epdHint(PANEL_HINT_MS, PANEL_HINT_PCT);
         frame.setVisibility(View.GONE);
@@ -428,6 +429,48 @@ final class Panel {
         return t;
     }
 
+    private void stylePowerBtn(TextView t, String label, boolean filled) {
+        if (t == null) return;
+        t.setText(label);
+        t.setTextColor(filled ? Color.WHITE : Color.BLACK);
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(filled ? Color.BLACK : Color.WHITE);
+        g.setStroke(2, Color.BLACK);
+        g.setCornerRadius(dp(6));
+        t.setBackground(g);
+    }
+
+    private void resetPowerBtns() {
+        powerArmed = 0;
+        stylePowerBtn(restartLabel, "重启安卓", true);
+        stylePowerBtn(rebootLabel, "重启机器", true);
+        stylePowerBtn(offLabel, "关机", true);
+    }
+
+    private TextView powerButton(final String label, final int want) {
+        TextView t = Ui.text(ctx, label, 16, true);
+        t.setGravity(Gravity.CENTER);
+        t.setSingleLine(true);
+        t.setPadding(dp(4), dp(11), dp(4), dp(11));
+        stylePowerBtn(t, label, true);
+        t.setClickable(true);
+        t.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                if (powerArmed != want) {
+                    resetPowerBtns();
+                    powerArmed = want;
+                    stylePowerBtn((TextView) v, "再点确认", false);
+                    return;
+                }
+                resetPowerBtns();
+                HostLink.cmd(want == 1 ? "restart" : (want == 2 ? "reboot" : "poweroff"));
+                finish();
+            }
+        });
+        Ui.fast(t);
+        return t;
+    }
+
     private void addCell(LinearLayout r, View v) {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         if (r.getChildCount() > 0) lp.leftMargin = dp(8);
@@ -464,10 +507,7 @@ final class Panel {
         if (fresh) { seenStatus = null; readStatus(); }   // 新搭的控件按当前状态填一次
         if (idx == P_DISPLAY) readLocal();
         if (idx == P_NOTES) loadNotes();
-        if (idx == P_MORE) {
-            if (offArmed) { offArmed = false; offLabel.setText("关机"); }
-            if (rebootArmed) { rebootArmed = false; rebootLabel.setText("重启机器"); }
-        }
+        if (idx == P_MORE && powerArmed != 0) resetPowerBtns();
     }
 
     private void buildMain(LinearLayout p) {
@@ -722,31 +762,11 @@ final class Panel {
         addCell(go2, bigButton("回 Kobo", new View.OnClickListener() { @Override public void onClick(View v) { HostLink.cmd("exit"); finish(); } }));
         p.addView(go2);
         LinearLayout goPwr = row();
-        rebootLabel = (TextView) bigButton("重启机器", new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                if (!rebootArmed) {
-                    rebootArmed = true; rebootLabel.setText("再点一次重启");
-                    if (offArmed) { offArmed = false; offLabel.setText("关机"); }
-                    return;
-                }
-                rebootArmed = false; rebootLabel.setText("重启机器");
-                HostLink.cmd("reboot");
-                finish();
-            }
-        });
+        restartLabel = powerButton("重启安卓", 1);
+        rebootLabel = powerButton("重启机器", 2);
+        offLabel = powerButton("关机", 3);
+        addCell(goPwr, restartLabel);
         addCell(goPwr, rebootLabel);
-        offLabel = (TextView) bigButton("关机", new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                if (!offArmed) {
-                    offArmed = true; offLabel.setText("再点一次关机");
-                    if (rebootArmed) { rebootArmed = false; rebootLabel.setText("重启机器"); }
-                    return;
-                }
-                offArmed = false; offLabel.setText("关机");
-                HostLink.cmd("poweroff");
-                finish();
-            }
-        });
         addCell(goPwr, offLabel);
         p.addView(goPwr);
         // 优化机器状态（和方块面板同一套：清后台 → 提速 → 省电）；结果写在按钮上

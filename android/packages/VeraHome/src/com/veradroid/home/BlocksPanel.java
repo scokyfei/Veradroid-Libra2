@@ -269,17 +269,29 @@ final class BlocksPanel {
         }), kp);
         body.addView(go, Blocks.gap(ctx, 12));
 
-        // 重启机器 | 关机：点两次确认，防误触
+        // 重启安卓 | 重启机器 | 关机：黑底白字强调，点两次确认防误触
         LinearLayout pwr = new LinearLayout(ctx);
-        rebootBtn = Blocks.button(ctx, "重启机器", false, new View.OnClickListener() {
-            @Override public void onClick(View v) { onPowerAction(true); }
+        restartBtn = Blocks.button(ctx, "重启安卓", true, new View.OnClickListener() {
+            @Override public void onClick(View v) { onPowerAction(1); }
         });
-        pwr.addView(rebootBtn, Blocks.weight(1));
+        restartBtn.setSingleLine(true);
+        restartBtn.setPadding(dp(6), dp(8), dp(6), dp(8));
+        pwr.addView(restartBtn, Blocks.weight(1));
+        LinearLayout.LayoutParams rp = Blocks.weight(1);
+        rp.leftMargin = dp(8);
+        rebootBtn = Blocks.button(ctx, "重启机器", true, new View.OnClickListener() {
+            @Override public void onClick(View v) { onPowerAction(2); }
+        });
+        rebootBtn.setSingleLine(true);
+        rebootBtn.setPadding(dp(6), dp(8), dp(6), dp(8));
+        pwr.addView(rebootBtn, rp);
         LinearLayout.LayoutParams pp = Blocks.weight(1);
         pp.leftMargin = dp(8);
-        powerBtn = Blocks.button(ctx, "关机", false, new View.OnClickListener() {
-            @Override public void onClick(View v) { onPowerAction(false); }
+        powerBtn = Blocks.button(ctx, "关机", true, new View.OnClickListener() {
+            @Override public void onClick(View v) { onPowerAction(3); }
         });
+        powerBtn.setSingleLine(true);
+        powerBtn.setPadding(dp(6), dp(8), dp(6), dp(8));
         pwr.addView(powerBtn, pp);
         body.addView(pwr, Blocks.gap(ctx, 8));
 
@@ -295,8 +307,8 @@ final class BlocksPanel {
     }
 
     private LinearLayout optBar, optCard, appBar;
-    private TextView appHint, rebootBtn, powerBtn;
-    private int powerArmed = 0;   // 0 = 未确认，1 = 待确认重启，2 = 待确认关机
+    private TextView appHint, restartBtn, rebootBtn, powerBtn;
+    private int powerArmed = 0;   // 0 = 未确认，1 = 待确认重启安卓，2 = 待确认重启机器，3 = 待确认关机
     private String appPkg;
 
     private final Runnable disarmPower = new Runnable() { @Override public void run() { resetPowerConfirm(); } };
@@ -304,34 +316,38 @@ final class BlocksPanel {
     private void resetPowerConfirm() {
         handler.removeCallbacks(disarmPower);
         powerArmed = 0;
+        if (restartBtn != null) {
+            restartBtn.setText("重启安卓");
+            restartBtn.setTextColor(Color.WHITE);
+            restartBtn.setBackground(Blocks.plainFilled(ctx));
+        }
         if (rebootBtn != null) {
             rebootBtn.setText("重启机器");
-            rebootBtn.setTextColor(Color.BLACK);
-            rebootBtn.setBackground(Blocks.plain(ctx));
+            rebootBtn.setTextColor(Color.WHITE);
+            rebootBtn.setBackground(Blocks.plainFilled(ctx));
         }
         if (powerBtn != null) {
             powerBtn.setText("关机");
-            powerBtn.setTextColor(Color.BLACK);
-            powerBtn.setBackground(Blocks.plain(ctx));
+            powerBtn.setTextColor(Color.WHITE);
+            powerBtn.setBackground(Blocks.plainFilled(ctx));
         }
     }
 
-    private void onPowerAction(boolean reboot) {
-        int want = reboot ? 1 : 2;
+    private void onPowerAction(int want) {
         if (powerArmed != want) {
             resetPowerConfirm();
             powerArmed = want;
-            TextView b = reboot ? rebootBtn : powerBtn;
+            TextView b = want == 1 ? restartBtn : (want == 2 ? rebootBtn : powerBtn);
             if (b != null) {
-                b.setText(reboot ? "再点一次重启" : "再点一次关机");
-                b.setTextColor(Color.WHITE);
-                b.setBackground(Blocks.plainFilled(ctx));
+                b.setText("再点确认");
+                b.setTextColor(Color.BLACK);
+                b.setBackground(Blocks.plain(ctx));
             }
             handler.postDelayed(disarmPower, 4000);
             return;
         }
         resetPowerConfirm();
-        HostLink.cmd(reboot ? "reboot" : "poweroff");
+        HostLink.cmd(want == 1 ? "restart" : (want == 2 ? "reboot" : "poweroff"));
         finish();
     }
 
