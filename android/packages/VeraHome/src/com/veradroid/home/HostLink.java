@@ -110,10 +110,16 @@ final class HostLink {
 
     /**
      * 宿主的状态文件和显示设置文件（status / settings）：搭一页时、预搭时、签名里一再读同一个文件（开机时一秒里几十次）。
-     * 一秒半之内、文件的修改时间和大小都没变就用刚读过的那份（给调用方一份拷贝）。别的文件每次都读。
+     * 一秒半之内、文件的修改时间、大小与 inode 都没变就用刚读过的那份（给调用方一份拷贝）。
+     * 结合 inode 校验可避免同秒等长原子替换（tmp -> mv，如反色 0->1、亮度 12->24）命中旧缓存。
      */
-    private static final class Kv { long at, mtime, len; Map<String, String> m; }
+    private static final class Kv { long at, mtime, len, ino; Map<String, String> m; }
     private static final Map<String, Kv> KV_CACHE = new HashMap<String, Kv>();
+
+    static long inode(String path) {
+        try { return android.system.Os.stat(path).st_ino; }
+        catch (Throwable ignored) { return -1L; }
+    }
 
     /** ctl/status 叠加 Android 实时电量 / 充电广播（healthd，宿主每分钟 bat_poke_tick 刷新）。 */
     static Map<String, String> status(android.content.Context c) {
@@ -135,14 +141,16 @@ final class HostLink {
         boolean hot = path.equals(CTL + "status") || path.equals(KFB + "settings");
         if (!hot) return kv0(path);
         java.io.File f = new java.io.File(path);
-        long now = android.os.SystemClock.uptimeMillis(), mt = f.lastModified(), len = f.length();
+        long now = android.os.SystemClock.uptimeMillis(), mt = f.lastModified(), len = f.length(), ino = inode(path);
         synchronized (KV_CACHE) {
             Kv k = KV_CACHE.get(path);
-            if (k != null && now - k.at < 1500 && k.mtime == mt && k.len == len) return new HashMap<String, String>(k.m);
+            if (k != null && now - k.at < 1500 && k.mtime == mt && k.len == len && ino >= 0 && k.ino == ino) {
+                return new HashMap<String, String>(k.m);
+            }
         }
         Map<String, String> m = kv0(path);
         Kv k = new Kv();
-        k.at = now; k.mtime = mt; k.len = len; k.m = new HashMap<String, String>(m);
+        k.at = now; k.mtime = mt; k.len = len; k.ino = ino; k.m = new HashMap<String, String>(m);
         synchronized (KV_CACHE) { KV_CACHE.put(path, k); }
         return m;
     }

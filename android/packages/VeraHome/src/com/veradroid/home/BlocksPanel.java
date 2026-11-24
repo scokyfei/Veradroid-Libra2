@@ -621,9 +621,10 @@ final class BlocksPanel {
     /** 只读状态 / 设置文件；两个文件都没改过就什么也不做。 */
     private void readStatus() {
         java.io.File f1 = new java.io.File(HostLink.CTL + "status"), f2 = new java.io.File(HostLink.KFB + "settings");
+        long ino1 = HostLink.inode(HostLink.CTL + "status"), ino2 = HostLink.inode(HostLink.KFB + "settings");
         int[] live = Ui.liveBattery(ctx);
         long batStamp = live != null ? (live[0] * 13L + live[1] * 3L) : -1L;
-        long stamp = f1.lastModified() * 31 + f1.length() * 7 + f2.lastModified() * 17 + f2.length() + System.currentTimeMillis() / 60000L + batStamp * 97L;
+        long stamp = f1.lastModified() * 31 + f1.length() * 7 + ino1 * 131 + f2.lastModified() * 17 + f2.length() + ino2 * 53 + System.currentTimeMillis() / 60000L + batStamp * 97L;
         if (stamp == seenStamp && seen != null) return;
         seenStamp = stamp;
         Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
