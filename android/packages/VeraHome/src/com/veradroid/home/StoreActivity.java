@@ -35,11 +35,13 @@ public class StoreActivity extends Activity {
     private static int cat;                     // 上次看的那一栏（重新打开商店还在那一栏）
     private static int tagIdx = 0;              // 官方推荐下的功能分类筛选（0 = 全部）
     private final int[] counts = { -1, -1 };
+    private final int[] tagCounts = { -1, -1, -1, -1, -1, -1, -1 };
     private String query = "";
     private int batch = 1, batches = 1;
     private LinearLayout tabs, tagBar;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final List<App> apps = new ArrayList<App>();
+    private final java.util.Map<App, android.widget.FrameLayout> iconBoxes = new java.util.IdentityHashMap<App, android.widget.FrameLayout>();
     private volatile java.util.Map<String, Integer> installedVersions = java.util.Collections.emptyMap();
     private LinearLayout list;
     private TextView status;
@@ -47,7 +49,7 @@ public class StoreActivity extends Activity {
     //  - 以前下载线程只往开着的那个界面上写字：用户离开商店（或界面被系统重建）以后，进度和失败原因谁也看不到；
     //  - 再点一次“安装”会再起一条线程，两条线程往同一个文件里写，SHA-256 必然失败；
     //  - 127 MB 要下好几分钟，Kobo 10 分钟没碰就进屏保，宿主在屏保时冻结 Android，下载就断在那里。
-    private static volatile String jobPkg;      // 正在处理的包名，null = 没有
+    private static final java.util.concurrent.atomic.AtomicReference<String> jobPkg = new java.util.concurrent.atomic.AtomicReference<String>(null); // 正在处理的包名，null = 没有
     private static volatile String jobMsg;      // 当前进度 / 最近一次的结果（重新打开商店时显示）
     private static StoreActivity live;          // 正在前台的商店界面（进度写到它上面），只在主线程读写
     // 下载镜像（服务器 /api/store/apps 的 "mirrors"；没有这一项时用 Dl.DEF_MIRRORS，[] = 不用镜像）
@@ -121,20 +123,11 @@ public class StoreActivity extends Activity {
         load();
     }
 
-    /** 官方推荐下的 6 大功能分类（2 行紧凑排布，墨水屏无需横向滚动，点击 0ms 本地筛选）。 */
+    /** 官方推荐下的 6 大功能分类（2 行紧凑排布，墨水屏无需横向滚动，切分类走服务端按分类分页）。 */
     private void tagBarRender() {
         tagBar.removeAllViews();
         if (cat != 0) { tagBar.setVisibility(View.GONE); return; }
         tagBar.setVisibility(View.VISIBLE);
-        int[] tagCnt = new int[TAGS.length];
-        if (!apps.isEmpty()) {
-            tagCnt[0] = apps.size();
-            for (App a : apps) {
-                for (int k = 1; k < TAGS.length; k++) {
-                    if (TAGS[k].equals(a.tag)) { tagCnt[k]++; break; }
-                }
-            }
-        }
         int[][] rows = { { 0, 1, 2, 3 }, { 4, 5, 6 } };
         for (int r = 0; r < rows.length; r++) {
             LinearLayout row = new LinearLayout(this);
@@ -142,13 +135,15 @@ public class StoreActivity extends Activity {
             if (r > 0) row.setPadding(0, dp(4), 0, 0);
             for (int c = 0; c < rows[r].length; c++) {
                 final int idx = rows[r][c];
-                String label = !apps.isEmpty() ? TAG_L[idx] + " " + tagCnt[idx] : TAG_L[idx];
+                int tc = tagCounts[idx];
+                String label = tc >= 0 ? TAG_L[idx] + " " + tc : TAG_L[idx];
                 android.widget.Button b = Ui.button(this, label, 13, idx == tagIdx, new View.OnClickListener() {
                     @Override public void onClick(View v) {
                         if (tagIdx == idx) return;
                         tagIdx = idx;
+                        batch = 1;
                         tagBarRender();
-                        render();
+                        load();
                     }
                 });
                 b.setSingleLine(true);
@@ -205,22 +200,36 @@ public class StoreActivity extends Activity {
 
     private void load() {
         final String t = token();
-        final int myCat = cat, myBatch = batch;
+        final int myCat = cat, myTag = tagIdx, myBatch = batch;
+        final String reqTag = (myCat == 0 && myTag > 0 && myTag < TAGS.length) ? TAGS[myTag] : "";
         final String q = query;
         status.setText("正在同步…");
         list.removeAllViews();
+        iconBoxes.clear();
         new Thread(new Runnable() {
             @Override public void run() {
                 String err = null;
                 final List<App> got = new ArrayList<App>();
                 final int[] cnt = { -1, -1, 1 };
+                final int[] tcnt = { -1, -1, -1, -1, -1, -1, -1 };
                 try {
-                    JSONObject j = get(StoreNet.base() + "/api/store/apps?category=" + CATS[myCat] + "&page=" + myBatch + "&per=100&q=" + enc(q)
-                        + "&device_id=" + enc(Update.deviceId(StoreActivity.this)) + "&token=" + enc(t));
+                    String url = StoreNet.base() + "/api/store/apps?category=" + CATS[myCat] + "&page=" + myBatch + "&per=50&q=" + enc(q)
+                        + (reqTag.length() > 0 ? "&tag=" + enc(reqTag) : "")
+                        + "&device_id=" + enc(Update.deviceId(StoreActivity.this)) + "&token=" + enc(t);
+                    JSONObject j = get(url);
                     JSONArray cs = j.optJSONArray("categories");
                     if (cs != null) for (int i = 0; i < cs.length(); i++) {
                         JSONObject c = cs.getJSONObject(i);
                         for (int k = 0; k < CATS.length; k++) if (CATS[k].equals(c.optString("id"))) cnt[k] = c.optInt("count", -1);
+                    }
+                    JSONObject tc = j.optJSONObject("tag_counts");
+                    if (tc != null) {
+                        int sum = 0;
+                        for (int k = 1; k < TAGS.length; k++) {
+                            tcnt[k] = tc.optInt(TAGS[k], 0);
+                            sum += tcnt[k];
+                        }
+                        tcnt[0] = cnt[0] >= 0 ? cnt[0] : sum;
                     }
                     cnt[2] = Math.max(1, j.optInt("pages", 1));
                     JSONArray ms = j.optJSONArray("mirrors");
@@ -250,13 +259,19 @@ public class StoreActivity extends Activity {
                 final java.util.Map<String, Integer> instMap = err == null ? snapshotInstalled(getApplicationContext()) : null;
                 final String fe = err;
                 ui.post(new Runnable() { @Override public void run() {
-                    if (isFinishing() || myCat != cat || myBatch != batch || !q.equals(query)) return;   // 用户已经换了一栏
+                    if (isFinishing() || myCat != cat || myTag != tagIdx || myBatch != batch || !q.equals(query)) return;   // 用户已经换了一栏
                     if (fe != null) { showError(fe); return; }
                     if (instMap != null) installedVersions = instMap;
                     apps.clear(); apps.addAll(got);
                     batches = cnt[2];
                     if (cnt[0] != counts[0] || cnt[1] != counts[1]) { counts[0] = cnt[0]; counts[1] = cnt[1]; tabsRender(); }
-                    tagBarRender();
+                    boolean tcChanged = false;
+                    if (tcnt[0] >= 0) {
+                        for (int k = 0; k < tagCounts.length; k++) {
+                            if (tagCounts[k] != tcnt[k]) { tagCounts[k] = tcnt[k]; tcChanged = true; }
+                        }
+                    }
+                    if (tcChanged) tagBarRender();
                     render();
                     icons(got);
                 } });
@@ -264,19 +279,43 @@ public class StoreActivity extends Activity {
         }, "StoreSync").start();
     }
 
-    /** 没装的应用：图标从商店取（缓存在本机），全部取完后只重画一次。 */
+    /** 没装的应用：图标从商店取（缓存在本机），原地更新对应 ImageView 不再重建整页视图。 */
     private void icons(final List<App> shown) {
         new Thread(new Runnable() { @Override public void run() {
-            boolean any = false;
+            Ui.lowPriority();
+            final List<App> updated = new ArrayList<App>();
             for (App a : shown) {
+                if (isFinishing()) return;
                 if (a.icon != null || a.iconUrl.length() == 0) continue;
                 android.graphics.Bitmap bm = StoreNet.image(a.iconUrl, "icon-" + (a.sha.length() >= 16 ? a.sha.substring(0, 16) : String.valueOf(a.id)));
-                if (bm != null) { a.icon = new android.graphics.drawable.BitmapDrawable(getResources(), bm); any = true; }
+                if (bm != null) {
+                    a.icon = new android.graphics.drawable.BitmapDrawable(getResources(), bm);
+                    updated.add(a);
+                }
             }
-            if (any) ui.post(new Runnable() { @Override public void run() {
-                if (!isFinishing() && apps.size() == shown.size() && (apps.isEmpty() || apps.get(0) == shown.get(0))) render();
+            if (!updated.isEmpty()) ui.post(new Runnable() { @Override public void run() {
+                if (isFinishing()) return;
+                for (App a : updated) {
+                    android.widget.FrameLayout ib = iconBoxes.get(a);
+                    if (ib != null && a.icon != null) bindIcon(ib, a);
+                }
             } });
         } }, "StoreIcons").start();
+    }
+
+    private void bindIcon(android.widget.FrameLayout ib, App a) {
+        ib.removeAllViews();
+        if (a.icon != null) {
+            android.widget.ImageView iv = new android.widget.ImageView(this);
+            iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            iv.setImageDrawable(a.icon);
+            ib.addView(iv, new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        } else {
+            String n0 = a.name.trim();
+            TextView l = Ui.text(this, n0.length() == 0 ? "?" : n0.substring(0, Character.charCount(n0.codePointAt(0))).toUpperCase(java.util.Locale.ROOT), 24, true);
+            l.setGravity(Gravity.CENTER);
+            ib.addView(l, new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
     }
 
     /** 应用的完整说明、上传者、校验值；用户上传的还写明怎么举报。 */
@@ -306,6 +345,7 @@ public class StoreActivity extends Activity {
               + (cat == 1 ? " · 都经过人工审核" : " · 阅读类已置顶"));
         if (jobMsg != null) status.setText(jobMsg);   // 正在下载 / 安装，或者上一次的结果（包括失败原因）
         list.removeAllViews();
+        iconBoxes.clear();
         int box = dp(56), btnW = dp(104);
         for (final App a : shown) {
             LinearLayout card = new LinearLayout(this);
@@ -317,17 +357,8 @@ public class StoreActivity extends Activity {
             ib.setBackground(Blocks.plain(this));
             int st = Blocks.stroke(this);
             ib.setPadding(st + dp(4), st + dp(4), st + dp(4), st + dp(4));
-            if (a.icon != null) {
-                android.widget.ImageView iv = new android.widget.ImageView(this);
-                iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
-                iv.setImageDrawable(a.icon);
-                ib.addView(iv, new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            } else {
-                String n0 = a.name.trim();
-                TextView l = Ui.text(this, n0.length() == 0 ? "?" : n0.substring(0, Character.charCount(n0.codePointAt(0))).toUpperCase(java.util.Locale.ROOT), 24, true);
-                l.setGravity(Gravity.CENTER);
-                ib.addView(l, new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            }
+            bindIcon(ib, a);
+            iconBoxes.put(a, ib);
             card.addView(ib, new LinearLayout.LayoutParams(box, box));
             LinearLayout col = new LinearLayout(this);
             col.setOrientation(LinearLayout.VERTICAL);
@@ -424,13 +455,12 @@ public class StoreActivity extends Activity {
     }
 
     private void install(final App a) {
-        if (jobPkg != null) {
+        if (!jobPkg.compareAndSet(null, a.pkg)) {
             String m = "正在处理另一个应用，等它下载 / 安装完再点" + (jobMsg != null ? "：" + jobMsg : "");
             status.setText(m); VeraToast.show(this, "上一个还没装完");
             return;
         }
         final String t = token();
-        jobPkg = a.pkg;
         say("正在下载 " + a.name + " …");
         final Context app = getApplicationContext();
         new Thread(new Runnable() {
@@ -438,7 +468,7 @@ public class StoreActivity extends Activity {
                 Thread awake = StoreNet.keepAwake();
                 try { job(a, t, app); }
                 catch (Throwable e) { jobDone("安装失败：" + reason(e), false); }   // 任何意外（OOM 之类）都要说出来，不能让线程悄悄死掉
-                finally { awake.interrupt(); jobPkg = null; }
+                finally { awake.interrupt(); jobPkg.set(null); }
             }
         }, "StoreDownload").start();
     }
@@ -604,6 +634,11 @@ public class StoreActivity extends Activity {
 
     @Override protected void onDestroy() {
         if (live == this) live = null;
+        iconBoxes.clear();
+        for (App a : apps) a.icon = null;
+        apps.clear();
+        if (list != null) list.removeAllViews();
+        if (jobPkg.get() == null) jobMsg = null;
         super.onDestroy();
     }
 

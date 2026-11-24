@@ -64,7 +64,16 @@ final class StoreNet {
                     byte[] b = new byte[16384]; int n;
                     while ((n = in.read(b)) > 0) { bo.write(b, 0, n); if (bo.size() > (2 << 20)) { in.close(); return null; } }
                     in.close();
-                    Dl.write(f, bo.toByteArray());
+                    File tmp = new File(f.getParentFile(), key + ".tmp." + Thread.currentThread().getId());
+                    try {
+                        Dl.write(tmp, bo.toByteArray());
+                        if (!tmp.renameTo(f)) {
+                            Dl.write(f, bo.toByteArray());
+                            tmp.delete();
+                        }
+                    } finally {
+                        if (tmp.exists()) tmp.delete();
+                    }
                 } finally { h.disconnect(); }
             }
             android.graphics.Bitmap bm = android.graphics.BitmapFactory.decodeFile(f.getPath());

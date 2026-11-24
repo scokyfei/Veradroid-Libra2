@@ -79,7 +79,7 @@ wifi_ps_tick() {
     now_s=$(date +%s 2>/dev/null || echo 0)
     last_s=$(stat -c %Y "$W/lastinput" 2>/dev/null || echo 0)
     idle_s=$((now_s - last_s))
-    if [ "$delta" -gt 65536 ] || { [ "$last_s" -gt 0 ] && [ "$idle_s" -lt 15 ]; }; then
+    if [ -f "$W/fwd.id" ] || alive "$W/installing" || [ "$delta" -gt 65536 ] || { [ "$last_s" -gt 0 ] && [ "$idle_s" -lt 15 ]; }; then
         wifi_ps_off
     else
         [ -f "$W/wifi.ps" ] && rm -f "$W/wifi.ps" && wifi_ps_set lps && t "wifi: idle (${idle_s}s) -> LPS=2 (ips=0)"

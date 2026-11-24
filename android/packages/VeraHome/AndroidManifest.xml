@@ -104,12 +104,14 @@
         <activity
             android:name=".StoreActivity"
             android:theme="@android:style/Theme.Holo.Light.NoActionBar"
+            android:launchMode="singleTop"
             android:excludeFromRecents="true"
             android:screenOrientation="nosensor"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize" />
         <activity
             android:name=".FontStoreActivity"
             android:theme="@android:style/Theme.Holo.Light.NoActionBar"
+            android:launchMode="singleTop"
             android:excludeFromRecents="true"
             android:screenOrientation="nosensor"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize" />

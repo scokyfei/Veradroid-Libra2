@@ -51,7 +51,7 @@ public class FontStoreActivity extends Activity {
     private String query = "";
     private int batch = 1, batches = 1, total = -1;
     private static volatile List<String> mirrors = java.util.Arrays.asList(Dl.DEF_MIRRORS);
-    private static volatile String jobFile;     // 正在下载的字体文件名，null = 没有
+    private static final java.util.concurrent.atomic.AtomicReference<String> jobFile = new java.util.concurrent.atomic.AtomicReference<String>(null); // 正在下载的字体文件名，null = 没有
     private static volatile String jobMsg;
     private static FontStoreActivity live;
 
@@ -116,7 +116,7 @@ public class FontStoreActivity extends Activity {
             android.widget.Button b = Ui.button(this, l[i], 15, i == tab, new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     if (idx == tab) return;
-                    if (jobFile == null) jobMsg = null;      // 上一次下载的结果看过了
+                    if (jobFile.get() == null) jobMsg = null;      // 上一次下载的结果看过了
                     tab = idx; batch = 1; tabsRender(); load();
                 }
             });
@@ -310,7 +310,7 @@ public class FontStoreActivity extends Activity {
             col.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { detail(it); } });
             Ui.fast(col);
             card.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-            String label = it.local != null ? "使用" : (it.file.equals(jobFile) ? "下载中" : "下载");
+            String label = it.local != null ? "使用" : (it.file.equals(jobFile.get()) ? "下载中" : "下载");
             View.OnClickListener act = new View.OnClickListener() { @Override public void onClick(View v) { if (it.local != null) detail(it); else download(it); } };
             View btn = Blocks.on(this) ? Blocks.button(this, label, it.local == null, act) : Ui.button(this, label, 15, it.local == null, act);
             if (btn instanceof TextView) { ((TextView) btn).setSingleLine(true); ((TextView) btn).setGravity(Gravity.CENTER); }
@@ -411,14 +411,14 @@ public class FontStoreActivity extends Activity {
     private void useSystem(Item it) {
         Fonts.setSystem(this, it.local.getAbsolutePath(), it.name);
         VeraToast.show(this, "系统字体已设为 " + it.name);
-        if (jobFile == null) jobMsg = null;
+        if (jobFile.get() == null) jobMsg = null;
         tabsRender(); render();      // 列表用新字体重画一次（标题等下次打开再换）
     }
 
     private void useReader(Item it) {
         Fonts.setReader(this, it.local.getAbsolutePath(), it.name);
         VeraToast.show(this, "阅读字体已设为 " + it.name);
-        if (jobFile == null) jobMsg = null;
+        if (jobFile.get() == null) jobMsg = null;
         render();
     }
 
@@ -431,7 +431,7 @@ public class FontStoreActivity extends Activity {
         boolean ok = it.local.delete();
         forget(it.file);
         VeraToast.show(this, ok ? "已删除 " + it.name : "删除失败");
-        if (jobFile == null) jobMsg = null;      // 状态行不再写“已下载 …”
+        if (jobFile.get() == null) jobMsg = null;      // 状态行不再写“已下载 …”
         it.local = null;
         tabsRender();
         if (tab == 1) loadLocal(); else render();
@@ -440,9 +440,8 @@ public class FontStoreActivity extends Activity {
     // ------------------------------------------------------------------ 下载
 
     private void download(final Item it) {
-        if (jobFile != null) { VeraToast.show(this, "上一个字体还没下完"); return; }
         if (it.file == null || !it.file.matches("[A-Za-z0-9._-]{1,80}") || !isFont(it.file)) { VeraToast.show(this, "这个字体的文件名不对，不能下载"); return; }
-        jobFile = it.file;
+        if (!jobFile.compareAndSet(null, it.file)) { VeraToast.show(this, "上一个字体还没下完"); return; }
         say("正在下载 " + it.name + " …");
         render();
         new Thread(new Runnable() { @Override public void run() {
@@ -487,7 +486,7 @@ public class FontStoreActivity extends Activity {
             } catch (Throwable e) {
                 err = e instanceof Exception && e.getMessage() != null && (e.getMessage().startsWith("下载失败") || e.getMessage().contains("存储空间") || e.getMessage().contains("下架") || e.getMessage().contains("校验") || e.getMessage().contains("打不开") || e.getMessage().contains("无法"))
                     ? e.getMessage() : "下载失败：" + StoreActivity.reason(e);
-            } finally { awake.interrupt(); jobFile = null; }
+            } finally { awake.interrupt(); jobFile.set(null); }
             final String msg = err != null ? err : "已下载 " + it.name + "，点“使用”可以设为系统字体或阅读字体";
             final boolean ok = err == null;
             jobMsg = msg;
@@ -528,7 +527,9 @@ public class FontStoreActivity extends Activity {
 
     @Override protected void onDestroy() {
         if (live == this) live = null;
-        if (jobFile == null) jobMsg = null;      // 下次打开不再显示上一次的结果
+        items.clear();
+        if (list != null) list.removeAllViews();
+        if (jobFile.get() == null) jobMsg = null;      // 下次打开不再显示上一次的结果
         super.onDestroy();
     }
 }

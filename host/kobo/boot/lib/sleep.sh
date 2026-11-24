@@ -232,6 +232,10 @@ kobo_deep_suspend() {
     return $rc
 }
 
+sleep_transfer_busy() {
+    [ -f "$W/fwd.id" ] || alive "$W/installing"
+}
+
 kobo_enter_sleep() {
     [ -f "$W/saver_frozen" ] || [ -f "$W/sleeping" ] && return 0
     touch "$W/sleeping" "$X/ctl/sleep"
@@ -246,13 +250,13 @@ kobo_enter_sleep() {
     echo "${cur_fl:-0}" > "$W/sleep.fl"
     kobo_light_set 0
     screensaver_show
-    if alive "$W/installing"; then
+    if sleep_transfer_busy; then
         touch "$W/saver_nofreeze"
-        t "sleep: apk install in progress, leaving android running"
+        t "sleep: transfer/install in progress, leaving android running"
     else
         android_freeze && touch "$W/saver_frozen"
+        type wifi_ps_restore >/dev/null 2>&1 && wifi_ps_restore
     fi
-    type wifi_ps_restore >/dev/null 2>&1 && wifi_ps_restore
     date +%s > "$W/saver.t0"
     t "sleep: entered screensaver (saved frontlight=$cur_fl)"
 
@@ -359,6 +363,10 @@ sleep_watch() {
             last=$now
         fi
         if [ "$last" -gt 0 ] && [ $((now - last)) -ge "$to" ]; then
+            if sleep_transfer_busy; then
+                touch "$W/lastinput" 2>/dev/null || true
+                continue
+            fi
             t "sleep: idle ${to}s reached (charging=$(kobo_is_charging && echo 1 || echo 0))"
             kobo_enter_sleep
         fi

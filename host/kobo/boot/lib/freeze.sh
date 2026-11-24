@@ -52,8 +52,9 @@ saver_exit_check() {
 # 触摸前端（veradroid-input）：Android 里所有按下的触点都抬起。冻结前 / 解冻前各发一次：冻结期间或之前
 # 被手势吞掉的触摸不会在解冻后变成永远按着的触点。写 inject FIFO 用 1<>：没人读也不会阻塞；veradroid-input 没在跑就不写。
 vinput_reset() {
-    [ -p $W/inject ] && kill -0 "$(cat $W/input.pid 2>/dev/null)" 2>/dev/null || return 0
-    echo "reset ${1:-host}" 1<>$W/inject 2>/dev/null
+    pid=$(cat "$W/input.pid" 2>/dev/null)
+    [ -p "$W/inject" ] && [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 0
+    echo "reset ${1:-host}" 1<>"$W/inject" 2>/dev/null
     return 0
 }
 android_freeze() {

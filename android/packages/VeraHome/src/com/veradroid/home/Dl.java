@@ -153,7 +153,15 @@ final class Dl {
         File dir = new File(out.getPath() + ".seg");
         File plan = new File(dir, "plan");
         int planned = 0;
-        if (plan.isFile()) try { planned = Integer.parseInt(new String(read(plan), "UTF-8").trim().split(" ")[1]); } catch (Exception e) { }
+        long plannedSize = -1;
+        if (plan.isFile()) try {
+            String[] ps = new String(read(plan), "UTF-8").trim().split(" ");
+            if (ps.length >= 2) {
+                plannedSize = Long.parseLong(ps[0]);
+                planned = Integer.parseInt(ps[1]);
+            }
+        } catch (Exception e) { }
+        if (planned > 0 && plannedSize != size) { clear(out); planned = 0; }  // cross-version file size changed: discard stale segments
         if (planned > 1 && segs == 1) { clear(out); planned = 0; }          // the source stopped doing Range: start again whole
         int n = planned > 1 ? planned : (segs > 1 && size >= SEG_MIN && !(out.isFile() && out.length() > 0)) ? segs : 1;
         if (n <= 1) { single(src, out, size, p, mirror, meter); return; }
@@ -274,12 +282,23 @@ final class Dl {
     private static void single(String url, File out, long size, Progress p, boolean mirror, Meter meter) throws Exception {
         long have = out.isFile() ? out.length() : 0;
         if (size > 0 && have == size) return;
+        if (size > 0 && have > size) { out.delete(); have = 0; }   // stale file larger than target version: restart
         HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
         try {
             h.setConnectTimeout(20000); h.setReadTimeout(60000);
             h.setRequestProperty("User-Agent", "VeraDroid/Store");
             if (have > 0) h.setRequestProperty("Range", "bytes=" + have + "-");
             int code = h.getResponseCode();
+            if (code == 416 && have > 0) {
+                // Range Not Satisfiable (e.g. file changed on server or stale partial): clear and retry whole once
+                h.disconnect();
+                out.delete();
+                have = 0;
+                h = (HttpURLConnection) new URL(url).openConnection();
+                h.setConnectTimeout(20000); h.setReadTimeout(60000);
+                h.setRequestProperty("User-Agent", "VeraDroid/Store");
+                code = h.getResponseCode();
+            }
             if (code != 200 && code != 206) throw new HttpError(code, h);
             boolean append = have > 0 && code == 206;
             if (!append) have = 0;   // server ignored the Range: start again from zero
