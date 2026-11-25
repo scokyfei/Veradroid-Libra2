@@ -45,6 +45,18 @@ public class StatsActivity extends Activity {
         actions.addView(Ui.button(this, "返回", 16, false, new View.OnClickListener() {
             @Override public void onClick(View v) { finish(); }
         }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        actions.addView(Ui.button(this, "重置阅读", 16, false, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                new VeraDialog.Builder(StatsActivity.this).title("重置阅读统计")
+                    .message("清空本机已记录的阅读时长与页数？（不影响书籍阅读进度）")
+                    .negative("取消", null)
+                    .positive("重置", new Runnable() { @Override public void run() {
+                        Stats.resetReading(StatsActivity.this);
+                        render();
+                        VeraToast.show(StatsActivity.this, "已重置阅读统计");
+                    } }).show();
+            }
+        }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         actions.addView(Ui.button(this, "刷新", 16, true, new View.OnClickListener() {
             @Override public void onClick(View v) { render(); }
         }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
@@ -57,6 +69,8 @@ public class StatsActivity extends Activity {
         list.removeAllViews();
         section("电量", Stats.batteryLines(this));
         section("阅读", Stats.readingLines(this));
+        String[] apps = Stats.appReadingLines(this);
+        if (apps.length > 0) section("按应用分布", apps);
     }
 
     private void section(String title, String[] lines) {

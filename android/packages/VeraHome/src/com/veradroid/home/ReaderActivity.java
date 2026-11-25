@@ -1421,13 +1421,27 @@ public class ReaderActivity extends Activity {
         byte[] b = new byte[(int) len];
         FileInputStream in = new FileInputStream(f);
         int n = 0;
-        while (n < b.length) { int r = in.read(b, n, b.length - n); if (r < 0) break; n += r; }
-        in.close();
-        String s = new String(b, 0, n, Charset.forName("UTF-8"));
-        int bad = 0;
-        for (int i = 0; i < s.length(); i++) if (s.charAt(i) == '\uFFFD') bad++;
-        if (bad > s.length() / 200 + 3) {
-            try { s = new String(b, 0, n, Charset.forName("GBK")); } catch (Throwable ignored) { }
+        try {
+            while (n < b.length) { int r = in.read(b, n, b.length - n); if (r < 0) break; n += r; }
+        } finally { in.close(); }
+        String s;
+        if (n >= 3 && (b[0] & 0xFF) == 0xEF && (b[1] & 0xFF) == 0xBB && (b[2] & 0xFF) == 0xBF) {
+            s = new String(b, 3, n - 3, Charset.forName("UTF-8"));
+        } else if (n >= 2 && (b[0] & 0xFF) == 0xFF && (b[1] & 0xFF) == 0xFE) {
+            s = new String(b, 2, n - 2, Charset.forName("UTF-16LE"));
+        } else if (n >= 2 && (b[0] & 0xFF) == 0xFE && (b[1] & 0xFF) == 0xFF) {
+            s = new String(b, 2, n - 2, Charset.forName("UTF-16BE"));
+        } else {
+            // 严格校验 UTF-8，只要存在非法字节序列就回退 GB18030（彻底修复短篇 GBK/GB18030 误判乱码）
+            try {
+                java.nio.charset.CharsetDecoder dec = Charset.forName("UTF-8").newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
+                s = dec.decode(java.nio.ByteBuffer.wrap(b, 0, n)).toString();
+            } catch (Throwable notUtf8) {
+                try { s = new String(b, 0, n, Charset.forName("GB18030")); }
+                catch (Throwable ignored) { s = new String(b, 0, n, Charset.forName("GBK")); }
+            }
         }
         return s.replace("\r\n", "\n").replace('\r', '\n');
     }
@@ -1486,8 +1500,10 @@ public class ReaderActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        Ui.noOverlay(this);
         flipCount(true);
-        readStarted = SystemClock.elapsedRealtime();
+        // 用 uptimeMillis（深度休眠时暂停计时）替代 elapsedRealtime，避免把合盖待机算进阅读时长
+        readStarted = SystemClock.uptimeMillis();
         readPages = 0;
         resumedNow = true;
         Stats.sampleBattery(this);
@@ -1498,7 +1514,11 @@ public class ReaderActivity extends Activity {
         resumedNow = false;
         flipCount(false);
         if (readStarted > 0) {
-            Stats.addReading(this, SystemClock.elapsedRealtime() - readStarted, readPages);
+            long dur = Math.max(0L, SystemClock.uptimeMillis() - readStarted);
+            // 防止亮屏忘关虚高：没翻过页最多计 5 分钟，有翻页按每页最多 8 分钟封顶
+            long cap = (readPages <= 0 ? 5L : Math.min(240L, readPages * 8L + 5L)) * 60000L;
+            if (dur > cap) dur = cap;
+            Stats.addReading(this, dur, readPages);
             readStarted = 0;
             readPages = 0;
         }

@@ -32,6 +32,7 @@ final class Stats {
 
     static void sampleBattery(Context c, int pct, boolean charging) {
         if (pct < 0) return;
+        if (pct > 100) pct = 100;
         SharedPreferences sp = p(c);
         String d = day();
         long now = System.currentTimeMillis();
@@ -86,16 +87,109 @@ final class Stats {
 
     static void addReading(Context c, long ms, int pages) {
         if (ms <= 0 && pages <= 0) return;
+        addAppReading(c, "builtin", ms, pages);
+    }
+
+    static void addAppReading(Context c, String pkg, long ms, int pages) {
+        if (ms <= 0 && pages <= 0) return;
+        long addMs = Math.max(0L, ms);
+        int addPg = Math.max(0, pages);
         SharedPreferences sp = p(c);
         String d = day();
-        long todayMs = sp.getLong("read." + d + ".ms", 0) + Math.max(0, ms);
-        int todayPages = sp.getInt("read." + d + ".pages", 0) + Math.max(0, pages);
-        sp.edit()
-          .putLong("read." + d + ".ms", todayMs)
-          .putInt("read." + d + ".pages", todayPages)
-          .putLong("read.total.ms", sp.getLong("read.total.ms", 0) + Math.max(0, ms))
-          .putInt("read.total.pages", sp.getInt("read.total.pages", 0) + Math.max(0, pages))
-          .apply();
+        SharedPreferences.Editor ed = sp.edit()
+            .putLong("read." + d + ".ms", sp.getLong("read." + d + ".ms", 0) + addMs)
+            .putInt("read." + d + ".pages", sp.getInt("read." + d + ".pages", 0) + addPg)
+            .putLong("read.total.ms", sp.getLong("read.total.ms", 0) + addMs)
+            .putInt("read.total.pages", sp.getInt("read.total.pages", 0) + addPg);
+        if (pkg != null && pkg.length() > 0 && addMs > 0) {
+            String ak = "read.app." + pkg + ".ms";
+            ed.putLong(ak, sp.getLong(ak, 0) + addMs);
+        }
+        ed.apply();
+    }
+
+    /** 第三方阅读应用前台有效时长跟踪（使用 uptimeMillis 自动跳过深度休眠，并检查宿主机休眠标记）。 */
+    private static final String[] READER_APPS = {
+        "com.tencent.weread.eink", "com.tencent.weread",
+        "org.koreader.launcher", "org.koreader.launcher.fdroid",
+        "com.duokan.reader", "com.duokan.einkreader",
+        "com.dragon.read", "com.qidian.QDReader", "com.jjwxc.reader",
+        "com.jd.app.reader", "com.jd.app.reader.pro", "com.gongzicp.loves",
+        "com.chaozh.iReader", "com.chaozh.iReaderFree", "com.chaozh.iReader.dj",
+        "com.flyersoft.moonreader", "com.flyersoft.moonreaderp",
+        "io.legado.app.release", "io.legado.app", "io.legado.ink", "com.legado.app.eink.release", "com.gedoor.monkeybook",
+        "com.amazon.kindle", "com.douban.book.reader", "com.netease.pris", "com.kmxs.reader", "com.shuqi.controller",
+        "org.readera", "com.foobnix.pdf.reader", "com.foobnix.pro.pdf.reader", "com.neverland.alreader"
+    };
+    private static String fgReaderPkg = null;
+    private static long fgReaderStartUp = 0L;
+
+    static boolean isReaderApp(String pkg) {
+        if (pkg == null || pkg.length() == 0) return false;
+        if (pkg.startsWith("com.zhangyue.")) return true;
+        for (String r : READER_APPS) if (r.equals(pkg)) return true;
+        return false;
+    }
+
+    static synchronized void trackForeground(Context c, String pkg) {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (fgReaderPkg != null && fgReaderStartUp > 0 && c != null) {
+            long dur = now - fgReaderStartUp;
+            boolean sleeping = new java.io.File(HostLink.CTL + "sleep").exists();
+            if (!sleeping && dur >= 5000L) {
+                if (dur > 30L * 60000L) dur = 30L * 60000L;   // 单段无切换封顶 30 分钟，防止亮屏发呆虚高
+                addAppReading(c, fgReaderPkg, dur, 0);
+            }
+        }
+        if (isReaderApp(pkg)) {
+            fgReaderPkg = pkg;
+            fgReaderStartUp = now;
+        } else {
+            fgReaderPkg = null;
+            fgReaderStartUp = 0L;
+        }
+    }
+
+    static String[] appReadingLines(Context c) {
+        SharedPreferences sp = p(c);
+        java.util.List<java.util.Map.Entry<String, Long>> list = new java.util.ArrayList<java.util.Map.Entry<String, Long>>();
+        for (java.util.Map.Entry<String, ?> en : sp.getAll().entrySet()) {
+            String k = en.getKey();
+            if (!k.startsWith("read.app.") || !k.endsWith(".ms") || !(en.getValue() instanceof Long)) continue;
+            long ms = (Long) en.getValue();
+            if (ms < 60000L) continue;
+            String pkg = k.substring(9, k.length() - 3);
+            list.add(new java.util.AbstractMap.SimpleEntry<String, Long>(pkg, ms));
+        }
+        if (list.isEmpty()) return new String[0];
+        java.util.Collections.sort(list, new java.util.Comparator<java.util.Map.Entry<String, Long>>() {
+            @Override public int compare(java.util.Map.Entry<String, Long> a, java.util.Map.Entry<String, Long> b) {
+                return Long.compare(b.getValue(), a.getValue());
+            }
+        });
+        android.content.pm.PackageManager pm = c.getPackageManager();
+        int n = Math.min(8, list.size());
+        String[] out = new String[n];
+        for (int i = 0; i < n; i++) {
+            String pkg = list.get(i).getKey();
+            String label = "builtin".equals(pkg) ? "内置阅读器" : pkg;
+            if (!"builtin".equals(pkg)) {
+                try { label = String.valueOf(pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0))); } catch (Throwable ignored) { }
+            }
+            out[i] = label + "  ·  " + duration(list.get(i).getValue());
+        }
+        return out;
+    }
+
+    static synchronized void resetReading(Context c) {
+        SharedPreferences sp = p(c);
+        SharedPreferences.Editor ed = sp.edit();
+        for (String k : new java.util.ArrayList<String>(sp.getAll().keySet())) {
+            if (k.startsWith("read.")) ed.remove(k);
+        }
+        ed.apply();
+        READ_MEMO.clear();
+        fgReaderStartUp = fgReaderPkg != null ? android.os.SystemClock.uptimeMillis() : 0L;
     }
 
     static String[] readingLines(Context c) {

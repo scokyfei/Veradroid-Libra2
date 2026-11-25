@@ -129,12 +129,15 @@ public class HostService extends Service {
         } catch (Throwable ignored) { }
         return null;
     }
+    private static volatile Context appCtx;
+
     /** 桌面（HomeActivity）到了前台：和任务栈通知看到桌面时一样发 "fg home"，只是不用等通知（见 HomeActivity.onResume）。 */
     static void foregroundHome() {
         if (lastReaderMode != 0) {
             lastReaderMode = 0;
             HostLink.epd("READER 0");
         }
+        if (appCtx != null) Stats.trackForeground(appCtx, "home");
         if ("home".equals(profPkg)) return;
         launchedPkg = null;
         profPkg = "home";
@@ -142,6 +145,7 @@ public class HostService extends Service {
     }
 
     private void writeForeground() {
+        appCtx = getApplicationContext();
         String pkg = "", cls = "";
         try {
             List<ActivityManager.RunningTaskInfo> l = ((ActivityManager) getSystemService(Context.ACTIVITY_SERVICE)).getRunningTasks(1);
@@ -165,6 +169,7 @@ public class HostService extends Service {
         // 不算换应用：底下那个应用的设置照旧。换到别的应用（不是桌面）时，显示桥替它挡住纯色的启动窗口（冷启动的白屏 / 黑屏）。
         String prof = pkg.length() == 0 ? null : !pkg.equals(getPackageName()) ? pkg : AppFont.overlay(cls) ? null : "home";
         if (prof != null && !prof.equals(profPkg)) {
+            Stats.trackForeground(this, prof);
             if (AppProf.host()) {
                 if (!prof.equals("home") && !prof.equals(launchedPkg)) HostLink.epd("LAUNCH " + AppProf.LAUNCH_MS);
                 AppProf.fg(prof);

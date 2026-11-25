@@ -73,6 +73,7 @@ final class Epub {
     // 正则都只编译一次（ART 上 String.replaceAll 每次都重新编译：1000 多个文件的书光编译正则就要十几秒）
     private static final Map<String, Pattern[]> ATTR = new HashMap<String, Pattern[]>();
     private static final Map<String, Pattern> CLOSE = new HashMap<String, Pattern>();
+    private static final Pattern P_COMMENT = Pattern.compile("(?s)<!--.*?-->");
     private static final Pattern P_STRIP0 = Pattern.compile("(?is)<head[^>]*>.*?</head>");
     private static final Pattern P_STRIP1 = Pattern.compile("(?is)<script[^>]*>.*?</script>");
     private static final Pattern P_STRIP2 = Pattern.compile("(?is)<style[^>]*>.*?</style>");
@@ -89,9 +90,9 @@ final class Epub {
     private static final Pattern P_SCHEME = Pattern.compile("(?i)^[a-z][a-z0-9+.-]*:.*");
     private static final Pattern P_HTMLEXT = Pattern.compile("(?i).*\\.(x?html?|htm)$");
     private static final Pattern P_NUMENT = Pattern.compile("&#(x?)([0-9a-fA-F]+);");
-    private static final Pattern P_ITEM = Pattern.compile("(?is)<item\\b[^>]*>");
-    private static final Pattern P_SPINE = Pattern.compile("(?is)<spine\\b[^>]*>");
-    private static final Pattern P_ITEMREF = Pattern.compile("(?is)<itemref\\b[^>]*>");
+    private static final Pattern P_ITEM = Pattern.compile("(?is)<(?:[a-zA-Z0-9_-]+:)?item\\b[^>]*>");
+    private static final Pattern P_SPINE = Pattern.compile("(?is)<(?:[a-zA-Z0-9_-]+:)?spine\\b[^>]*>");
+    private static final Pattern P_ITEMREF = Pattern.compile("(?is)<(?:[a-zA-Z0-9_-]+:)?itemref\\b[^>]*>");
 
     static Book load(File f) throws Exception {
         ZipFile z = new ZipFile(f);
@@ -573,7 +574,7 @@ final class Epub {
         try {
             ZipEntry e = z.getEntry(name);
             if (e == null) {
-                String decoded = java.net.URLDecoder.decode(name, "UTF-8");
+                String decoded = pctDecode(name);
                 e = z.getEntry(decoded);
             }
             if (e == null) return null;
@@ -1000,7 +1001,7 @@ final class Epub {
     }
 
     static String stripHtml(String html) {
-        String s = html;
+        String s = P_COMMENT.matcher(html).replaceAll("");
         s = P_STRIP0.matcher(s).replaceAll(" ");
         s = P_STRIP1.matcher(s).replaceAll(" ");
         s = P_STRIP2.matcher(s).replaceAll(" ");
@@ -1018,19 +1019,31 @@ final class Epub {
     }
 
     static String htmlToText(String s) {
-        s = s.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-             .replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'");
+        if (s.indexOf('&') < 0) return s;
+        // 先解码数字实体（用 Matcher.quoteReplacement 防 &#36;($) / &#92;(\) 崩溃），最后再解 &amp; 防止双重转义
         Matcher m = P_NUMENT.matcher(s);
-        StringBuffer sb = new StringBuffer();
-        while (m.find()) {
-            try {
-                int cp = Integer.parseInt(m.group(2), m.group(1).length() > 0 ? 16 : 10);
-                m.appendReplacement(sb, new String(Character.toChars(cp)));
-            } catch (Exception e) {
-                m.appendReplacement(sb, "");
-            }
+        if (m.find()) {
+            StringBuffer sb = new StringBuffer(s.length());
+            do {
+                try {
+                    int cp = Integer.parseInt(m.group(2), m.group(1).length() > 0 ? 16 : 10);
+                    String rep = Character.isValidCodePoint(cp) ? new String(Character.toChars(cp)) : "";
+                    m.appendReplacement(sb, Matcher.quoteReplacement(rep));
+                } catch (Exception e) {
+                    m.appendReplacement(sb, "");
+                }
+            } while (m.find());
+            m.appendTail(sb);
+            s = sb.toString();
         }
-        m.appendTail(sb);
-        return sb.toString();
+        return s.replace("&nbsp;", " ").replace("&ensp;", " ").replace("&emsp;", "\u3000")
+             .replace("&lt;", "<").replace("&gt;", ">")
+             .replace("&quot;", "\"").replace("&apos;", "'")
+             .replace("&mdash;", "—").replace("&ndash;", "–").replace("&hellip;", "…")
+             .replace("&ldquo;", "“").replace("&rdquo;", "”").replace("&lsquo;", "‘").replace("&rsquo;", "’")
+             .replace("&bull;", "•").replace("&middot;", "·").replace("&laquo;", "«").replace("&raquo;", "»")
+             .replace("&copy;", "©").replace("&reg;", "®").replace("&trade;", "™")
+             .replace("&times;", "×").replace("&divide;", "÷").replace("&deg;", "°").replace("&plusmn;", "±")
+             .replace("&amp;", "&");
     }
 }
