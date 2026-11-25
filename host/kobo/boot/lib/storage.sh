@@ -23,7 +23,7 @@ st_tool() {
     return 1
 }
 
-st_num() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; [ ${#1} -le 6 ]; }
+st_num() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; [ ${#1} -le 10 ]; }
 st_img_mb() { stat -c %s "$SYSTEM_IMG" 2>/dev/null | awk '{ printf "%d", $1 / 1048576 }'; }
 st_img_kb() { stat -c %s "$SYSTEM_IMG" 2>/dev/null | awk '{ printf "%d", $1 / 1024 }'; }
 st_alloc_mb() { du -k "$SYSTEM_IMG" 2>/dev/null | awk '{ printf "%d", $1 / 1024 }'; }

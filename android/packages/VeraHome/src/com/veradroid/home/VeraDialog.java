@@ -67,7 +67,22 @@ final class VeraDialog {
                 TextView m = Ui.text(a, message, 16, false);
                 m.setTextColor(Blocks.on(a) ? Color.BLACK : Color.DKGRAY);   // 方块风格只用纯黑白
                 m.setPadding(0, dp(4), 0, dp(12));
-                box.addView(m);
+                // 长错误文案（如安装/更新失败堆栈）放入限高滚动容器，防止把底部「知道了」按钮挤出屏幕
+                if (message.length() > 140 || message.indexOf('\n') >= 0) {
+                    final int maxH = Math.max(dp(180), (int) (a.getResources().getDisplayMetrics().heightPixels * 0.50f));
+                    PageScrollView msv = new PageScrollView(a) {
+                        @Override protected void onMeasure(int ws, int hs) {
+                            int mode = MeasureSpec.getMode(hs);
+                            int sz = MeasureSpec.getSize(hs);
+                            int cap = (mode == MeasureSpec.UNSPECIFIED) ? maxH : Math.min(sz, maxH);
+                            super.onMeasure(ws, MeasureSpec.makeMeasureSpec(cap, MeasureSpec.AT_MOST));
+                        }
+                    };
+                    msv.addView(m, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                    box.addView(msv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                } else {
+                    box.addView(m);
+                }
             }
             if (extra != null) {
                 // 闪烁的光标会让墨水屏每 0.5 秒刷一小块：对话框里的输入框一律不显示光标

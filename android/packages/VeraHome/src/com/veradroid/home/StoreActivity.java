@@ -68,6 +68,7 @@ public class StoreActivity extends Activity {
         super.onCreate(b);
         getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.WHITE));
         getWindow().setWindowAnimations(0);
+        Ui.noOverlay(this);
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -118,6 +119,7 @@ public class StoreActivity extends Activity {
         page.addView(actions);
         Blocks.restyle(this, page, title, actions, "Store / e-ink apps");
 
+        if (jobPkg.get() == null) jobMsg = null;
         tabsRender();
         tagBarRender();
         load();

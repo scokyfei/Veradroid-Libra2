@@ -318,7 +318,7 @@ final class Transfer {
             r.query = target.substring(qm + 1);
             for (String kv : r.query.split("&")) {
                 int eq = kv.indexOf('=');
-                if (eq > 0) try { r.q.put(URLDecoder.decode(kv.substring(0, eq), "UTF-8"), URLDecoder.decode(kv.substring(eq + 1), "UTF-8")); } catch (Exception ignored) { }
+                if (eq > 0) try { r.q.put(pctDecode(kv.substring(0, eq)), pctDecode(kv.substring(eq + 1))); } catch (Exception ignored) { }
             }
         }
         for (int i = 1; i < lines.length; i++) {
@@ -635,27 +635,54 @@ final class Transfer {
      * writes (ctl/inst.<name>). Returns the host's output ("Success" or the reason), or null when nothing came back in
      * INSTALL_WAIT_MS. {@code p} gets the elapsed minutes once a minute.
      */
+    static String pctDecode(String s) {
+        if (s == null || s.indexOf('%') < 0) return s == null ? "" : s;
+        try {
+            byte[] out = new byte[s.length()];
+            int n = 0;
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (c == '%' && i + 2 < s.length()) {
+                    int hi = Character.digit(s.charAt(i + 1), 16), lo = Character.digit(s.charAt(i + 2), 16);
+                    if (hi >= 0 && lo >= 0) { out[n++] = (byte) ((hi << 4) | lo); i += 2; continue; }
+                }
+                byte[] utf = String.valueOf(c).getBytes("UTF-8");
+                if (n + utf.length > out.length) out = java.util.Arrays.copyOf(out, out.length * 2 + utf.length);
+                System.arraycopy(utf, 0, out, n, utf.length);
+                n += utf.length;
+            }
+            return new String(out, 0, n, "UTF-8");
+        } catch (Exception e) { return s; }
+    }
+
     static String hostInstall(File staged, InstallProgress p) {
         File res = new File(HostLink.CTL + "inst." + staged.getName());
-        res.delete();
+        boolean existed = res.exists();
+        long prevMtime = existed ? res.lastModified() : -1L;
+        long prevIno = existed ? HostLink.inode(res.getPath()) : -1L;
+        if (existed && res.delete()) { existed = false; prevMtime = -1L; prevIno = -1L; }
         HostLink.cmd("install " + staged.getAbsolutePath());   // absolute: the host accepts the shared and our own staging folder
-        long start = System.currentTimeMillis(), until = start + INSTALL_WAIT_MS;
+        long start = android.os.SystemClock.elapsedRealtime(), until = start + INSTALL_WAIT_MS;
         int shown = 0;
-        while (System.currentTimeMillis() < until) {
+        while (android.os.SystemClock.elapsedRealtime() < until) {
             try { Thread.sleep(1500); } catch (InterruptedException e) { return null; }
             if (res.exists()) {
+                if (existed && res.lastModified() == prevMtime && HostLink.inode(res.getPath()) == prevIno) continue;
                 String out = "";
+                java.io.BufferedReader r = null;
                 try {
-                    java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(res));
+                    r = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(res), "UTF-8"));
                     String line; StringBuilder sb = new StringBuilder();
                     while ((line = r.readLine()) != null) sb.append(line).append(' ');
-                    r.close();
                     out = sb.toString().trim();
                 } catch (Exception ignored) { }
+                finally { if (r != null) try { r.close(); } catch (Throwable ignored) { } }
                 res.delete();
                 return out.length() == 0 ? "宿主没有给出结果" : out;
+            } else {
+                existed = false;
             }
-            int m = (int) ((System.currentTimeMillis() - start) / 60000L);
+            int m = (int) ((android.os.SystemClock.elapsedRealtime() - start) / 60000L);
             if (m != shown && p != null) { shown = m; p.minutes(m); }
         }
         return null;
@@ -677,7 +704,7 @@ final class Transfer {
             @Override public void run() {
                 synchronized (installLock) {
                     t.kind = "install"; t.state = "running"; t.msg = "正在安装…（大应用可能要好几分钟）";
-                    String safe = "up" + t.id + ".apk";
+                    String safe = "up" + t.id + "-" + (System.currentTimeMillis() & 0xfffffL) + ".apk";
                     File staged = new File(tmpDir(), safe);
                     if (!apk.renameTo(staged)) { t.state = "error"; t.msg = "安装失败：不能整理安装包"; return; }
                     staged.setReadable(true, false);
@@ -716,7 +743,11 @@ final class Transfer {
         String ct = r.h.get("content-type");
         if (ct == null || !ct.toLowerCase(Locale.US).startsWith("multipart/form-data") || ct.indexOf("boundary=") < 0) { json(out, 200, obj("ok", false, "msg", "需要 multipart 上传")); return; }
         String boundary = ct.substring(ct.indexOf("boundary=") + 9).trim();
-        if (boundary.startsWith("\"")) boundary = boundary.substring(1, boundary.lastIndexOf('"'));
+        int semi = boundary.indexOf(';');
+        if (semi >= 0) boundary = boundary.substring(0, semi).trim();
+        if (boundary.startsWith("\"") && boundary.length() >= 2 && boundary.indexOf('"', 1) > 0) {
+            boundary = boundary.substring(1, boundary.indexOf('"', 1));
+        }
         String to = r.q.containsKey("to") ? r.q.get("to") : "books";
         // 文件管理里的“上传到当前文件夹”：原样放进那个文件夹（APK 也只是保存，不安装）
         File folder = null;
@@ -942,19 +973,38 @@ final class Transfer {
         return new Cloud.Progress() { @Override public void update(long done, long total) { t.done = done; t.total = total; } };
     }
 
-    /** A download lands in TMP first; move it to the books folder (apk stays and is installed). */
+    /** A download lands in TMP first; move it to the target folder (fonts -> Fonts, books -> Books/Kindle, apk stays and is installed). */
     private void finishDownload(File f, String to, Task t) {
         t.name = f.getName();
         if (!isApk(f.getName())) {
-            File dest = uniqueFile(dirFor(to), f.getName());
+            File dir = targetDir(f.getName(), to);
+            long need = f.length() + 64L * 1024 * 1024;
+            if (dir.getUsableSpace() < need) {
+                f.delete();
+                t.state = "error"; t.msg = "空间不够：剩余 " + (dir.getUsableSpace() >> 20) + " MB（至少要留 64 MB）";
+                return;
+            }
+            File dest = uniqueFile(dir, f.getName());
             if (!f.renameTo(dest)) {
+                File tmp = new File(dir, ".vdcp-" + t.id + "-" + (System.currentTimeMillis() & 0xfffffL));
+                InputStream i = null;
+                FileOutputStream o = null;
                 try {
-                    FileOutputStream o = new FileOutputStream(dest);
-                    InputStream i = new java.io.FileInputStream(f);
+                    i = new java.io.FileInputStream(f);
+                    o = new FileOutputStream(tmp);
                     byte[] b = new byte[65536]; int n;
                     while ((n = i.read(b)) > 0) o.write(b, 0, n);
-                    i.close(); o.close(); f.delete();
-                } catch (IOException e) { t.state = "error"; t.msg = "保存失败"; return; }
+                    o.getFD().sync();
+                    o.close(); o = null;
+                    i.close(); i = null;
+                    if (!tmp.renameTo(dest)) throw new IOException("rename failed");
+                    f.delete();
+                } catch (IOException e) {
+                    if (i != null) try { i.close(); } catch (Throwable ignored) { }
+                    if (o != null) try { o.close(); } catch (Throwable ignored) { }
+                    tmp.delete();
+                    t.state = "error"; t.msg = "保存失败"; return;
+                }
             }
             f = dest;
         }

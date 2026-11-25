@@ -472,6 +472,7 @@ final class Blocks {
      * 给那些整页是一个竖排 LinearLayout 的 Activity 用：只换页头，下面的内容照旧。
      */
     static LinearLayout headInto(android.app.Activity a, LinearLayout root, String en, String zh, View extra) {
+        Ui.noOverlay(a);
         root.setPadding(dp(a, 16), statusInset(a), dp(a, 16), dp(a, 12));
         LinearLayout h = activityHead(a, en, zh, extra);
         h.setPadding(0, dp(a, 10), 0, dp(a, 8));

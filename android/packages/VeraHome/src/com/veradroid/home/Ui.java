@@ -57,6 +57,15 @@ final class Ui {
         }
     }
 
+    /** 消除 Holo 主题默认在顶部绘制的 ~1.5mm 灰色阴影横条（windowContentOverlay）。 */
+    static void noOverlay(android.app.Activity a) {
+        if (a == null) return;
+        try {
+            android.view.View cv = a.findViewById(android.R.id.content);
+            if (cv instanceof android.widget.FrameLayout) ((android.widget.FrameLayout) cv).setForeground(null);
+        } catch (Throwable ignored) { }
+    }
+
     private Ui() { }
 
     /**

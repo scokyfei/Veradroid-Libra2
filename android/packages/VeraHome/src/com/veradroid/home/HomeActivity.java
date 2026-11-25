@@ -216,6 +216,7 @@ public class HomeActivity extends Activity {
         Store.purgeLegacyCloud();
         getWindow().setBackgroundDrawable(new ColorDrawable(Color.WHITE));
         getWindow().setWindowAnimations(0);
+        Ui.noOverlay(this);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
         if (!standalone) {
         startService(new Intent(this, HostService.class));

@@ -86,6 +86,7 @@ public class WifiActivity extends Activity {
         sv.addView(list, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         setContentView(root);
+        Ui.noOverlay(this);
         startWatch();
     }
 
@@ -130,6 +131,7 @@ public class WifiActivity extends Activity {
         body.addView(paged, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         root.addView(body, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         setContentView(root);
+        Ui.noOverlay(this);
         startWatch();
     }
 
@@ -157,6 +159,7 @@ public class WifiActivity extends Activity {
         if (isFinishing()) return;
         if ("wifi.list".equals(file)) { render(read("wifi.list")); return; }
         if ("wifi.scan".equals(file)) { if (scanning) showScan(read("wifi.scan")); return; }
+        if (pending == null) return;   // 忽略进入页面前残留的旧 wifi.result
         Map<String, String> m = HostLink.kv(HostLink.CTL + "wifi.result");
         String name = unhex(m.get("essid"));
         if (name == null) name = pending == null ? "" : pending;

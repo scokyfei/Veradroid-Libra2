@@ -27,23 +27,37 @@ rotate_apply() {
     fi
 }
 
+_subpid() {
+    _sp=
+    [ -r /proc/self/stat ] && read -r _sp _ < /proc/self/stat 2>/dev/null || true
+    echo "${_sp:-$$}"
+}
+
 wifi_list() {
+    _tp="$X/ctl/wifi.list.tmp.$(_subpid)"
     cur=$(kobo_wifi_current)
     kobo_wifi_saved | while IFS= read -r n; do
         if [ -n "$cur" ] && [ "$n" = "$cur" ]; then printf '*%s\n' "$n"; else printf ' %s\n' "$n"; fi
-    done > "$X/ctl/wifi.list.tmp"
-    mv -f "$X/ctl/wifi.list.tmp" "$X/ctl/wifi.list"
+    done > "$_tp"
+    chmod 644 "$_tp" 2>/dev/null
+    mv -f "$_tp" "$X/ctl/wifi.list"
 }
 
-wifi_result() { printf '%s\n' "$@" > "$X/ctl/wifi.result.tmp" && mv -f "$X/ctl/wifi.result.tmp" "$X/ctl/wifi.result"; }
+wifi_result() {
+    _tp="$X/ctl/wifi.result.tmp.$(_subpid)"
+    printf '%s\n' "$@" > "$_tp" && chmod 644 "$_tp" 2>/dev/null && mv -f "$_tp" "$X/ctl/wifi.result"
+}
 
 wifi_scan() {
-    kobo_wifi_scan > "$X/ctl/wifi.scan.tmp" 2>/dev/null || : > "$X/ctl/wifi.scan.tmp"
-    chmod 644 "$X/ctl/wifi.scan.tmp" 2>/dev/null
-    mv -f "$X/ctl/wifi.scan.tmp" "$X/ctl/wifi.scan"
+    rm -f "$X/ctl/wifi.result" 2>/dev/null || true
+    _tp="$X/ctl/wifi.scan.tmp.$(_subpid)"
+    kobo_wifi_scan > "$_tp" 2>/dev/null || : > "$_tp"
+    chmod 644 "$_tp" 2>/dev/null
+    mv -f "$_tp" "$X/ctl/wifi.scan"
 }
 
 wifi_connect() {
+    rm -f "$X/ctl/wifi.result" 2>/dev/null || true
     hex=$1
     case "$hex" in ''|*[!0-9a-f]*) wifi_result ok=0 "error=bad name"; return 1 ;; esac
     want=$(printf "$(printf '%s' "$hex" | sed 's/../\\x&/g')")
@@ -98,7 +112,7 @@ opt_run() {
     ck=0
     if [ "$cp" -gt 0 ] && kobo_is_charging && type compile_kick >/dev/null 2>&1; then compile_kick; ck=1; fi
     { echo "before=$b"; echo "after=$a"; echo "zram_orig_mb=$zo"; echo "zram_compr_mb=$zc"
-      echo "compile_pending=$cp"; echo "compile_kicked=$ck"; } > "$r.tmp" && mv -f "$r.tmp" "$r"
+      echo "compile_pending=$cp"; echo "compile_kicked=$ck"; } > "$r.tmp" && chmod 644 "$r.tmp" 2>/dev/null && mv -f "$r.tmp" "$r"
     t "optimize: MemAvailable $b -> $a MB, zram ${zo:-?}/${zc:-?} MB"
 }
 
