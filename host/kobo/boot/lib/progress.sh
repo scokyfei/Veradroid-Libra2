@@ -39,13 +39,13 @@ vp_rate() { b=${1:-0}; if [ "$b" -ge 1048576 ]; then echo "$(vp_mb "$b") MB/s"; 
 # ---- 字体 / FBInk ----
 vp_font() { for f in "$@"; do [ -f "$f" ] && { echo "$f"; return 0; }; done; echo ""; }
 VPF=/usr/local/Trolltech/QtEmbedded-4.6.2-arm/lib/fonts
-VP_FZB=$(vp_font "${VD:-/mnt/onboard/.adds/veradroid-libra2}/fonts/LXGWWenKai-Regular.ttf" /mnt/onboard/fonts/LXGWWenKai-Regular.ttf $VPF/KoboNickel-Bold.ttf $VPF/KoboNickel.ttf)
-VP_FZR=$(vp_font "${VD:-/mnt/onboard/.adds/veradroid-libra2}/fonts/LXGWWenKai-Regular.ttf" /mnt/onboard/fonts/LXGWWenKai-Regular.ttf $VPF/KoboNickel.ttf)
+VP_FZB=$(vp_font "${VD:-/mnt/onboard/.adds/Veradroid-Libra2}/fonts/LXGWWenKai-Regular.ttf" /mnt/onboard/fonts/LXGWWenKai-Regular.ttf $VPF/KoboNickel-Bold.ttf $VPF/KoboNickel.ttf)
+VP_FZR=$(vp_font "${VD:-/mnt/onboard/.adds/Veradroid-Libra2}/fonts/LXGWWenKai-Regular.ttf" /mnt/onboard/fonts/LXGWWenKai-Regular.ttf $VPF/KoboNickel.ttf)
 VP_FEN=$(vp_font $VPF/KoboNickel-Bold.ttf $VPF/Avenir-Bold.ttf)
 [ -n "$VP_FEN" ] || VP_FEN=$VP_FZB
 # 找一个能跑的 FBInk
 vp_fb_find() {
-    for f in "$@" "${VD:-/mnt/onboard/.adds/veradroid-libra2}/bin/fbink" /mnt/onboard/.adds/koreader/fbink /usr/bin/fbink /usr/local/bin/fbink; do
+    for f in "$@" "${VD:-/mnt/onboard/.adds/Veradroid-Libra2}/bin/fbink" /mnt/onboard/.adds/koreader/fbink /usr/bin/fbink /usr/local/bin/fbink; do
         [ -n "$f" ] && [ -x "$f" ] || continue
         e=$("$f" -e 2>/dev/null) || continue
         w=$(printf '%s' "$e" | tr ';' '\n' | sed -n 's/^viewWidth=//p' | head -1)
@@ -184,7 +184,7 @@ vp_en_err() {
         14) echo "Network too slow, download timed out. Tap install again to resume, or use the offline package." ;;
         15) echo "Download corrupted twice (checksum). Try another network." ;;
         21) echo "Not enough storage. Free some space and tap install again." ;;
-        *) echo "Device-side error. Restart the Kobo and try again; log: veradroid-libra2/logs/install.log" ;;
+        *) echo "Device-side error. Restart the Kobo and try again; log: Veradroid-Libra2/logs/install.log" ;;
     esac
 }
 # ---- 对外 ----
@@ -388,7 +388,7 @@ vp_netcheck() {
 # （只连我们自己的服务器，不找第三方测速站）。在子 shell 里跑：会读 network.conf（代理 / DNS / IP）。
 vp_netdiag() { # 输出文件 [服务器根地址]
     nf=$1; nb=${2:-https://veradroid.wenjin.jp}
-    VD=${VD:-/mnt/onboard/.adds/veradroid-libra2}
+    VD=${VD:-/mnt/onboard/.adds/Veradroid-Libra2}
     [ -f "$VD/network.conf" ] && . "$VD/network.conf"
     t0=$(date +%s)
     vp_kvw "$nf" state=running step=check "line1=正在检查 Wi-Fi、域名解析、网络连接…" "start=$t0"

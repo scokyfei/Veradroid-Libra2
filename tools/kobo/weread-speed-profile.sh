@@ -7,7 +7,7 @@
 # Zero modification to base.apk.
 set -eu
 
-VD=${VD:-/mnt/onboard/.adds/veradroid-libra2}
+VD=${VD:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}
 SYS=$VD/sys
 PKG=com.tencent.weread.eink
 PROF=$SYS/data/misc/profiles/cur/0/$PKG/primary.prof

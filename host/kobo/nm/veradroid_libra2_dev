@@ -1,0 +1,3 @@
+# NickelMenu entries for VeraDroid Dev on Kobo Libra 2 (side-by-side with Veradroid-Libra2 release).
+menu_item:main:VeraDroid Dev (Android):cmd_spawn:/bin/sh /mnt/onboard/.adds/veradroid-libra2-dev/boot/veradroid.sh home
+menu_item:main:VeraDroid Dev 停止:cmd_spawn:/bin/sh /mnt/onboard/.adds/veradroid-libra2-dev/boot/stop.sh

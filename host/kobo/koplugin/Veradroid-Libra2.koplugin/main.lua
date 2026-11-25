@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- KOReader plugin launcher for VeraDroid on Kobo Libra 2 (N418).
+-- KOReader plugin launcher for Veradroid-Libra2 on Kobo Libra 2 (N418).
 local Device = require("device")
 if not Device:isKobo() then return { disabled = true } end
 
@@ -8,12 +8,12 @@ local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local _ = require("gettext")
 
-local VeraDroidLibra2 = WidgetContainer:extend {
-    name = "veradroid_libra2",
+local VeradroidLibra2 = WidgetContainer:extend {
+    name = "Veradroid-Libra2",
     is_doc_only = false,
 }
 
-local VD = "/mnt/onboard/.adds/veradroid-libra2"
+local VD = "/mnt/onboard/.adds/Veradroid-Libra2"
 local BOOT = VD .. "/boot/veradroid.sh"
 local STOP = VD .. "/boot/stop.sh"
 local UPDATER = VD .. "/boot/lib/localupdate.sh"
@@ -38,23 +38,23 @@ local function fileExists(path)
     return true
 end
 
-function VeraDroidLibra2:init()
+function VeradroidLibra2:init()
     self.ui.menu:registerToMainMenu(self)
 end
 
-function VeraDroidLibra2:addToMainMenu(menu_items)
-    menu_items.veradroid_libra2 = {
-        text = _("VeraDroid (Libra 2)"),
+function VeradroidLibra2:addToMainMenu(menu_items)
+    menu_items.veradroid_libra2_pkg = {
+        text = _("Veradroid-Libra2"),
         sorting_hint = "tools",
         sub_item_table = {
             {
-                text = _("启动 VeraDroid (Android)"),
+                text = _("启动 Veradroid-Libra2 (Android)"),
                 callback = function()
                     self:startVeraDroid()
                 end,
             },
             {
-                text = _("停止 VeraDroid"),
+                text = _("停止 Veradroid-Libra2"),
                 callback = function()
                     os.execute("/bin/sh " .. STOP .. " </dev/null >/dev/null 2>&1 &")
                     UIManager:show(InfoMessage:new {
@@ -76,7 +76,7 @@ function VeraDroidLibra2:addToMainMenu(menu_items)
                     local ver = readLine(VD .. "/VERSION") or "未知"
                     local img = fileExists(VD .. "/veradroid-sys.img") and "已初始化" or "未初始化（首次启动将自动创建）"
                     UIManager:show(InfoMessage:new {
-                        text = "VeraDroid 状态：" .. st
+                        text = "Veradroid-Libra2 状态：" .. st
                             .. "\n当前版本：" .. ver
                             .. "\n系统镜像：" .. img
                             .. "\n安装目录：" .. VD,
@@ -87,15 +87,15 @@ function VeraDroidLibra2:addToMainMenu(menu_items)
     }
 end
 
-function VeraDroidLibra2:startVeraDroid()
+function VeradroidLibra2:startVeraDroid()
     if not fileExists(BOOT) then
         UIManager:show(InfoMessage:new {
-            text = "未找到 VeraDroid 启动脚本：\n" .. BOOT,
+            text = "未找到 Veradroid-Libra2 启动脚本：\n" .. BOOT,
         })
         return
     end
     local msg = fileExists(VD .. "/veradroid-sys.img")
-        and _("正在启动 VeraDroid，请稍候…")
+        and _("正在启动 Veradroid-Libra2，请稍候…")
         or _("首次启动：将自动初始化 Android 系统镜像（约 1–2 分钟），请稍候…")
     UIManager:show(InfoMessage:new {
         text = msg,
@@ -105,7 +105,7 @@ function VeraDroidLibra2:startVeraDroid()
     os.execute("setsid /bin/sh " .. BOOT .. " home </dev/null >/dev/null 2>&1 &")
 end
 
-function VeraDroidLibra2:applyUpdate()
+function VeradroidLibra2:applyUpdate()
     if not fileExists(UPDATER) then
         UIManager:show(InfoMessage:new {
             text = "未找到离线升级脚本：\n" .. UPDATER,
@@ -117,11 +117,11 @@ function VeraDroidLibra2:applyUpdate()
     if p then p:close() end
     out = out:gsub("^%s+", ""):gsub("%s+$", "")
     if out == "" then
-        out = "未在 update/ 目录发现可用的升级包。\n请将 VeraDroid-Kobo-Libra2-*.zip 放入：\n" .. VD .. "/update/"
+        out = "未在 update/ 目录发现可用的升级包。\n请将 Veradroid-Libra2-*.zip 放入：\n" .. VD .. "/update/"
     end
     UIManager:show(InfoMessage:new {
         text = out,
     })
 end
 
-return VeraDroidLibra2
+return VeradroidLibra2

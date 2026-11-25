@@ -2,7 +2,7 @@
 # Common definitions for VeraDroid on Kobo Libra 2.
 PATH=/usr/bin:/bin:/usr/sbin:/sbin:$PATH; export PATH
 
-VD=${VD:-/mnt/onboard/.adds/veradroid-libra2}
+VD=${VD:-/mnt/onboard/.adds/Veradroid-Libra2}
 SYS=${SYS:-$VD/sys}
 SYSTEM_IMG=${SYSTEM_IMG:-$VD/veradroid-sys.img}
 W=/tmp/veradroid

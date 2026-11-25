@@ -68,7 +68,15 @@ start_helpers() {
 
 P=$(cat "$W/pid" 2>/dev/null)
 if [ -n "$P" ] && kill -0 "$P" 2>/dev/null; then
-    if [ ! -f "$W/frozen" ] && ! framework_paused && [ ! -d "$W/starting" ]; then
+    cur_vd=$(cat "$W/vd" 2>/dev/null || true)
+    if [ -n "$cur_vd" ] && [ "$cur_vd" != "$VD" ]; then
+        t "switching instance ($cur_vd -> $VD): stopping previous instance cleanly"
+        if [ -f "$cur_vd/boot/stop.sh" ]; then
+            sh "$cur_vd/boot/stop.sh" >/dev/null 2>&1 || true
+        else
+            sh "$VD/boot/stop.sh" >/dev/null 2>&1 || true
+        fi
+    elif [ ! -f "$W/frozen" ] && ! framework_paused && [ ! -d "$W/starting" ]; then
         t "inconsistent state (android running without paused kobo ui), restarting cleanly"
         sh "$VD/boot/stop.sh" >/dev/null 2>&1
         storage_mount
@@ -99,7 +107,7 @@ sh "$VD/boot/stop.sh" --stale >/dev/null 2>&1 || true
 
 # 1. Auto-apply pending offline upgrade ZIP in $VD/update/ before booting
 if [ -z "${VERADROID_NO_AUTOUPDATE:-}" ] && [ -f "$VD/boot/lib/localupdate.sh" ]; then
-    for _upz in "$VD/update"/VeraDroid-Kobo-Libra2-*.zip "$VD/update"/veradroid-kobo-libra2-*.zip; do
+    for _upz in "$VD/update"/Veradroid-Libra2-*.zip "$VD/update"/VeraDroid-Kobo-Libra2-*.zip "$VD/update"/veradroid-kobo-libra2-*.zip; do
         [ -f "$_upz" ] || continue
         t "update: applying offline package ${_upz##*/}"
         storage_umount 2>/dev/null || true
@@ -209,6 +217,7 @@ zram_on
 slim_apply
 readahead_on
 net_setup
+echo "$VD" > "$W/vd"
 container_start || { sh "$VD/boot/stop.sh" >/dev/null 2>&1; exit 1; }
 bat_baseline
 net_start

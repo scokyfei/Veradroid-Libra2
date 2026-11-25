@@ -14,7 +14,7 @@ TOP=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 HOST=${KOBO_HOST:-192.168.0.60}
 PORT=${KOBO_PORT:-2222}
 USER=${KOBO_USER:-root}
-REMOTE_VD=${KOBO_VD:-/mnt/onboard/.adds/veradroid-libra2}
+REMOTE_VD=${KOBO_VD:-/mnt/onboard/.adds/veradroid-libra2-dev}
 BIN_DIR=${BIN_DIR:-$TOP/build/kobo-bin}
 LEGACY_DIR=${LEGACY_DIR:-}
 KMOD_DIR=${KMOD_DIR:-}
@@ -89,7 +89,7 @@ put_file() {
 echo "[deploy] Uploading host payload to $HOST:$PORT -> $REMOTE_VD ..."
 run_remote "mkdir -p $REMOTE_VD /mnt/onboard/.adds/koreader/plugins"
 put_file "$TAR" "/tmp/veradroid-kobo-host.tar.gz"
-run_remote "tar -xzf /tmp/veradroid-kobo-host.tar.gz -C $REMOTE_VD && rm -f /tmp/veradroid-kobo-host.tar.gz && cp -a $REMOTE_VD/koplugin/veradroid_libra2.koplugin /mnt/onboard/.adds/koreader/plugins/ && chmod 755 $REMOTE_VD/bin/* $REMOTE_VD/boot/*.sh"
+run_remote "tar -xzf /tmp/veradroid-kobo-host.tar.gz -C $REMOTE_VD && rm -f /tmp/veradroid-kobo-host.tar.gz && rm -rf /mnt/onboard/.adds/koreader/plugins/veradroid_libra2_dev.koplugin && cp -a $REMOTE_VD/koplugin/veradroid_libra2_dev.koplugin /mnt/onboard/.adds/koreader/plugins/ && [ -d /mnt/onboard/.adds/nm ] && cp -f $REMOTE_VD/nm/veradroid_libra2_dev /mnt/onboard/.adds/nm/veradroid_libra2_dev || true && chmod 755 $REMOTE_VD/bin/* $REMOTE_VD/boot/*.sh"
 
 if [ "$INIT_IMG" = 1 ]; then
     [ -n "$LEGACY_DIR" ] && [ -f "$LEGACY_DIR/rootfs.tar.gz" ] || { echo "deploy-kobo: --init-img needs LEGACY_DIR with rootfs.tar.gz" >&2; exit 2; }

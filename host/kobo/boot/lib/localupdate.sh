@@ -2,19 +2,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Offline incremental updater for VeraDroid on Kobo Libra 2 (N418).
 #
-# Drop VeraDroid-Kobo-Libra2-<ver>-upgrade.zip (or -full.zip) into:
-#   /mnt/onboard/.adds/veradroid-libra2/update/
+# Drop Veradroid-Libra2-<ver>-upgrade.zip (or -full.zip) into:
+#   /mnt/onboard/.adds/Veradroid-Libra2/update/
 # It will be applied automatically on next launch (NickelMenu or KOReader),
 # or manually via:
-#   sh /mnt/onboard/.adds/veradroid-libra2/boot/lib/localupdate.sh check
-#   sh /mnt/onboard/.adds/veradroid-libra2/boot/lib/localupdate.sh install [--force] [--quiet]
+#   sh /mnt/onboard/.adds/Veradroid-Libra2/boot/lib/localupdate.sh check
+#   sh /mnt/onboard/.adds/Veradroid-Libra2/boot/lib/localupdate.sh install [--force] [--quiet]
 #
 # Preserves 100% of user data: veradroid-sys.img (/data), settings.conf,
 # apps/, fonts/, screensaver/, logs/. Updates boot/, bin/, models/, kmod/,
 # VERSION, NickelMenu entry (if .adds/nm exists), and KOReader plugin (if .adds/koreader exists).
 
 PATH=/usr/bin:/bin:/usr/sbin:/sbin:$PATH; export PATH
-VD=${VD:-/mnt/onboard/.adds/veradroid-libra2}
+VD=${VD:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
 W=/tmp/veradroid
 UPD=$VD/update
 STAGE=$VD/state/update.stage
@@ -68,7 +68,7 @@ write_result() {
 find_best_zip() {
     best=
     bestver=
-    for f in "$UPD"/VeraDroid-Kobo-Libra2-*.zip "$UPD"/veradroid-kobo-libra2-*.zip; do
+    for f in "$UPD"/Veradroid-Libra2-*.zip "$UPD"/VeraDroid-Kobo-Libra2-*.zip "$UPD"/veradroid-kobo-libra2-*.zip; do
         [ -f "$f" ] || continue
         bn=${f##*/}
         v=$(printf '%s' "$bn" | sed -n 's/.*-\([0-9][0-9.]*\)\(-[a-zA-Z0-9_]*\)\{0,1\}\.zip$/\1/p')
@@ -110,7 +110,7 @@ fi
 
 found=$(find_best_zip || true)
 if [ -z "$found" ]; then
-    say "未在 update/ 目录发现升级包（VeraDroid-Kobo-Libra2-*.zip）。"
+    say "未在 update/ 目录发现升级包（Veradroid-Libra2-*.zip）。"
     exit 3
 fi
 
@@ -158,8 +158,11 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE" || fail "无法创建临时解压目录"
 unzip -o -q "$ZIP" -d "$STAGE" 2>/dev/null || fail "解压升级包失败（存储空间不足？）"
 
-SRC=$STAGE/.adds/veradroid-libra2
-[ -d "$SRC" ] || fail "升级包目录结构无效（缺少 .adds/veradroid-libra2）"
+SRC=
+for cand in "$STAGE/.adds/Veradroid-Libra2" "$STAGE/.adds/veradroid-libra2"; do
+    [ -d "$cand" ] && { SRC=$cand; break; }
+done
+[ -n "$SRC" ] || fail "升级包目录结构无效（缺少 .adds/Veradroid-Libra2）"
 [ -f "$SRC/manifest.json" ] || fail "升级包缺少 manifest.json"
 grep -q '"product"[[:space:]]*:[[:space:]]*"veradroid-kobo-libra2"' "$SRC/manifest.json" || fail "非 Kobo Libra 2 专用安装包"
 [ -f "$SRC/boot/veradroid.sh" ] && sh -n "$SRC/boot/veradroid.sh" 2>/dev/null || fail "升级包启动脚本校验失败"
@@ -228,12 +231,13 @@ chmod 755 "$VD/bin/"* "$VD/boot/"*.sh 2>/dev/null || true
 
 # Sync both NickelMenu and KOReader entry points when present
 updated_entries=
-if [ -d "$NM_DIR" ] && [ -f "$VD/nm/veradroid_libra2" ]; then
-    cp -f "$VD/nm/veradroid_libra2" "$NM_DIR/veradroid_libra2" 2>/dev/null && updated_entries="${updated_entries}NickelMenu "
+if [ -d "$NM_DIR" ] && [ -f "$VD/nm/Veradroid-Libra2" ]; then
+    cp -f "$VD/nm/Veradroid-Libra2" "$NM_DIR/Veradroid-Libra2" 2>/dev/null && updated_entries="${updated_entries}NickelMenu "
 fi
-if [ -d "/mnt/onboard/.adds/koreader" ] && [ -d "$VD/koplugin/veradroid_libra2.koplugin" ]; then
+if [ -d "/mnt/onboard/.adds/koreader" ] && [ -d "$VD/koplugin/Veradroid-Libra2.koplugin" ]; then
     mkdir -p "$KO_PLUGINS" 2>/dev/null || true
-    cp -a "$VD/koplugin/veradroid_libra2.koplugin" "$KO_PLUGINS/" 2>/dev/null && updated_entries="${updated_entries}KOReader "
+    rm -rf "$KO_PLUGINS/Veradroid-Libra2.koplugin" 2>/dev/null || true
+    cp -a "$VD/koplugin/Veradroid-Libra2.koplugin" "$KO_PLUGINS/" 2>/dev/null && updated_entries="${updated_entries}KOReader "
 fi
 
 sync

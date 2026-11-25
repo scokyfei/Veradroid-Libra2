@@ -5,7 +5,7 @@
 # both NickelMenu and KOReader entry points.
 #
 # Usage (run on Kobo Libra 2 via SSH):
-#   sh /mnt/onboard/.adds/veradroid-libra2/install.sh [options]
+#   sh /mnt/onboard/.adds/Veradroid-Libra2/install.sh [options]
 # Options:
 #   --auto            Install NickelMenu & KOReader entries if present (default)
 #   --both            Install both NickelMenu & KOReader entries unconditionally
@@ -81,17 +81,17 @@ case "$ENTRY_MODE" in
         ;;
 esac
 
-if [ "$inst_nm" = 1 ] && [ -f "$VD/nm/veradroid_libra2" ]; then
+if [ "$inst_nm" = 1 ] && [ -f "$VD/nm/Veradroid-Libra2" ]; then
     mkdir -p "$NM_DIR"
-    cp -f "$VD/nm/veradroid_libra2" "$NM_DIR/veradroid_libra2"
-    echo "Entry OK:    NickelMenu -> $NM_DIR/veradroid_libra2"
+    cp -f "$VD/nm/Veradroid-Libra2" "$NM_DIR/Veradroid-Libra2"
+    echo "Entry OK:    NickelMenu -> $NM_DIR/Veradroid-Libra2"
 fi
 
-if [ "$inst_ko" = 1 ] && [ -d "$VD/koplugin/veradroid_libra2.koplugin" ]; then
+if [ "$inst_ko" = 1 ] && [ -d "$VD/koplugin/Veradroid-Libra2.koplugin" ]; then
     mkdir -p "$KO_PLUGINS"
-    rm -rf "$KO_PLUGINS/veradroid_libra2.koplugin"
-    cp -a "$VD/koplugin/veradroid_libra2.koplugin" "$KO_PLUGINS/"
-    echo "Entry OK:    KOReader   -> $KO_PLUGINS/veradroid_libra2.koplugin"
+    rm -rf "$KO_PLUGINS/Veradroid-Libra2.koplugin"
+    cp -a "$VD/koplugin/Veradroid-Libra2.koplugin" "$KO_PLUGINS/"
+    echo "Entry OK:    KOReader   -> $KO_PLUGINS/Veradroid-Libra2.koplugin"
 fi
 
 # 5. Fresh install vs Incremental upgrade

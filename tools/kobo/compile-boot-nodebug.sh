@@ -7,7 +7,7 @@
 # container.sh automatically bind-mounts the rebuilt files on the next VeraDroid start.
 set -eu
 
-VD=${VD:-/mnt/onboard/.adds/veradroid-libra2}
+VD=${VD:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}
 SYS=$VD/sys
 OUT=$SYS/data/local/tmp/boot-nodebug
 OUT_NEW=$SYS/data/local/tmp/boot-nodebug.new
