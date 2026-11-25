@@ -5,7 +5,10 @@
 #             ~90 MB RAM), and relaunch them on exit with their saved environment.
 # Never touches dropbear or wpa_supplicant (Wi-Fi & SSH stay active).
 FWD=$W/fw
-FBDEPTH=/mnt/onboard/.adds/koreader/fbdepth
+FBDEPTH=
+for _fd in "$VD/bin/fbdepth" /mnt/onboard/.adds/koreader/fbdepth /usr/bin/fbdepth; do
+    [ -x "$_fd" ] && { FBDEPTH=$_fd; break; }
+done
 
 framework_paused() { [ -f "$FWD/paused" ]; }
 

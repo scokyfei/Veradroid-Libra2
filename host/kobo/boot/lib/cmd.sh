@@ -321,7 +321,9 @@ wrmaint_cmd() {
             ;;
         profile)
             echo "正在采集热点并刷新微信读书 speed-profile 编译（后台执行约 1–2 分钟）..." > "$X/wrmaint.txt"
-            if [ -f "$VD/tools/weread-speed-profile.sh" ]; then
+            if [ -f "$VD/boot/weread-speed-profile.sh" ]; then
+                sh "$VD/boot/weread-speed-profile.sh" >>"$LOG" 2>&1 || true
+            elif [ -f "$VD/tools/weread-speed-profile.sh" ]; then
                 sh "$VD/tools/weread-speed-profile.sh" >>"$LOG" 2>&1 || true
             elif type weread_profile_refresh >/dev/null 2>&1; then
                 weread_profile_refresh >>"$LOG" 2>&1 || true

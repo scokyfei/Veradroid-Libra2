@@ -14,6 +14,8 @@ __pycache__/
 build/
 dist/*.apk
 dist/*.tar.gz
+dist/*.zip
+dist/SHA256SUMS.txt
 # Dependencies and private host keys (added when the git baseline was created).
 node_modules/
 hostkey_rsa

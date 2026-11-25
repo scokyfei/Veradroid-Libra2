@@ -46,7 +46,7 @@ exec >>"$LOG" 2>&1
 
 if [ -z "${VERADROID_DETACHED:-}" ]; then
     echo 0 > /proc/$$/oom_score_adj 2>/dev/null || true
-    exec env -i VERADROID_DETACHED=1 VD="$VD" PATH="$PATH" setsid sh "$0" "$@" </dev/null
+    exec env -i VERADROID_DETACHED=1 VERADROID_NO_AUTOUPDATE="${VERADROID_NO_AUTOUPDATE:-}" VD="$VD" PATH="$PATH" setsid sh "$0" "$@" </dev/null
 fi
 
 echo "== $(date) start (Kobo Libra 2) app=${1:-$SYSTEM_APP}"
@@ -96,14 +96,89 @@ while [ -n "$sp" ] && [ "$sp" != "$$" ] && [ "$sp" != "$PPID" ] && kill -0 "$sp"
 done
 
 sh "$VD/boot/stop.sh" --stale >/dev/null 2>&1 || true
+
+# 1. Auto-apply pending offline upgrade ZIP in $VD/update/ before booting
+if [ -z "${VERADROID_NO_AUTOUPDATE:-}" ] && [ -f "$VD/boot/lib/localupdate.sh" ]; then
+    for _upz in "$VD/update"/VeraDroid-Kobo-Libra2-*.zip "$VD/update"/veradroid-kobo-libra2-*.zip; do
+        [ -f "$_upz" ] || continue
+        t "update: applying offline package ${_upz##*/}"
+        storage_umount 2>/dev/null || true
+        if sh "$VD/boot/lib/localupdate.sh" install --quiet; then
+            t "update: applied successfully, re-executing updated veradroid.sh"
+            rm -f "$W/starting/pid"; rmdir "$W/starting" 2>/dev/null || true
+            trap - EXIT
+            exec env -i VERADROID_DETACHED=1 VERADROID_NO_AUTOUPDATE=1 VD="$VD" PATH="$PATH" sh "$VD/boot/veradroid.sh" "$@"
+        fi
+        break
+    done
+fi
+
+# 2. First-boot auto-init (fresh install) OR staged rootfs upgrade (full bundle extracted over existing install)
+if [ -f "$VD/rootfs.tar.gz" ]; then
+    need_init=0
+    init_mode=fresh
+    if [ ! -f "$SYSTEM_IMG" ]; then
+        need_init=1
+        init_mode=fresh
+    else
+        # Existing veradroid-sys.img: skip rootfs re-extraction when SHA-256 already matches
+        storage_mount 2>/dev/null || true
+        want_sha=$(sha256sum "$VD/rootfs.tar.gz" 2>/dev/null | awk '{print $1}')
+        have_sha=$(cat "$SYS/rootfs.sha256" 2>/dev/null | tr -cd '0-9a-f')
+        if [ -n "$want_sha" ] && [ "$want_sha" = "$have_sha" ]; then
+            t "init: rootfs.tar.gz matches installed image ($want_sha), removing duplicate tarball"
+            rm -f "$VD/rootfs.tar.gz"
+        elif [ -d "$R" ] && [ -e "$R/init" ] && [ -z "$have_sha" ]; then
+            # Legacy pre-hash image with valid rootfs: preserve existing rootfs & data, record hash, skip rewrite
+            t "init: existing system image already initialized, preserving /data and skipping rootfs.tar.gz"
+            [ -n "$want_sha" ] && echo "$want_sha" > "$SYS/rootfs.sha256" 2>/dev/null || true
+            rm -f "$VD/rootfs.tar.gz"
+        else
+            need_init=1
+            init_mode=upgrade
+        fi
+    fi
+    if [ "$need_init" = 1 ]; then
+        kmod_load || { t "kmod_load failed before init-sysimg"; splash "VeraDroid：当前固件内核暂不支持 ($(uname -r))" 32; sleep 5; exit 1; }
+        storage_umount 2>/dev/null || true
+        FRAMEWORK_AFTER_SAVE=
+        framework_stop || { t "cannot pause kobo ui for init-sysimg"; exit 1; }
+        if [ "$init_mode" = fresh ]; then
+            t "init: first-boot auto-initializing veradroid-sys.img from rootfs.tar.gz"
+            splash "VeraDroid 首次安装：正在创建 Android 系统镜像（约 1–2 分钟，请勿关机）…" 34 || true
+            init_rc=0
+            sh "$VD/boot/init-sysimg.sh" "$VD/rootfs.tar.gz" 2048 || init_rc=$?
+        else
+            t "init: upgrading Android rootfs in veradroid-sys.img (preserving /data)"
+            splash "VeraDroid 升级：正在更新系统镜像（保留全部应用与数据，请勿关机）…" 34 || true
+            init_rc=0
+            sh "$VD/boot/init-sysimg.sh" --upgrade-rootfs "$VD/rootfs.tar.gz" || init_rc=$?
+        fi
+        if [ "$init_rc" != 0 ]; then
+            t "init: init-sysimg.sh failed (rc=$init_rc)"
+            if [ "$init_rc" = 21 ]; then
+                splash "VeraDroid 安装失败：Kobo 存储空间不足（至少需要 2.3 GB 可用空间）" 32 || true
+            else
+                splash "VeraDroid 系统镜像初始化失败（代码 $init_rc），详见 logs/veradroid.log" 32 || true
+            fi
+            sleep 6
+            framework_start
+            exit 1
+        fi
+        rm -f "$VD/rootfs.tar.gz"
+        t "init: system image ready, continuing boot"
+    fi
+fi
+
 rm -f "$SYS/settings.app" "$W/appprof.pkg"
 
-storage_mount || { t "storage_mount failed"; splash "VeraDroid：系统镜像挂载失败" 36; sleep 4; exit 1; }
-kmod_load     || { t "kmod_load failed"; splash "VeraDroid：内核模块加载失败" 36; sleep 4; exit 1; }
-[ -d "$R" ] && [ -e "$R/init" ] || { t "no Android rootfs at $R"; splash "VeraDroid：未找到 Android 系统镜像" 36; sleep 4; exit 1; }
+storage_mount || { t "storage_mount failed"; splash "VeraDroid：系统镜像挂载失败" 36; sleep 4; framework_paused && framework_start; exit 1; }
+kmod_load     || { t "kmod_load failed"; splash "VeraDroid：内核模块加载失败 ($(uname -r))" 34; sleep 4; framework_paused && framework_start; exit 1; }
+[ -d "$R" ] && [ -e "$R/init" ] || { t "no Android rootfs at $R"; splash "VeraDroid：未找到 Android 系统镜像，请使用完整安装包" 34; sleep 4; framework_paused && framework_start; exit 1; }
 
 FRAMEWORK_AFTER_SAVE='splash_begin 正在准备 3'
 framework_stop || { t "cannot pause kobo ui"; exit 1; }
+[ -f "$W/splash.on" ] || splash_begin 正在准备 3
 splash_update 12
 
 display_prepare

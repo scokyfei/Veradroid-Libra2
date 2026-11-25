@@ -1,4 +1,5 @@
-# NickelMenu entry for VeraDroid on Kobo Libra 2.
-# Copy to /mnt/onboard/.adds/nm/veradroid_libra2 to launch from Nickel.
+# NickelMenu entries for VeraDroid on Kobo Libra 2 (N418).
+# Placed at /mnt/onboard/.adds/nm/veradroid_libra2 — works standalone without KOReader.
 menu_item:main:VeraDroid (Android):cmd_spawn:/bin/sh /mnt/onboard/.adds/veradroid-libra2/boot/veradroid.sh home
-menu_item:main:VeraDroid Stop:cmd_spawn:/bin/sh /mnt/onboard/.adds/veradroid-libra2/boot/stop.sh
+menu_item:main:VeraDroid 停止:cmd_spawn:/bin/sh /mnt/onboard/.adds/veradroid-libra2/boot/stop.sh
+menu_item:main:VeraDroid 检查更新:cmd_output:500:/bin/sh /mnt/onboard/.adds/veradroid-libra2/boot/lib/localupdate.sh install

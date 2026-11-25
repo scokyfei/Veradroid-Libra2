@@ -24,11 +24,19 @@
    ```
 2. 部署到 Kobo Libra 2 并初始化 `veradroid-sys.img`：
    ```sh
-   KOBO_HOST=192.168.0.60 KOBO_PORT=2222 \
+   KOBO_HOST=<KOBO_IP> KOBO_PORT=2222 \
    BIN_DIR=build/kobo-bin \
-   LEGACY_DIR=/path/to/veradroid-legacy-0.8.13/veradroid-pw6 \
+   LEGACY_DIR=/path/to/veradroid-legacy/veradroid-pw6 \
    KMOD_DIR=/path/to/Koboweread/kernels \
      sh tools/kobo/deploy-kobo.sh --init-img
+   ```
+   或构建面向终端用户的纯净安装包（全新安装 `-full.zip` + 增量升级 `-upgrade.zip`，同时支持 NickelMenu 与 KOReader 入口）：
+   ```sh
+   BIN_DIR=build/kobo-bin \
+   EXTRA_BIN_DIR=/path/to/extra-kobo-bins \
+   LEGACY_DIR=/path/to/veradroid-legacy/veradroid-pw6 \
+   KMOD_DIR=/path/to/Koboweread/kernels \
+     sh tools/kobo/build-release.sh dist
    ```
 3. 启动 / 停止：
    - KOReader：顶部菜单 → 工具 → **VeraDroid (Libra 2)** → **启动 VeraDroid (Android)**
