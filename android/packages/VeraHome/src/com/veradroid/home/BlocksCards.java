@@ -148,10 +148,11 @@ final class BlocksCards {
 
     /** 回到主页的那一刻（onResume，主页还没画）：前一个应用是第三方应用就存它的缩略图和时间。 */
     /** 算作“阅读应用”的包（继续阅读卡片只记这些）：默认一份常见的阅读器，用户可以在“首页卡片”里增减（键 blk_readers）。 */
-    static final String READERS_DEFAULT = "com.tencent.weread.eink,com.tencent.weread,org.koreader.launcher,com.flyersoft.moonreader,com.flyersoft.moonreaderp,"
-        + "com.duokan.reader,com.duokan.einkreader,com.chaozh.iReaderFree,com.chaozh.iReader,com.amazon.kindle,com.dragon.read,com.jjwxc.reader,"
+    static final String READERS_DEFAULT = "com.tencent.weread.eink,com.tencent.weread,org.koreader.launcher,org.koreader.launcher.fdroid,com.flyersoft.moonreader,com.flyersoft.moonreaderp,"
+        + "com.duokan.reader,com.duokan.einkreader,com.chaozh.iReaderFree,com.chaozh.iReader,com.chaozh.iReader.dj,com.amazon.kindle,com.dragon.read,com.jjwxc.reader,"
         + "com.qidian.QDReader,com.zhangyue.iReader.Eink,com.ss.android.lark.read,com.tadu.android,org.geometerplus.zlibrary.ui.android,com.ireadercity,"
-        + "io.legado.app.release,io.legado.ink,com.gedoor.monkeybook";
+        + "com.jd.app.reader,com.jd.app.reader.pro,com.gongzicp.loves,com.kmxs.reader,com.douban.book.reader,com.shuqi.controller,com.qq.reader,"
+        + "io.legado.app.release,io.legado.app,io.legado.ink,com.legado.app.eink.release,com.gedoor.monkeybook";
     static List<String> readers(Context c) {
         List<String> l = new ArrayList<String>();
         for (String x : Store.prefs(c, "home").getString("blk_readers", READERS_DEFAULT).split(",")) if (x.trim().length() > 0) l.add(x.trim());

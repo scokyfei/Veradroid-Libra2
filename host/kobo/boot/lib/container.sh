@@ -472,6 +472,8 @@ run_in_ns() {
 
     mount -t proc proc "$R/proc" || exit 1
     [ -f "$W/cmdline" ] && mount --bind "$W/cmdline" "$R/proc/cmdline"
+    mkdir -p "$R/acct" 2>/dev/null || true
+    mount -t tmpfs -o size=4m,mode=755 tmpfs "$R/acct" 2>/dev/null || true
 
     mount -t sysfs -o ro sysfs "$R/sys" || exit 1
     for d in sys/fs/selinux sys/fs/bpf sys/fs/pstore sys/kernel/tracing; do

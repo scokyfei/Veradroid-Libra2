@@ -136,7 +136,7 @@ cmd_listen() {
         reboot)  do_reboot ;;
         poweroff) do_poweroff ;;
         sleep)   [ -p "$W/power.fifo" ] && ( echo sleep > "$W/power.fifo" ) & ;;
-        diag)    ( diag_save; touch "$X/ctl/diag.done" ) & ;;
+        diag)    ( diag_save; touch "$X/ctl/diag.done"; chmod 644 "$X/ctl/diag.done" 2>/dev/null ) & ;;
         clear)   epd_send FULL ;;
         screenshot)
             mkdir -p "$SYS/data/media/0/Screenshots"
@@ -238,7 +238,7 @@ cmd_listen() {
         compile) type compile_cmd >/dev/null 2>&1 && compile_cmd "$a" ;;
         wrmaint) ( wrmaint_cmd "$a" ) </dev/null >>"$LOG" 2>&1 & ;;
         optimize) ( opt_run ) & ;;
-        poke)    touch "$W/lastinput" 2>/dev/null || true ;;
+        poke)    touch "$W/lastinput" "$X/lasttouch" 2>/dev/null || true; chmod 644 "$X/lasttouch" 2>/dev/null || true ;;
         wifi)
             case "$a" in
                 0|1) ( kobo_wifi_set "$a"; [ "$a" = 1 ] && { hostnet_write 2>/dev/null || true; dns_apply 2>/dev/null || true; }; status_write ) </dev/null >>"$LOG" 2>&1 & ;;

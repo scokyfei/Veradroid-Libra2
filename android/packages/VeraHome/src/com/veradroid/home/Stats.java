@@ -123,6 +123,7 @@ final class Stats {
     };
     private static String fgReaderPkg = null;
     private static long fgReaderStartUp = 0L;
+    private static long fgReaderStartWall = 0L;
 
     static boolean isReaderApp(String pkg) {
         if (pkg == null || pkg.length() == 0) return false;
@@ -132,21 +133,31 @@ final class Stats {
     }
 
     static synchronized void trackForeground(Context c, String pkg) {
-        long now = android.os.SystemClock.uptimeMillis();
+        long nowUp = android.os.SystemClock.uptimeMillis();
+        long nowWall = System.currentTimeMillis();
         if (fgReaderPkg != null && fgReaderStartUp > 0 && c != null) {
-            long dur = now - fgReaderStartUp;
+            long dur = nowUp - fgReaderStartUp;
             boolean sleeping = new java.io.File(HostLink.CTL + "sleep").exists();
+            // 结合宿主机 /dev/kfb/lasttouch 触摸时间戳：如果阅读中途放桌上超过 5 分钟无操作，只计到最后一次触摸后 5 分钟
+            long lastTouch = new java.io.File(HostLink.KFB + "lasttouch").lastModified();
+            if (lastTouch > 0 && fgReaderStartWall > 0 && nowWall > lastTouch + 5L * 60000L) {
+                long activeEnd = Math.max(fgReaderStartWall, lastTouch) + 5L * 60000L;
+                long touchDur = Math.max(0L, activeEnd - fgReaderStartWall);
+                if (touchDur < dur) dur = touchDur;
+            }
             if (!sleeping && dur >= 5000L) {
-                if (dur > 30L * 60000L) dur = 30L * 60000L;   // 单段无切换封顶 30 分钟，防止亮屏发呆虚高
+                if (dur > 30L * 60000L) dur = 30L * 60000L;   // 单段无切换兜底封顶 30 分钟
                 addAppReading(c, fgReaderPkg, dur, 0);
             }
         }
         if (isReaderApp(pkg)) {
             fgReaderPkg = pkg;
-            fgReaderStartUp = now;
+            fgReaderStartUp = nowUp;
+            fgReaderStartWall = nowWall;
         } else {
             fgReaderPkg = null;
             fgReaderStartUp = 0L;
+            fgReaderStartWall = 0L;
         }
     }
 

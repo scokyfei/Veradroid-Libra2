@@ -200,12 +200,22 @@ final class Cleaner {
 
     // ------------------------------------------------------------------ 共用
 
-    /** 现在有进程活着的用户应用，去掉前台的、保持后台的。 */
+    /** 现在有进程活着的用户应用，去掉前台的、保持后台的、以及正在跑前台服务/听书/下载的可感知进程。 */
     private static List<String> backgroundUserApps(Context c, String fg) {
+        Set<String> protectedPkgs = new HashSet<String>();
+        try {
+            List<ActivityManager.RunningAppProcessInfo> procs = ((ActivityManager) c.getSystemService(Context.ACTIVITY_SERVICE)).getRunningAppProcesses();
+            if (procs != null) for (ActivityManager.RunningAppProcessInfo p : procs) {
+                if (p.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_PERCEPTIBLE && p.pkgList != null) {
+                    for (String pkg : p.pkgList) protectedPkgs.add(pkg);
+                }
+            }
+        } catch (Throwable ignored) { }
         List<String> out = new ArrayList<String>();
         for (String p : runningPackages(c)) {
             if (p.equals(fg) || !userApp(c, p)) continue;
             if (keepAlive(c, p)) { Log.i(TAG, "bgclean: " + p + " marked 保持后台 - kept"); continue; }
+            if (protectedPkgs.contains(p)) { Log.i(TAG, "bgclean: " + p + " foreground/perceptible service - kept"); continue; }
             out.add(p);
         }
         return out;

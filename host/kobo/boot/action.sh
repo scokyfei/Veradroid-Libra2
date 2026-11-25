@@ -112,7 +112,8 @@ case "$1" in
     sleep)  power_send sleep ;;
     wake)   power_send wake ;;
     hint)   case "$2" in back) POS=b; hint back "BACK|返回" ;; esac ;;
-    poke)   touch "$W/lastinput" 2>/dev/null || true
+    poke)   touch "$W/lastinput" "$X/lasttouch" 2>/dev/null || true
+            chmod 644 "$X/lasttouch" 2>/dev/null || true
             if [ "${WIFI_PS:-auto}" = auto ] && [ ! -f "$W/wifi.ps" ] && [ ! -f "$W/sleeping" ] && [ ! -f "$W/saver_frozen" ] && [ -w /sys/module/8723ds/parameters/rtw_power_mgnt ]; then
                 ( echo 0 > /sys/module/8723ds/parameters/rtw_power_mgnt 2>/dev/null || true
                   iwpriv wlan0 pm_set "lps=0" >/dev/null 2>&1 || true

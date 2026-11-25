@@ -125,23 +125,27 @@ final class Books {
                 Info info = info(f);
                 if (info.coverEntry == null || info.coverEntry.length() == 0) return null;
                 ZipEntry e = z.getEntry(info.coverEntry);
+                if (e == null) e = z.getEntry(Transfer.pctDecode(info.coverEntry));
                 if (e == null) return null;
                 InputStream in = z.getInputStream(e);
                 ByteArrayOutputStream bo = new ByteArrayOutputStream();
                 byte[] b = new byte[32768];
                 int r;
-                while ((r = in.read(b)) > 0) { bo.write(b, 0, r); if (bo.size() > 8 * 1024 * 1024) break; }
-                in.close();
+                try {
+                    while ((r = in.read(b)) > 0) { bo.write(b, 0, r); if (bo.size() > 8 * 1024 * 1024) break; }
+                } finally { in.close(); }
                 byte[] data = bo.toByteArray();
                 // Do not decode a 4000px cover at full size just to shrink it to 180px:
                 // on a 512 MB Kobo that alone can be tens of MB and OOM.
                 BitmapFactory.Options bounds = new BitmapFactory.Options();
                 bounds.inJustDecodeBounds = true;
                 BitmapFactory.decodeByteArray(data, 0, data.length, bounds);
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
                 int sample = 1;
                 while (bounds.outWidth / sample > tw * 2 || bounds.outHeight / sample > th * 2) sample *= 2;
                 BitmapFactory.Options opts = new BitmapFactory.Options();
                 opts.inSampleSize = sample;
+                opts.inPreferredConfig = Bitmap.Config.RGB_565;
                 Bitmap src = BitmapFactory.decodeByteArray(data, 0, data.length, opts);
                 return fit(src, tw, th);
             } finally {
@@ -250,7 +254,7 @@ final class Books {
         try {
             ZipEntry e = z.getEntry(name);
             if (e == null) {
-                String d = java.net.URLDecoder.decode(name, "UTF-8");
+                String d = Transfer.pctDecode(name);
                 e = z.getEntry(d);
             }
             if (e == null) return null;

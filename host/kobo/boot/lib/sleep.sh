@@ -283,7 +283,8 @@ kobo_exit_sleep() {
         kobo_light_set "$(cat "$W/sleep.fl" 2>/dev/null)"
         rm -f "$W/sleep.fl"
     fi
-    touch "$W/lastinput" 2>/dev/null || true
+    touch "$W/lastinput" "$X/lasttouch" 2>/dev/null || true
+    chmod 644 "$X/lasttouch" 2>/dev/null || true
     rm -f "$X/ctl/sleep"
     # Reset vinput slot state again after opening the sleep gate so any stale Elan resume event is cleared.
     type vinput_reset >/dev/null 2>&1 && vinput_reset thaw
@@ -306,7 +307,8 @@ sleep_watch() {
     pf=$W/power.fifo
     rm -f "$pf"; mkfifo "$pf" 2>/dev/null || return 1
     chmod 666 "$pf"
-    touch "$W/lastinput" 2>/dev/null || true
+    touch "$W/lastinput" "$X/lasttouch" 2>/dev/null || true
+    chmod 644 "$X/lasttouch" 2>/dev/null || true
     exec 4<>"$pf"
     SLEEP_FIFO_READY=1
     MEM_WAKE_TS=0
@@ -359,12 +361,14 @@ sleep_watch() {
         last=$(stat -c %Y "$W/lastinput" 2>/dev/null || echo 0)
         now=$(date +%s)
         if [ "$last" -gt "$now" ]; then
-            touch "$W/lastinput" 2>/dev/null || true
+            touch "$W/lastinput" "$X/lasttouch" 2>/dev/null || true
+    chmod 644 "$X/lasttouch" 2>/dev/null || true
             last=$now
         fi
         if [ "$last" -gt 0 ] && [ $((now - last)) -ge "$to" ]; then
             if sleep_transfer_busy; then
-                touch "$W/lastinput" 2>/dev/null || true
+                touch "$W/lastinput" "$X/lasttouch" 2>/dev/null || true
+    chmod 644 "$X/lasttouch" 2>/dev/null || true
                 continue
             fi
             t "sleep: idle ${to}s reached (charging=$(kobo_is_charging && echo 1 || echo 0))"

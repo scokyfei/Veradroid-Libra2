@@ -113,7 +113,7 @@ compile_needed() { # pkg [force]
 
 compile_status() { # KEY=value...
     [ -d $X/ctl ] || return 0
-    printf '%s\n' "$@" > $CST.tmp 2>/dev/null && mv -f $CST.tmp $CST
+    printf '%s\n' "$@" > $CST.tmp 2>/dev/null && chmod 644 $CST.tmp 2>/dev/null && mv -f $CST.tmp $CST
 }
 # 排队（去重）。$2=force：强制重编
 compile_enqueue() { # pkg [force]
