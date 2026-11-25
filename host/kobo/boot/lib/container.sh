@@ -230,6 +230,12 @@ nocap_mount() {
 container_start() {
     # Reset oom_score_adj to 0 so restarted Android container never inherits -800 from watchdog/cmd.
     echo 0 > /proc/self/oom_score_adj 2>/dev/null || true
+    # Keep $SYS/version in sync with $VD/VERSION across fresh installs and incremental upgrades
+    if [ -f "$VD/VERSION" ] && [ -d "$SYS" ]; then
+        if ! cmp -s "$VD/VERSION" "$SYS/version" 2>/dev/null; then
+            cp "$VD/VERSION" "$SYS/version.tmp" 2>/dev/null && mv -f "$SYS/version.tmp" "$SYS/version" 2>/dev/null || true
+        fi
+    fi
     # Prevent Android init.rc `mount rootfs rootfs / ro remount` from flipping the
     # shared ext4 loop superblock (/dev/loop0 holding both rootfs and /data) read-only!
     if [ -w "$R/init.rc" ] && grep -q '^[[:space:]]*mount rootfs rootfs / ro remount' "$R/init.rc" 2>/dev/null; then
