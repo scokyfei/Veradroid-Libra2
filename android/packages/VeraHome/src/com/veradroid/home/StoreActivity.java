@@ -583,7 +583,13 @@ public class StoreActivity extends Activity {
                 before = Dl.have(out);
                 continue;
             } catch (Dl.HttpError e) {
-                if (e.code == 404 || e.code == 403) throw e;   // 商店里没有了 / 没权限：重试也没用
+                if (e.code == 404 || e.code == 403) {
+                    if (e.mirror) {
+                        say("镜像源返回 " + e.code + "，自动切回主站继续…");
+                        continue;
+                    }
+                    throw e;   // 主站也没有 / 没权限：重试也没用
+                }
                 last = e;
             } catch (java.io.IOException e) {
                 last = e;

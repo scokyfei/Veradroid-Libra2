@@ -54,6 +54,7 @@ public class HostService extends Service {
         watchForeground();
         AppProf.migrate(this);
         keepAnimationsOff();
+        NavBarService.apply(this);
         try {
             android.content.IntentFilter f = new android.content.IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
             f.addAction(Intent.ACTION_SCREEN_OFF);

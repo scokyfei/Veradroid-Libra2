@@ -13,11 +13,27 @@ STALE=; [ "$1" = "--stale" ] && STALE=1
 RS=; [ -f "$W/restarting" ] && RS=1
 [ -n "$STALE" ] || echo "[$(date +%H:%M:%S)] stop.sh called (parent $PPID)" >> "$LOG"
 
+# Collect full ancestor PID chain up to PID 1 so stop.sh never kills its own caller/grandparent mid-stop.
+ANCESTORS=" $$ $PPID "
+_ap=$PPID
+_d=0
+while [ -n "$_ap" ] && [ "$_ap" -gt 1 ] && [ $_d -lt 16 ]; do
+    _stat=$(cat "/proc/$_ap/stat" 2>/dev/null) || break
+    _pp=$(printf '%s\n' "${_stat##*) }" | awk '{print $2}')
+    case "$_pp" in ''|*[!0-9]*) break ;; esac
+    [ "$_pp" -le 1 ] && break
+    case "$ANCESTORS" in *" $_pp "*) break ;; esac
+    ANCESTORS="$ANCESTORS$_pp "
+    _ap=$_pp
+    _d=$((_d + 1))
+done
+is_ancestor() { case "$ANCESTORS" in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+
 if [ -z "$STALE" ]; then
     echo $$ > /tmp/veradroid-stop.pid
     trap 'rm -f /tmp/veradroid-stop.pid' EXIT
     sp=$(cat "$W/starting/pid" 2>/dev/null)
-    if [ -n "$sp" ] && [ "$sp" != "$$" ] && [ "$sp" != "$PPID" ] && kill -0 "$sp" 2>/dev/null; then
+    if [ -n "$sp" ] && ! is_ancestor "$sp" && kill -0 "$sp" 2>/dev/null; then
         kill "$sp" 2>/dev/null || true
         usleep 300000
         kill -9 "$sp" 2>/dev/null || true
@@ -31,8 +47,11 @@ ps=
 for f in watchdog guard sleep cmd boot afterboot compile diagboot; do
     p=$(cat "$W/$f.pid" 2>/dev/null)
     [ -n "$p" ] || continue
-    [ "$p" = "$PPID" ] || [ "$p" = "$$" ] && continue
-    for c in $(pgrep -P "$p" 2>/dev/null); do kill "$c" 2>/dev/null && ps="$ps $c"; done
+    is_ancestor "$p" && continue
+    for c in $(pgrep -P "$p" 2>/dev/null); do
+        is_ancestor "$c" && continue
+        kill "$c" 2>/dev/null && ps="$ps $c"
+    done
     kill "$p" 2>/dev/null && ps="$ps $p"
 done
 : > "$W/compile.quit" 2>/dev/null || true

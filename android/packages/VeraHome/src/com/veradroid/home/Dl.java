@@ -29,7 +29,7 @@ final class Dl {
     static final int SEGS = 4;                 // dl.wenjin.jp allows 8 connections per IP; stay well under it
     static final long SEG_MIN = 2L << 20;      // was 8 MB: a 4 MB app (EinkBro) went over one slow connection
     static volatile long SLOW_BPS = 40L << 10;  // under this (bytes/s, over WINDOW_MS) another source is tried
-    static volatile long WARM_MS = 15000, WINDOW_MS = 12000;
+    static volatile long WARM_MS = 15000, WINDOW_MS = 12000, STALL_MS = 60000;
 
     /** This try was stopped because src was too slow while another source is left; resume with src in the slow set. */
     static final class Slow extends java.io.IOException {
@@ -37,12 +37,19 @@ final class Dl {
         Slow(String src, long bps) { super("下载太慢（" + (bps >> 10) + " KB/s），换一个下载源"); this.src = src; this.bps = bps; }
     }
 
-    /** Throughput over a sliding window; slow() once warm and the window average is under SLOW_BPS. */
+    /** Throughput over a sliding window; slow() once warm and under SLOW_BPS, stalled() when 0 bytes for STALL_MS. */
     static final class Meter {
-        final long t0 = System.currentTimeMillis();
+        final long t0 = android.os.SystemClock.elapsedRealtime();
+        final boolean canSwitch;
         final long[] ts = new long[64], bs = new long[64]; int n;
-        volatile boolean cancel;
-        synchronized void sample(long total) { long now = System.currentTimeMillis(); ts[n % 64] = now; bs[n % 64] = total; n++; }
+        long lastProgAt = t0, lastBytes = -1;
+        volatile boolean cancel, stallCancel;
+        Meter(boolean canSwitch) { this.canSwitch = canSwitch; }
+        synchronized void sample(long total) {
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (total > lastBytes) { lastBytes = total; lastProgAt = now; }
+            ts[n % 64] = now; bs[n % 64] = total; n++;
+        }
         /** Bytes/s over the last WINDOW_MS, or -1 while still warming up / not enough samples. */
         synchronized long rate() {
             if (n < 2) return -1;
@@ -54,7 +61,8 @@ final class Dl {
             if (dt < WINDOW_MS / 2) return -1;
             return (bs[(n - 1) % 64] - bs[i % 64]) * 1000 / dt;
         }
-        boolean slow() { long r = rate(); return r >= 0 && r < SLOW_BPS; }
+        boolean slow() { if (!canSwitch) return false; long r = rate(); return r >= 0 && r < SLOW_BPS; }
+        synchronized boolean stalled() { return android.os.SystemClock.elapsedRealtime() - lastProgAt >= STALL_MS; }
     }
 
     interface Progress { void on(long done, long total, boolean mirror); }
@@ -143,10 +151,11 @@ final class Dl {
         final String src = (String) pk[0];
         int segs = (Integer) pk[1];
         final boolean mirror = !src.equals(cands.get(cands.size() - 1));
-        // another source left to switch to? Only then a slow source is given up.
-        final Meter meter = usable(cands, slow).size() > 1 ? new Meter() : null;
+        // another source left to switch to? Only then a slow source is given up; 60s 0-byte stall always reconnects.
+        final Meter meter = new Meter(usable(cands, slow).size() > 1);
         try { fetchFrom(src, segs, mirror, out, size, p, meter); }
         catch (Slow e) { if (slow != null) slow.add(src); throw e; }
+        catch (HttpError e) { if (mirror && (e.code == 404 || e.code == 403) && slow != null) slow.add(src); throw e; }
     }
 
     private static void fetchFrom(final String src, int segs, final boolean mirror, final File out, final long size, final Progress p, final Meter meter) throws Exception {
@@ -179,7 +188,7 @@ final class Dl {
             if (f.length() > b - a + 1) f.delete();
             if (a + f.length() > b) continue;
             Thread t = new Thread(new Runnable() { @Override public void run() {
-                try { range(src, f, a + f.length(), b, meter, activeConns, idx); }
+                try { range(src, f, a + f.length(), b, mirror, meter, activeConns, idx); }
                 catch (Exception e) { synchronized (err) { if (err[0] == null) err[0] = e; } }
             }}, "StoreSeg" + i);
             t.start(); ts.add(t);
@@ -195,8 +204,15 @@ final class Dl {
                 if (meter.slow()) {
                     synchronized (activeConns) { meter.cancel = true; }
                     abortActive(activeConns, ts);
+                } else if (meter.stalled()) {
+                    synchronized (activeConns) { meter.cancel = true; meter.stallCancel = true; }
+                    abortActive(activeConns, ts);
                 }
             }
+        }
+        if (meter != null && meter.stallCancel) {
+            android.util.Log.i("VeraStore", "stalled 60s on " + host(src) + ", reconnecting (" + (have(out) >> 10) + " KB kept)");
+            throw new java.io.IOException("下载卡在 0 KB/s 超过 60 秒，正在重连");
         }
         if (meter != null && meter.cancel) {
             long r = Math.max(0, meter.rate());
@@ -242,7 +258,7 @@ final class Dl {
     }
 
     /** Bytes from..to (inclusive) of url appended to f. */
-    private static void range(String url, File f, long from, long to, Meter meter, HttpURLConnection[] activeConns, int idx) throws Exception {
+    private static void range(String url, File f, long from, long to, boolean mirror, Meter meter, HttpURLConnection[] activeConns, int idx) throws Exception {
         if (meter != null && meter.cancel) return;
         HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
         synchronized (activeConns) {
@@ -257,6 +273,7 @@ final class Dl {
             h.setRequestProperty("User-Agent", "VeraDroid/Store");
             h.setRequestProperty("Range", "bytes=" + from + "-" + to);
             int code = h.getResponseCode();
+            if (code == 404 || code == 403) throw new HttpError(code, h, mirror, url);
             if (code != 206) throw new java.io.IOException("HTTP " + code);
             InputStream in = h.getInputStream();
             FileOutputStream fo = new FileOutputStream(f, true);
@@ -299,7 +316,7 @@ final class Dl {
                 h.setRequestProperty("User-Agent", "VeraDroid/Store");
                 code = h.getResponseCode();
             }
-            if (code != 200 && code != 206) throw new HttpError(code, h);
+            if (code != 200 && code != 206) throw new HttpError(code, h, mirror, url);
             boolean append = have > 0 && code == 206;
             if (!append) have = 0;   // server ignored the Range: start again from zero
             InputStream in = new java.io.BufferedInputStream(h.getInputStream(), 65536);
@@ -332,7 +349,14 @@ final class Dl {
     /** An HTTP error status from the server; the message is its JSON "error" when it sent one. */
     static final class HttpError extends Exception {
         final int code;
-        HttpError(int code, HttpURLConnection h) { super(message(code, h)); this.code = code; }
+        final boolean mirror;
+        final String src;
+        HttpError(int code, HttpURLConnection h, boolean mirror, String src) {
+            super(message(code, h));
+            this.code = code;
+            this.mirror = mirror;
+            this.src = src;
+        }
         private static String message(int code, HttpURLConnection h) {
             try {
                 InputStream in = h.getErrorStream();

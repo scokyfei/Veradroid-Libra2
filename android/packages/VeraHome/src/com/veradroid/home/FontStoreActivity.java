@@ -480,12 +480,22 @@ public class FontStoreActivity extends Activity {
                 } };
                 Exception last = null;
                 boolean got = false;
+                java.util.Set<String> slow = new java.util.HashSet<String>();
                 for (int tries = 0; tries < 6 && !got; tries++) {
                     try {
-                        Dl.fetchOnce(cands, part, it.size, p);
+                        Dl.fetchOnce(cands, part, it.size, p, slow);
                         got = it.size <= 0 || part.length() == it.size;
+                    } catch (Dl.Slow e) {
+                        say("镜像下载太慢（" + (e.bps >> 10) + " KB/s），切换下载源继续…");
+                        continue;
                     } catch (Dl.HttpError e) {
-                        if (e.code == 404 || e.code == 403) throw new Exception("这个字体已经从商店下架了");
+                        if (e.code == 404 || e.code == 403) {
+                            if (e.mirror) {
+                                say("镜像源返回 " + e.code + "，切回主站继续下载…");
+                                continue;
+                            }
+                            throw new Exception("这个字体已经从商店下架了");
+                        }
                         last = e;
                     } catch (java.io.IOException e) { last = e; }
                     if (!got && tries < 5) { say("网络中断，正在从断点继续下载（第 " + (tries + 2) + " 次）…"); Thread.sleep(3000L * (tries + 1)); }

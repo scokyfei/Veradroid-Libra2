@@ -981,6 +981,11 @@ static int push(const uint8_t *rgba, int x, int y, int w, int h, int mode)
         rgba_to_y8_rot(rgba, x, y, w, h, cur_y8);
         int px, py, pw, ph;
         rot_rect(x, y, w, h, &px, &py, &pw, &ph);
+        if (px < 0) { pw += px; px = 0; }
+        if (py < 0) { ph += py; py = 0; }
+        if (px + pw > W) pw = W - px;
+        if (py + ph > H) ph = H - py;
+        if (pw <= 0 || ph <= 0) return 0;
         lightf_pass(cur_y8, W, W, H, py, py + ph);
         push_region(px, py, px + pw, py + ph, mode);
         return 0;
@@ -1202,11 +1207,24 @@ static int img_box(const uint8_t *buf, int w, int h, int *bx0, int *by0, int *bx
     for (int ty = 0; ty + QP_TILE / 2 <= h; ty += QP_TILE)
         for (int tx = 0; tx + QP_TILE / 2 <= w; tx += QP_TILE) {
             int ex = tx + QP_TILE < w ? tx + QP_TILE : w, ey = ty + QP_TILE < h ? ty + QP_TILE : h, s = 0, g = 0;
+            int gmin = 255, gmax = 0;
+            unsigned bins = 0;
             for (int j = ty; j < ey; j += 2) {
                 const uint8_t *r = buf + (size_t)j * w;
-                for (int i = tx + (j & 2 ? 1 : 0); i < ex; i += 2) { s++; if (r[i] >= 40 && r[i] <= 215) g++; }
+                for (int i = tx + (j & 2 ? 1 : 0); i < ex; i += 2) {
+                    s++;
+                    int v = r[i];
+                    if (v >= 40 && v <= 215) {
+                        g++;
+                        if (v < gmin) gmin = v;
+                        if (v > gmax) gmax = v;
+                        bins |= 1u << ((v - 40) * 8 / 176);
+                    }
+                }
             }
-            if (s && g * 2 >= s) {
+            /* Require real tonal spread across >= 3 mid-gray bins so solid dark/sepia/eye-care
+               page backgrounds are never mistaken for a full-screen photograph. */
+            if (s && g * 2 >= s && (gmax - gmin) >= 32 && __builtin_popcount(bins) >= 3) {
                 n++;
                 if (tx < x0) x0 = tx;
                 if (ty < y0) y0 = ty;
@@ -1334,7 +1352,7 @@ static int push_y8(const uint8_t *buf, int x, int y, int w, int h, int mode)
 #endif
                                           c.wfm_mode == WFM_GL16);
             int lowq = c.wfm_mode == WFM_DU || c.wfm_mode == WFM_A2 || c.is_animated || coll;   /* AUTO picks a 16-gray waveform for gray content itself */
-            qp_note(buf, x, y, w, h, fullq && !c.is_animated, lowq, t0);
+            if (ui_mode != 2) qp_note(buf, x, y, w, h, fullq && !c.is_animated, lowq, t0);
         }
         if ((c.wfm_mode == WFM_DU || c.wfm_mode == WFM_A2) && mode != M_CLEAN) {   /* remember what was drawn 1-bit, for CLEAN / the scroll cleanup */
             if (!cl_valid) { cl_x0 = x; cl_y0 = y; cl_x1 = x + w; cl_y1 = y + h; cl_valid = 1; }
