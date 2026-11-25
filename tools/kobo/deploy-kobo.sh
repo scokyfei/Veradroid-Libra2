@@ -3,7 +3,7 @@
 # Package and deploy VeraDroid for Kobo Libra 2 over SSH.
 #
 # Usage:
-#   KOBO_HOST=192.168.0.60 KOBO_PORT=2222 \
+#   KOBO_HOST=<KOBO_IP> KOBO_PORT=2222 \
 #   BIN_DIR=/path/to/kobo-bin \
 #   LEGACY_DIR=/path/to/veradroid-pw6 \
 #   KMOD_DIR=/path/to/Koboweread/kernels \
@@ -11,7 +11,7 @@
 set -eu
 
 TOP=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-HOST=${KOBO_HOST:-192.168.0.60}
+HOST=${KOBO_HOST:?set KOBO_HOST to your Kobo IP address}
 PORT=${KOBO_PORT:-2222}
 USER=${KOBO_USER:-root}
 REMOTE_VD=${KOBO_VD:-/mnt/onboard/.adds/veradroid-libra2-dev}

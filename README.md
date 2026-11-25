@@ -1,149 +1,135 @@
-# VeraDroid
+# Veradroid-Libra2
 
-在越狱的 Kindle 上运行 Android 7.1 的开源项目。Android 和 Kindle 系统共用同一个 Linux 内核，跑在独立的根文件系统和容器里；
-不刷机、不替换内核、不改写 Kindle 的系统分区，随时可以回到 Kindle 原来的界面。
+*An optimized Android 7.1.1 reading environment (VeraDroid port) for **Kobo Libra 2 (N418)** — supporting both **NickelMenu** and **KOReader**, true `mem` deep sleep, NEON Skia E-Ink rendering, and incremental offline upgrades.*
 
-- 网站、安装说明和更新日志：<https://veradroid.wenjin.jp>
-- 作者：ajie
-- 许可：GPL-3.0-or-later（见 [`LICENSE`](LICENSE)、[`THIRD_PARTY.md`](THIRD_PARTY.md)）
+将开源项目 [VeraDroid](https://github.com/xyc0677/veradroid)（`legacy` 分支，Android 7.1.1 / 32-bit ARMv7）深度移植并优化到 **Kobo Libra 2 (N418)**，复用并融合 [Koboweread](https://github.com/scokyfei/Koboweread) 的内核模块与阅读器硬件调优方案。
 
-> 本项目与 Amazon 没有任何关联，也未获得其认可或赞助。“Kindle”是 Amazon.com, Inc. 或其关联公司的商标。
-> 仓库里没有 Amazon 的固件、内核镜像、内核模块或从 Amazon 软件中提取的任何文件。越狱、安装第三方软件有风险，请自行判断。
+Android 运行在独立的 `ext4` 系统镜像（`veradroid-sys.img`）与挂载命名空间容器内，**不刷机、不替换 Kobo 内核、不改动 Kobo 系统分区与原生书库**；退出后自动卸载镜像与 loop 设备，不影响 USB 传书，随时一键返回 Kobo 原生界面（Nickel）或 KOReader。
 
-## 支持的机型
+- **上游项目**：[VeraDroid](https://github.com/xyc0677/veradroid)（原作者 `ajie` · [veradroid.wenjin.jp](https://veradroid.wenjin.jp)）
+- **Kobo 移植与优化**：`scokyfei`（参考 [Koboweread](https://github.com/scokyfei/Koboweread)）
+- **开源协议**：GPL-3.0-or-later（见 [`LICENSE`](LICENSE)、[`NOTICE`](NOTICE)、[`THIRD_PARTY.md`](THIRD_PARTY.md)）
 
-| 机型 | 安装包 | 当前版本 | 状态 |
-|---|---|---|---|
-| Kindle Paperwhite 6（2024） | `pw6` | 1.02 | 正式支持 |
-| Paperwhite 5、入门款 2022（KT5）、入门款 2024（KT6） | `k49` | 1.10 | 实验性，已有真实用户在用 |
-| Scribe、Colorsoft | `k49` | 1.10 | 实验性，只在模拟器里验证过；Colorsoft 按灰度显示，Scribe 不支持手写笔 |
-| Paperwhite 2 / 3 / 4、Voyage、Oasis 2 / 3 等老机型 | `legacy` | 0.8.13 | 测试阶段 |
-
-固件版本、越狱方式等细节以网站上的说明为准。
-
-## 功能
-
-- 完整的 Android 7.1.1 运行环境：可以安装 APK，运行阅读、笔记、浏览器等应用；
-  与 Kindle 共享书库（`documents`）和 Kindle 自带字体。
-- 墨水屏显示：按脏区域局部刷新，多种刷新模式和波形，可选抖动、浅色过滤、旋转（竖 / 横 / 倒置）。
-- 触摸和按键：多点触摸、全局边缘手势（返回、下拉面板、亮度 / 色温）、四角长按、机身双击翻页、蓝牙翻页器和键盘。
-- 自带桌面 VeraHome：方块 / 经典两种界面风格、下拉面板、书库、应用管理、使用统计、屏保、锁屏。
-- 自带输入法 VeraIME（拼音）。
-- 局域网传书 / 管理网页（PIN 保护，只在打开时可用）。
-- 与 Kindle 的配合：前光、电源键休眠唤醒、Wi-Fi、时区、电量；低内存机型的冻结 / 精简 / 预编译策略。
-- 在线更新和离线整包；安装失败或启动失败时自动回到 Kindle。
-
-## 架构
-
-```
-┌──────────────────────────── Kindle（Linux 内核，Amazon 固件）────────────────────────────┐
-│  Kindle 界面（暂停 / 恢复）                                                               │
-│                                                                                          │
-│  宿主脚本 host/<机型>/boot（busybox sh，root）                                            │
-│    ├─ 容器：unshare 出 mount / UTS / IPC / net / PID 命名空间，pivot_root 后执行 /init       │
-│    │   （3.0 内核没有命名空间：chroot + 共用 Kindle 网络）                                   │
-│    ├─ 网络：slirp4netns（Kindle 内核没有 veth）                                           │
-│    ├─ 显示桥 display/epd.c（veradroid-epd，静态链接 FBInk）                               │
-│    ├─ 输入前端 input/vinput.c（veradroid-input，uinput）                                  │
-│    └─ 设置、手势、休眠、更新、诊断（boot/lib/*.sh）                                       │
-│                                                                                          │
-│  Android 7.1.1（AOSP 编译，android/）                                                     │
-│    ├─ gralloc / hwcomposer：渲染到共享缓冲，脏矩形经 FIFO 交给显示桥                       │
-│    ├─ memfd 代替 ashmem、无 GPU 的软件渲染、binder 协议适配                               │
-│    └─ VeraHome（桌面）、VeraIME（输入法）                                                 │
-└──────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-| 目录 | 内容 |
-|---|---|
-| `host/pw6`、`host/k49`、`host/legacy` | Kindle 上运行的宿主脚本（启动、停止、容器、显示、输入、休眠、设置、更新），按安装包分三套 |
-| `display/` | 显示桥：RGBA 共享缓冲 → 灰度 → 墨水屏刷新（FBInk / 驱动 ioctl） |
-| `input/` | 输入前端：读取 Kindle 的触摸 / 按键设备，坐标变换后经 uinput 交给 Android，识别全局手势 |
-| `android/` | AOSP 7.1.1 的设备配置（`device/veradroid/`）、整文件覆盖（`overlay/`）、小补丁（`small-patches.py`）、hwcomposer、VeraHome 和 VeraIME 源码 |
-| `bluetooth/` | 蓝牙翻页器 / 键盘桥 |
-| `cloud/static/` | 安装器和更新脚本（`bootstrap.sh` 等）、书库入口脚本 |
-| `kpm/`、`kual/`、`documents/` | KPM 包、KUAL 扩展、书库入口 |
-| `tools/` | 交叉编译（`cross/`）、老内核的外挂内核模块（`kmod/`）、系统镜像构建（`build/`）、测量工具（`bench/`）、小程序源码（`src/`） |
-| `diagnostics/` | 设备调查、兼容性检查、冒烟测试 |
-| `tests/` | 宿主脚本和安装器的静态测试（全部：`sh tests/run-static.sh`；单个：`sh tests/<名字>-test.sh`） |
-| `docs/` | 设计说明：宿主设置接口、打包与更新、系统镜像、蓝牙、旋转、界面等 |
-
-## 构建
-
-仓库只有源码，不含预编译二进制和 APK。
-
-### 1. Android 系统镜像（AOSP android-7.1.1_r61）
-
-```sh
-# 构建环境（Ubuntu 16.04 + OpenJDK 8）
-docker build -t vdaosp:7.1 -f tools/build/Dockerfile.aosp tools/build
-
-# AOSP 源码
-export AOSP_WORK=$HOME/veradroid-aosp
-mkdir -p "$AOSP_WORK/src" && cd "$AOSP_WORK/src"
-repo init -u https://android.googlesource.com/platform/manifest -b android-7.1.1_r61 --depth=1
-repo sync -c -j8
-cd -
-
-# 打补丁并编译两种镜像：pw6（64 位 binder 协议）和 k49（32 位 binder 协议）
-sh tools/build/build_rootfs.sh prepare
-sh tools/build/build_rootfs.sh pw6
-sh tools/build/build_rootfs.sh k49
-```
-
-`android/apply-patches.sh` 把 `android/` 下的设备配置、覆盖文件和补丁应用到 AOSP 源码树（可重复运行）；
-`build_rootfs.sh` 在此基础上编译、检查并打包 `rootfs-<镜像>-<git>.tar.gz`，同时输出同一次编译的 VeraHome / VeraIME。
-细节见 [`docs/system-image.md`](docs/system-image.md)、[`docs/packaging-and-ota.md`](docs/packaging-and-ota.md)。
-老机型（3.0 / 4.1 内核，Cortex-A9）用另一个产品 `veradroid_kindle32`。
-
-### 2. 宿主程序（ARM 交叉编译）
-
-```sh
-# 新机型：Ubuntu 的 gcc-arm-linux-gnueabihf，静态链接
-git clone https://github.com/NiLuJe/FBInk && (cd FBInk && git checkout 886f25f && git apply ../patches/fbink-state-dump-args.patch)
-make -C FBInk CROSS_TC=arm-linux-gnueabihf KINDLE=1 MINIMAL=1 IMAGE=1 DRAW=1 staticlib
-arm-linux-gnueabihf-gcc -O2 -static -I FBInk display/epd.c FBInk/Release/libfbink.a -lm -o veradroid-epd
-arm-linux-gnueabihf-gcc -O2 -static input/vinput.c -o veradroid-input
-
-# 老机型（glibc 2.19）：tools/cross/Dockerfile.legacy + tools/cross/build-legacy-bin.sh
-```
-
-`tools/src/` 里的小程序（`pivot_init`、`slirpctl`、`vdlmk` 等）同样静态编译；slirp4netns 用上游发布的 armv7l 静态二进制（见 `third_party/README.md`）。
-没有 binder / tun / uinput 的老内核需要外挂模块：`tools/kmod/`（需要自行下载 Amazon 公开的对应内核 GPL 源码）。
-
-### 3. 打包
-
-安装包 = `host/<机型>/` 的脚本 + 上面编出的宿主程序（`bin/`）+ 系统镜像 `rootfs.tar.gz` + APK + 字体
-（霞鹜文楷 `LXGWWenKai-Regular.ttf`，从 <https://github.com/lxgw/LxgwWenKai> 下载，OFL 1.1）。
-包结构和安装器的约定见 [`docs/packaging-and-ota.md`](docs/packaging-and-ota.md) 和 `cloud/static/bootstrap.sh`。
-
-## 安装
-
-请按网站上的说明操作：<https://veradroid.wenjin.jp>（需要先越狱）。
-
-## 参与
-
-见 [`CONTRIBUTING.md`](CONTRIBUTING.md)；安全问题见 [`SECURITY.md`](SECURITY.md)。
-
-## 许可
-
-VeraDroid 自己的代码按 GNU General Public License 第 3 版或（由你选择）任何更新版本授权（GPL-3.0-or-later），
-文件头有 `SPDX-License-Identifier`。AOSP 覆盖文件沿用原文件的许可；第三方组件见 [`THIRD_PARTY.md`](THIRD_PARTY.md)。
+> 本项目为社区开源项目，与 Rakuten Kobo、Google、腾讯或 Amazon 均无关联。发布的安装包不含任何个人数据或第三方闭源应用 APK（如微信读书需由用户自行安装）。
 
 ---
 
-## English summary
+## 适用设备与环境
 
-VeraDroid runs Android 7.1.1 (built from AOSP `android-7.1.1_r61`) on jailbroken Kindle e-readers. Android lives in its own
-root file system inside a container on the Kindle's own Linux kernel; nothing is flashed and the Kindle system partition is
-not modified, so you can always return to the stock Kindle UI.
+| 项目 | 要求 |
+|---|---|
+| 设备型号 | **Kobo Libra 2 (N418)**（i.MX6SL 单核 Cortex-A9 + NEON，512 MB RAM，1264×1680 300 ppi） |
+| 支持固件 | **4.38.23852**（内核 `4.1.15-00868-g58a2758be07`）或 **4.34.20097**（内核 `4.1.15-00838-g349fbf5767c`） |
+| 启动入口 | **NickelMenu**（可独立使用，无需安装 KOReader）或 **KOReader 插件**（两者可同时安装） |
+| 存储空间 | 全新安装建议 Kobo 剩余空间 **≥ 2.5 GB**（首次启动自动创建 2 GB ext4 镜像） |
 
-- Supported: Kindle Paperwhite 6 (package `pw6` 1.02, official); Paperwhite 5, Kindle 2022 / 2024 (`k49` 1.10, experimental,
-  used by real users); Scribe and Colorsoft (`k49` 1.10, experimental, verified on an emulator only; Colorsoft runs in grayscale,
-  no pen on Scribe); older models PW2 / PW3 / PW4 / Voyage / Oasis 2 / 3 (`legacy` 0.8.13, testing).
-- Components: host shell scripts (`host/`), an e-ink display bridge (`display/`, uses FBInk), an input front-end (`input/`),
-  AOSP device config and patches (`android/`), the VeraHome launcher and VeraIME input method, installer scripts (`cloud/static/`).
-- Build: see "构建" above (Docker image `tools/build/Dockerfile.aosp`, `tools/build/build_rootfs.sh`, ARM cross-compilation of
-  the host programs). Install instructions: <https://veradroid.wenjin.jp>.
-- License: GPL-3.0-or-later. Third-party components: `THIRD_PARTY.md`. Author: ajie.
-- Not affiliated with, endorsed or sponsored by Amazon. "Kindle" is a trademark of Amazon.com, Inc. or its affiliates.
+---
+
+## 核心特性
+
+- **双入口无缝切换**：同时提供 **NickelMenu** 入口（内置独立 `fbink` / `fbdepth`，无需 KOReader）与 **KOReader 插件** 入口；进入时自动暂停 Nickel / KOReader，退出时自动恢复原界面与帧缓冲色深。
+- **深度墨水屏显示优化 (`veradroid-epd`)**：
+  - 原生 `1264×1680`（300 ppi）局部刷新、REAGL / GL16 / A2 滚动波形、Eclipse 夜间波形（`GLKW16`/`GCK16`）与暗底压黑；
+  - **4 档实时 E-Ink 文字笔锋加黑**（Skia NEON 字形层加速 + Gamma 增强）与 **32×32 插图智能抖动**（文字锐利、插图柔和）；
+  - 阅读页专属翻页动画门控、弹窗/目录收起自动清残影、大图后自动消残影、单应用独立显示配置。
+- **完整硬件操控与手势 (`veradroid-input`)**：
+  - Elan 触摸屏 `--swap-xy` 坐标映射、**重力感应自动旋转**（`kx122`，0°/90°/180°/270° 无重启随动）；
+  - 实体翻页键支持互换与 **14 种长按快捷功能**；
+  - **左右边缘上下滑动无级调亮度与色温**（直写 `mxc_msp430` / `lm3630a` sysfs，支持左右互换）；
+  - 底边三段手势、顶边下拉快捷面板、双指手势、四角长按（默认左下角长按 2 秒返回 Kobo）。
+- **低内存与深度省电调优**：
+  - `256 MB` ZRAM + `vdsqueeze` 冷页预挤压 + 零 FUSE `kobo-sdcard` 绑定挂载 + 后台应用智能 `speed-profile` / `speed` AOT 预编译；
+  - **真 `mem` 深度休眠**（过滤 Linux 4.1 伪 RTC 唤醒，待机功耗低至 ~0.1%/h）、阅读静止 15s 自动 Wi-Fi LPS 省电、CPU 静止柔和限频、独立无操作息灯。
+- **完整 VeraHome 桌面生态**：
+  - 6 大分层设置、内置应用商店 & 字体商店、局域网网页传书 / 安装 / 管理（PIN 保护）、离线阅读器、阅读时长统计（结合宿主机触摸时间戳防虚高）、自定义屏保与锁屏。
+- **纯净系统 + 离线增量升级**：
+  - 首次启动自动为设备生成随机 `android_id`；Wi-Fi 直接复用 Kobo 宿主机网络配置，安装包不含任何个人隐私；
+  - 内置离线升级器（`localupdate.sh`），支持 SHA-256 校验、防降级检查、失败自动回滚，增量升级 **100% 保留已装应用、书籍、阅读进度与设置**。
+
+完整的技术实现、微信读书专项优化与实机基准测试数据见：[`docs/kobo-libra2-optimizations.md`](docs/kobo-libra2-optimizations.md)。
+
+---
+
+## 安装与升级指南
+
+请前往本仓库 [Releases](https://github.com/scokyfei/Veradroid-Libra2/releases) 页面下载对应压缩包：
+
+- **`Veradroid-Libra2-<版本>-full.zip`**（约 138 MB）：**全新安装完整包**
+- **`Veradroid-Libra2-<版本>-upgrade.zip`**（约 4.6 MB）：**增量升级包**
+
+### 一、全新安装（免 SSH，USB 解压即用）
+
+1. 确保 Kobo Libra 2 剩余空间 **≥ 2.5 GB**。
+2. 用 USB 数据线连接电脑，打开 Kobo U 盘根目录（即设备上的 `/mnt/onboard`）。
+3. 将 `Veradroid-Libra2-<版本>-full.zip` 中的 `.adds` 文件夹完整解压合并到 Kobo 根目录：
+   ```text
+   .adds/
+   ├── Veradroid-Libra2/                         # 主程序与纯净 Android rootfs
+   ├── nm/Veradroid-Libra2                       # NickelMenu 入口（不覆盖你已有的 nm/config）
+   └── koreader/plugins/Veradroid-Libra2.koplugin/  # KOReader 插件入口
+   ```
+4. 安全弹出 USB，直接从以下任一入口启动：
+   - **NickelMenu**：右下角菜单 → `Veradroid-Libra2 (Android)`
+   - **KOReader**：顶部菜单 → 工具 → `Veradroid-Libra2` → `启动 Veradroid-Libra2 (Android)`
+5. 首次启动会自动创建 2 GB ext4 系统镜像（约 1–2 分钟，屏幕有进度提示，请勿关机），完成后自动删除临时 `rootfs.tar.gz` 并直接进入 Android 桌面。
+   > 若习惯使用 SSH 安装，也可直接执行：`sh /mnt/onboard/.adds/Veradroid-Libra2/install.sh`
+
+### 二、增量升级（保留全部应用、书籍与设置）
+
+- **方式 A（推荐，自动校验与失败回滚）**：
+  1. 将 `Veradroid-Libra2-<版本>-upgrade.zip` 直接复制到 Kobo 的 `.adds/Veradroid-Libra2/update/` 目录。
+  2. 弹出 USB 后，点击 NickelMenu「`Veradroid-Libra2 检查更新`」或 KOReader「`应用离线升级包`」，或直接启动 `Veradroid-Libra2` 即可自动完成升级。
+- **方式 B（USB 覆盖解压）**：
+  - 将 `-upgrade.zip` 中的 `.adds` 目录直接解压覆盖到 Kobo 根目录即可（升级包不含 `veradroid-sys.img` 与 `settings.conf`，不会清除任何个人数据）。
+
+### 三、安装第三方应用（如微信读书墨水屏版）
+
+1. **应用商店**：进入桌面 →「应用商店」直接搜索安装；
+2. **USB 自动安装**：将 32 位 ARM（`armeabi-v7a`）APK 放入 `.adds/Veradroid-Libra2/apps/`，启动后自动安装并清理原 APK；
+3. **局域网传书网页**：打开桌面「传书与安装」，在电脑/手机浏览器上传 APK 或电子书。
+
+### 四、常用操作
+
+- **返回 Kobo / KOReader**：长按屏幕**左下角 2 秒**，或从顶部下拉面板点击「返回 Kobo」。
+- **实体翻页键**：上键下一页、下键上一页；默认长按上键全刷消残影、长按下键返回（均可在设置中自定义）。
+- **无级调光 / 色温**：在屏幕左右边缘上下滑动即可平滑调节前光亮度与色温。
+- **电源键**：短按休眠进入深度待机，再按唤醒。
+
+---
+
+## 从源码编译与打包
+
+```sh
+# 1. 使用 Zig 0.13 交叉编译 Kobo ARMv7 静态二进制（无需 Docker）
+ZIG=/path/to/zig FBINK_DIR=/path/to/fbink E2FSPROGS_TAR=/path/to/e2fsprogs-1.47.1.tar.xz \
+  sh tools/kobo/build-kobo-bin.sh build/kobo-bin
+
+# 2. 编译 VeraHome.apk（需 JDK 17 + android-25 android.jar + d8 + aapt2 + apksigner）
+TOOLS_DIR=/path/to/tools bash tools/kobo/build-verahome.sh
+
+# 3. 生成纯净发布包（full.zip + upgrade.zip + SHA256SUMS.txt，内置隐私审计）
+BIN_DIR=build/kobo-bin \
+EXTRA_BIN_DIR=/path/to/extra-kobo-bins \
+LEGACY_DIR=/path/to/veradroid-legacy/veradroid-pw6 \
+KMOD_DIR=/path/to/Koboweread/kernels \
+  sh tools/kobo/build-release.sh dist
+```
+
+---
+
+## 项目目录概览
+
+| 目录 | 说明 |
+|---|---|
+| [`host/kobo/`](host/kobo/) | Kobo Libra 2 宿主机脚本（容器、显示、输入、休眠、网络、编译、离线升级、NickelMenu & KOReader 双入口、硬件配置） |
+| [`display/legacy/epd.c`](display/legacy/epd.c) | Kobo EPDC v2 墨水屏显示桥（FBInk + NEON 灰度转换 + 局部插图抖动 + Eclipse 夜间波形） |
+| [`input/legacy/vinput.c`](input/legacy/vinput.c) | 触摸 / 实体翻页键 / `kx122` 自动旋转 / 边缘滑光输入前端 |
+| [`android/packages/VeraHome/`](android/packages/VeraHome/) | Kobo 适配版 VeraHome 桌面与系统服务源码 |
+| [`tools/kobo/`](tools/kobo/) | Kobo 编译、打包、Bionic `madvise`/Skia NEON 垫片与运行时优化脚本 |
+| [`docs/kobo-libra2-optimizations.md`](docs/kobo-libra2-optimizations.md) | 完整功能清单、优化说明与 Kobo Libra 2 实机基准测试记录 |
+
+## 致谢与许可
+
+- 感谢 [VeraDroid](https://github.com/xyc0677/veradroid) 作者 `ajie` 构建的优秀墨水屏 Android 框架。
+- 感谢 [NiLuJe/FBInk](https://github.com/NiLuJe/FBInk)、[KOReader](https://github.com/koreader/koreader)、[NickelMenu](https://github.com/pgaskin/NickelMenu) 与 [霞鹜文楷 (LXGW WenKai)](https://github.com/lxgw/LxgwWenKai)。
+- 本项目遵循 **GPL-3.0-or-later** 开源协议，详见 [`LICENSE`](LICENSE) 与 [`THIRD_PARTY.md`](THIRD_PARTY.md)。

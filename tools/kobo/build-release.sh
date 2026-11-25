@@ -256,7 +256,9 @@ audit_stage() {
         exit 10
     fi
 
-    personal_hits=$(grep -rnI -E '192\.168\.0\.60|255632438|/Users/jinghao|jinghao' \
+    personal_pat='192\.168\.[0-9]+\.[0-9]+|/Users/[^/[:space:]]+|/home/[^/[:space:]]+'
+    [ -n "${AUDIT_EXTRA_PATTERNS:-}" ] && personal_pat="${personal_pat}|${AUDIT_EXTRA_PATTERNS}"
+    personal_hits=$(grep -rnI -E "$personal_pat" \
         "$vd/boot" \
         "$vd/models" \
         "$vd/nm" \
@@ -273,7 +275,7 @@ audit_stage() {
     fi
 
     if [ -d "$vd/seed" ]; then
-        seed_hits=$(grep -rnI -iE 'weread|255632438|6307b89fb17c2462' "$vd/seed" 2>/dev/null || true)
+        seed_hits=$(grep -rnI -iE 'weread|6307b89fb17c2462' "$vd/seed" 2>/dev/null || true)
         if [ -n "$seed_hits" ]; then
             echo "AUDIT FAILED ($label): un-scrubbed entry in seed/:" >&2
             echo "$seed_hits" >&2
@@ -282,7 +284,7 @@ audit_stage() {
     fi
 
     if [ -f "$vd/rootfs.tar.gz" ]; then
-        rfs_hits=$(tar -tzf "$vd/rootfs.tar.gz" | grep -iE 'weread|WRBook|WRReader|255632438|/data/app/|/data/data/' || true)
+        rfs_hits=$(tar -tzf "$vd/rootfs.tar.gz" | grep -iE 'weread|WRBook|WRReader|WRAccount|/data/app/|/data/data/' || true)
         if [ -n "$rfs_hits" ]; then
             echo "AUDIT FAILED ($label): unexpected data in rootfs.tar.gz:" >&2
             echo "$rfs_hits" >&2
