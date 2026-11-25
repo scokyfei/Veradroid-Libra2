@@ -1263,7 +1263,7 @@ static int push_y8(const uint8_t *buf, int x, int y, int w, int h, int mode)
        uses the fast one, otherwise a tap that touches the header and the list queues several slow refreshes */
     int large = frame_big || (long)w * h > (long)W * H * 85 / 100;
     int flash = mode == M_FULL;
-    WFM_MODE_INDEX_T aw = ui_mode == 1 ? WFM_GC16 : ui_mode == 2 ? WFM_DU : ui_mode == 3 ? WFM_AUTO : (large ? WFM_REAGL : WFM_DU);
+    WFM_MODE_INDEX_T aw = ui_mode == 1 ? (large ? WFM_REAGL : WFM_GL16) : ui_mode == 2 ? WFM_DU : ui_mode == 3 ? WFM_AUTO : (large ? WFM_REAGL : WFM_DU);
     /* touch scroll: the scroll waveform now (A2 on i.MX, DU on MediaTek / SCROLLWFM du), one full-quality pass later */
     if (g_scroll && mode == M_AUTO && !g_cleaning) aw = (scroll_a2 && !g_is_mtk) ? WFM_A2 : WFM_DU;
     else if (g_burst && mode == M_AUTO && ui_mode != 2 && !g_cleaning) aw = WFM_DU;

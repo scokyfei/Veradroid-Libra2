@@ -233,7 +233,7 @@ kobo_deep_suspend() {
 }
 
 sleep_transfer_busy() {
-    [ -f "$W/fwd.id" ] || alive "$W/installing"
+    [ -f "$W/fwd.id" ] || alive "$W/installing" || [ -f "$W/compile.lock" ] || alive "$W/compile.guard"
 }
 
 kobo_enter_sleep() {

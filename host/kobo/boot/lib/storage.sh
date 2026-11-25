@@ -156,7 +156,9 @@ st_lock() {
         op=$(cat "$ST_LOCK/pid" 2>/dev/null)
         [ -n "$op" ] && kill -0 "$op" 2>/dev/null && return 1
     fi
-    echo "${1:-$$}" > "$ST_LOCK/pid"
+    _spid=
+    [ -r /proc/self/stat ] && read -r _spid _ < /proc/self/stat 2>/dev/null || true
+    echo "${1:-${_spid:-$$}}" > "$ST_LOCK/pid"
 }
 st_unlock() { rm -f "$ST_LOCK/pid"; rmdir "$ST_LOCK" 2>/dev/null; return 0; }
 st_locked_by_other() {

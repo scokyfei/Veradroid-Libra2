@@ -474,15 +474,21 @@ run_in_ns() {
     [ -f "$W/cmdline" ] && mount --bind "$W/cmdline" "$R/proc/cmdline"
 
     mount -t sysfs -o ro sysfs "$R/sys" || exit 1
-    for d in sys/fs/selinux sys/fs/bpf sys/fs/pstore sys/kernel/tracing sys/kernel/debug; do
+    for d in sys/fs/selinux sys/fs/bpf sys/fs/pstore sys/kernel/tracing; do
         [ -d "$R/$d" ] && mount -t tmpfs -o ro,size=4k tmpfs "$R/$d" 2>/dev/null || true
     done
-    # Provide an empty read-only /sys/kernel/debug/wakeup_sources so BatteryStatsService's
-    # KernelWakelockReader stops flooding /data/system/dropbox with Slog.wtf stack traces.
-    if [ ! -e /proc/wakelocks ] && [ -d "$R/sys/kernel/debug" ]; then
-        mount -o remount,rw "$R/sys/kernel/debug" 2>/dev/null && \
-            : > "$R/sys/kernel/debug/wakeup_sources" && chmod 444 "$R/sys/kernel/debug/wakeup_sources" && \
+    # Provide a valid read-only /sys/kernel/debug/wakeup_sources (standard header + placeholder row)
+    # so BatteryStatsService's KernelWakelockReader stops flooding /data/system/dropbox with Slog.wtf traces.
+    # Mount writable first for BusyBox compatibility, then remount read-only.
+    if [ -d "$R/sys/kernel/debug" ]; then
+        if mount -t tmpfs -o size=4k tmpfs "$R/sys/kernel/debug" 2>/dev/null; then
+            if [ ! -e /proc/wakelocks ]; then
+                printf 'name\t\tactive_count\tevent_count\twakeup_count\texpire_count\tactive_since\ttotal_time\tmax_time\tlast_change\tprevent_suspend_time\nveradroid\t\t0\t\t0\t\t0\t\t0\t\t0\t\t0\t\t0\t\t0\t\t0\n' \
+                    > "$R/sys/kernel/debug/wakeup_sources" 2>/dev/null || true
+                chmod 444 "$R/sys/kernel/debug/wakeup_sources" 2>/dev/null || true
+            fi
             mount -o remount,ro "$R/sys/kernel/debug" 2>/dev/null || true
+        fi
     fi
 
     mkdir -p "$SYS/data" && mount --bind "$SYS/data" "$R/data" && mount -o remount,bind,nosuid,nodev,noatime "$R/data" 2>/dev/null || true

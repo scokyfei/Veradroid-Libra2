@@ -183,10 +183,12 @@ cmd_listen() {
             esac ;;
         uninstallapp)
             case "$a" in ''|*[!A-Za-z0-9._]*) ;; *)
+                rm -f "$X/ctl/uninst.$a" "$X/ctl/uninst.$a.tmp" 2>/dev/null || true
                 ( type compile_hold >/dev/null 2>&1 && compile_hold
                   r=$(adb_sh "cmd package uninstall --user 0 $a" 2>&1 | tr '\n' ' ')
                   type compile_release >/dev/null 2>&1 && compile_release
-                  echo "$r" > "$X/ctl/uninst.$a.tmp"; mv -f "$X/ctl/uninst.$a.tmp" "$X/ctl/uninst.$a" ) & ;;
+                  printf '%s\n' "$r" > "$X/ctl/uninst.$a.tmp" && chmod 644 "$X/ctl/uninst.$a.tmp" 2>/dev/null
+                  mv -f "$X/ctl/uninst.$a.tmp" "$X/ctl/uninst.$a" ) & ;;
             esac ;;
         install)
             case "$a" in
@@ -197,6 +199,7 @@ cmd_listen() {
             case "$ipath" in *[!A-Za-z0-9._/-]*|*..*) ipath= ;; esac
             if [ -n "$ipath" ]; then
                 iname=${ipath##*/}
+                rm -f "$X/ctl/inst.$iname" "$X/ctl/inst.$iname.tmp" 2>/dev/null || true
                 ( upload_dir_fix 2>/dev/null; chmod 777 "$SYS/data/local/tmp" 2>/dev/null
                   type compile_hold >/dev/null 2>&1 && compile_hold
                   sz=$(stat -c%s "$SYS$ipath" 2>/dev/null)
@@ -204,7 +207,8 @@ cmd_listen() {
                   r=$(adb_sh "cmd package install -r -d -g -S $sz < $ipath" 2>&1 | tr '\n' ' ')
                   [ "$(cat "$W/installing" 2>/dev/null)" = "$ipid" ] && rm -f "$W/installing"
                   adb_sh 'cmd package set-home-activity com.veradroid.home/.HomeActivity' >/dev/null 2>&1 || true
-                  echo "$r" > "$X/ctl/inst.$iname.tmp"; mv -f "$X/ctl/inst.$iname.tmp" "$X/ctl/inst.$iname"
+                  printf '%s\n' "$r" > "$X/ctl/inst.$iname.tmp" && chmod 644 "$X/ctl/inst.$iname.tmp" 2>/dev/null
+                  mv -f "$X/ctl/inst.$iname.tmp" "$X/ctl/inst.$iname"
                   type compile_release >/dev/null 2>&1 && compile_release
                   case "$r" in *Success*) type compile_watch >/dev/null 2>&1 && compile_watch ;; esac ) &
             fi ;;
