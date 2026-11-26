@@ -264,25 +264,37 @@ wrmaint_status() {
     _ma=$(awk '/^MemAvailable:/{printf "%.1f MB", $2/1024}' /proc/meminfo 2>/dev/null)
     _zr=$(awk '{printf "%.1f MB", $1/1024/1024}' /sys/block/zram0/compr_data_size 2>/dev/null)
     _cf=$(awk '{printf "%d MHz", $1/1000}' /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 2>/dev/null)
-    _odex=$(ls -lh "$SYS"/data/app/com.tencent.weread.eink-*/oat/arm/base.odex 2>/dev/null | awk 'NR==1{print $5}')
+    _lps=$(awk '/LPS mode:/{sub(/.*LPS mode:[[:space:]]*/, ""); sub(/[[:space:]]*\(.*/, ""); print; exit}' /proc/net/rtl8723ds/wlan0/ps_info 2>/dev/null)
+    _usb="已关闭"
+    if type usb_mtp_active >/dev/null 2>&1 && usb_mtp_active; then
+        _usb="已连接电脑"
+    elif type usb_mtp_running >/dev/null 2>&1 && usb_mtp_running; then
+        _usb="已就绪"
+    fi
+    _bt="关"
+    type bt_is_on >/dev/null 2>&1 && bt_is_on && _bt="开"
     _wr="$SYS/data/data/com.tencent.weread.eink"
-    _wal_b=0
-    for _wf in "$_wr"/databases/*-wal "$_wr"/databases/*/*-wal; do
-        [ -f "$_wf" ] || continue
-        _sz=$(wc -c < "$_wf" 2>/dev/null || echo 0)
-        _wal_b=$((_wal_b + _sz))
-    done
-    _wal_kb=$((_wal_b / 1024))
-    _log_mb=$(du -sm "$_wr/files/log" 2>/dev/null | awk '{print $1}')
-    _zip_mb=$(du -sm "$_wr/cache/downloader" 2>/dev/null | awk '{print $1}')
-    _lps=$(cat /proc/net/rtl8723ds/wlan0/lps_info 2>/dev/null | awk '/lps_mode/{print $NF; exit}')
+    _has_wr=0
+    [ -d "$_wr" ] && _has_wr=1
     {
         echo "可用内存：${_ma:-?}（ZRAM 已压缩：${_zr:-0 MB}）"
         echo "当前 CPU 上限：${_cf:-?}（静止限频：${IDLE_CAP_MS:-10000}ms / $(( ${IDLE_CAP_KHZ:-792000} / 1000 ))MHz）"
-        echo "微信读书热点包 (base.odex)：${_odex:-未编译}"
-        echo "数据库 WAL：${_wal_kb} KB　|　日志：${_log_mb:-0} MB　|　下载包残留：${_zip_mb:-0} MB"
-        echo "笔锋加黑档位：${KFB_FONT_GAMMA:-2}　|　插图智能抖动：${KFB_IMG_DITHER:-1}"
-        echo "无操作自动息灯：${FL_TIMEOUT:-0} 秒　|　Wi-Fi LPS：${_lps:-auto}"
+        echo "USB MTP：${_usb}　|　蓝牙：${_bt}　|　Wi-Fi LPS：${_lps:-auto}"
+        echo "笔锋加黑档位：${KFB_FONT_GAMMA:-2}　|　插图智能抖动：${KFB_IMG_DITHER:-1}　|　息灯超时：${FL_TIMEOUT:-0} 秒"
+        if [ "$_has_wr" = 1 ]; then
+            _odex=$(ls -lh "$SYS"/data/app/com.tencent.weread.eink-*/oat/arm/base.odex 2>/dev/null | awk 'NR==1{print $5}')
+            _wal_b=0
+            for _wf in "$_wr"/databases/*-wal "$_wr"/databases/*/*-wal; do
+                [ -f "$_wf" ] || continue
+                _sz=$(wc -c < "$_wf" 2>/dev/null || echo 0)
+                _wal_b=$((_wal_b + _sz))
+            done
+            _wal_kb=$((_wal_b / 1024))
+            _log_mb=$(du -sm "$_wr/files/log" 2>/dev/null | awk '{print $1}')
+            _zip_mb=$(du -sm "$_wr/cache/downloader" 2>/dev/null | awk '{print $1}')
+            echo "微信读书热点包 (base.odex)：${_odex:-未编译}"
+            echo "微信读书 WAL：${_wal_kb} KB　|　日志：${_log_mb:-0} MB　|　残包：${_zip_mb:-0} MB"
+        fi
     } > "$X/wrmaint.txt.tmp" && mv -f "$X/wrmaint.txt.tmp" "$X/wrmaint.txt"
 }
 

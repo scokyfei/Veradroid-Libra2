@@ -39,6 +39,7 @@ status_write() {
         type bat_status_lines >/dev/null 2>&1 && bat_status_lines
         type bt_status_lines >/dev/null 2>&1 && bt_status_lines
         type usb_mtp_running >/dev/null 2>&1 && { usb_mtp_running && echo "usbmtp=1" || echo "usbmtp=0"; }
+        type usb_mtp_active >/dev/null 2>&1 && { usb_mtp_active && echo "usbconn=1" || echo "usbconn=0"; }
         ps=$(type wifi_ps_state >/dev/null 2>&1 && wifi_ps_state)
         [ -n "$ps" ] && echo "wifips=$ps"
         echo "wifipsmode=${WIFI_PS:-auto}"

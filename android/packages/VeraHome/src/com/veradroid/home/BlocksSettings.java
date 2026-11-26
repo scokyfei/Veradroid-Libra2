@@ -45,6 +45,10 @@ final class BlocksSettings {
     static final String[] KEYLONG_V = { "none", "clear", "back", "panel", "home", "switch", "invert", "frontlight", "light+", "light-", "screenshot", "wifi", "sleep", "kindle" };
     static final String[] KEYLONG_MS_L = { "0.35 秒", "0.5 秒", "0.7 秒", "1.0 秒" };
     static final String[] KEYLONG_MS_V = { "350", "500", "700", "1000" };
+    static final String[] KEYMAP_L = { "音量键（推荐）", "翻页键", "方向键" };
+    static final String[] KEYMAP_V = { "volume", "page", "dpad" };
+    static final String[] WIFIPS_L = { "自动（推荐）", "始终省电", "保持全速" };
+    static final String[] WIFIPS_V = { "auto", "on", "off" };
     static final String[] FLTO_L = { "关", "1 分钟", "2 分钟", "3 分钟", "5 分钟", "10 分钟" };
     static final String[] FLTO_V = { "0", "60", "120", "180", "300", "600" };
     static final String[] IDLECAP_L = { "关", "10 秒（默认）", "20 秒", "30 秒" };
@@ -89,10 +93,10 @@ final class BlocksSettings {
         case BlocksHome.S_DISPLAY_ADV: return cfg + "|" + prefs.getBoolean("flashui", false) + "|" + prefs.getString("system_font_name", "") + "|" + prefs.getBoolean("system_font_all", true);
         case BlocksHome.S_CONTROLS: return cfg;
         case BlocksHome.S_POWER: return cfg + st.get("sleep") + prefs.getBoolean("clock12", false) + "|" + prefs.getInt(Cleaner.LIMIT_KEY, Cleaner.defaultLimit()) + "|" + java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR);
-        case BlocksHome.S_STORAGE: return cfg + "|" + st.get("wifi") + "|" + st.get("lanip") + "|" + st.get("ssh") + "|" + Transfer.get(a).running() + "|" + prefs.getInt("xfer_idle", 30) + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
+        case BlocksHome.S_STORAGE: return cfg + "|" + st.get("wifi") + "|" + st.get("lanip") + "|" + st.get("ssh") + "|" + st.get("usbmtp") + "|" + st.get("usbconn") + "|" + Transfer.get(a).running() + "|" + prefs.getInt("xfer_idle", 30) + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
         case BlocksHome.S_UI: return prefs.getString("name", "VeraDroid") + "|" + prefs.getString("quick", "") + "|" + prefs.getString("panelname", "") + "|" + Fonts.weight(a) + "|" + Blocks.caps(a) + "|" + Blocks.anim(a) + "|" + Blocks.on(a);
         case BlocksHome.S_CARDS: return prefs.getString(BlocksCards.KEY, BlocksCards.DEFAULT) + prefs.getString("blk_quick", "") + prefs.getString("wx_city", "") + prefs.getString("blk_readers", "") + a.appsVersion();
-        default: return prefs.getString("name", "VeraDroid") + "|" + Token.bound(a) + "|" + Token.user(a) + "|" + (System.currentTimeMillis() / 60000);
+        default: return prefs.getString("name", "VeraDroid") + "|" + Token.bound(a) + "|" + Token.user(a) + "|" + a.appsVersion() + "|" + (System.currentTimeMillis() / 60000);
         }
     }
 
@@ -278,7 +282,7 @@ final class BlocksSettings {
             @Override public void onStep(int i) { host("KFB_ANIM_MODE=" + ANIMDIR_V[i]); } })));
         add(wf, Blocks.row(a, "翻页动画速度", "Page-turn wipe steps", new Blocks.Stepper(a, ANIMSTEP_L, idx(ANIMSTEP_V, cfg.get("KFB_ANIM_STEPS"), 2), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_ANIM_STEPS=" + ANIMSTEP_V[i]); } })));
-        add(wf, Blocks.row(a, "全局灰度抖动", "Global dithering (off = smart image dither)", new Blocks.Stepper(a, DITHER_L, idx(DITHER_V, cfg.get("KFB_DITHER"), 0), new Blocks.Stepper.Listener() {
+        add(wf, Blocks.row(a, "全局灰度抖动", "Global dithering", new Blocks.Stepper(a, DITHER_L, idx(DITHER_V, cfg.get("KFB_DITHER"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_DITHER=" + DITHER_V[i]); } })));
         add(wf, Blocks.row(a, "浅色过滤", "Light-colour filter", new Blocks.Stepper(a, Panel.LIGHTF_L, idx(Panel.LIGHTF_V, cfg.get("KFB_LIGHTF"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("KFB_LIGHTF=" + Panel.LIGHTF_V[i]); } })));
@@ -286,19 +290,19 @@ final class BlocksSettings {
             @Override public void onToggle(boolean on) { host("KFB_DARKEN=" + (on ? 1 : 0)); } })));
         LinearLayout sf = group(c, "文字渲染与系统字体");
         if (HostLink.isKobo()) {
-            add(sf, Blocks.row(a, "全局 NEON 文字与字形加速", "Skia NEON & glyph cache for all apps", toggle(!"0".equals(cfg.get("KFB_SKIA_OPT")), new Icons.Toggle.Listener() {
+            add(sf, Blocks.row(a, "全局 NEON 文字加速", "NEON text engine", toggle(!"0".equals(cfg.get("KFB_SKIA_OPT")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("KFB_SKIA_OPT=" + (on ? 1 : 0)); } })));
         }
         add(sf, Blocks.navRow(a, "系统字体", "当前：" + prefs.getString("system_font_name", "系统默认") + "（桌面、设置、阅读器一起换）", new View.OnClickListener() {
             @Override public void onClick(View v) { a.fontDialog(); } }));
-        add(sf, Blocks.row(a, "应用到所有应用", "Apply system font to all apps (restart)", toggle(prefs.getBoolean("system_font_all", true), new Icons.Toggle.Listener() {
+        add(sf, Blocks.row(a, "应用到所有应用", "Apply to all apps", toggle(prefs.getBoolean("system_font_all", true), new Icons.Toggle.Listener() {
             @Override public void onToggle(boolean on) {
                 prefs.edit().putBoolean("system_font_all", on).commit();
                 a.systemFontAll(on ? prefs.getString("system_font_path", null) : null);
             } })));
         add(sf, Blocks.navRow(a, "字体商店", "下载或管理共享字体", new View.OnClickListener() {
             @Override public void onClick(View v) { FontStoreActivity.open(a); } }));
-        add(sf, Blocks.navRow(a, "导入字体", "在传输网页上传 .ttf / .otf 自动进入字体库", new View.OnClickListener() {
+        add(sf, Blocks.navRow(a, "导入字体", "通过 USB 或网页上传 .ttf / .otf 到 Fonts 目录", new View.OnClickListener() {
             @Override public void onClick(View v) { a.startActivity(new Intent(a, TransferActivity.class)); } }));
         return shell("Display / advanced", "高级显示设置", c);
     }
@@ -311,28 +315,30 @@ final class BlocksSettings {
         LinearLayout kr = group(c, "方向与实体按键");
         final android.os.Handler rotH = a.handler();
         final Runnable[] rotRun = { null };
-        add(kr, Blocks.row(a, "屏幕方向", "Screen rotation (2.5s delay; 90°/270° restarts)", new Blocks.Stepper(a, ROTATE_L, idx(ROTATE_V, cfg.get("KFB_ROTATE"), 0), new Blocks.Stepper.Listener() {
+        add(kr, Blocks.row(a, "屏幕方向", "Screen rotation", new Blocks.Stepper(a, ROTATE_L, idx(ROTATE_V, cfg.get("KFB_ROTATE"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(final int i) {
                 if (rotRun[0] != null) rotH.removeCallbacks(rotRun[0]);
                 rotRun[0] = new Runnable() { @Override public void run() { host("KFB_ROTATE=" + ROTATE_V[i]); } };
                 rotH.postDelayed(rotRun[0], 2500);
-                VeraToast.show(a, "2.5 秒后应用：" + ROTATE_L[i]);
+                VeraToast.show(a, "2.5 秒后应用：" + ROTATE_L[i] + (i >= 2 ? "（横屏将自动重启）" : ""));
             } })));
         if (HostLink.isKobo()) {
-            add(kr, Blocks.row(a, "重力感应自动旋转", "Auto rotate (0° / 180°, keys follow)", toggle("1".equals(cfg.get("KFB_AUTO_ROTATE")), new Icons.Toggle.Listener() {
+            add(kr, Blocks.row(a, "重力感应自动旋转", "Auto rotate 0° / 180°", toggle("1".equals(cfg.get("KFB_AUTO_ROTATE")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("KFB_AUTO_ROTATE=" + (on ? 1 : 0)); } })));
-            add(kr, Blocks.row(a, "翻页键功能互换", "Swap page-turn buttons", toggle("1".equals(cfg.get("PAGE_KEYS_SWAP")), new Icons.Toggle.Listener() {
+            add(kr, Blocks.row(a, "实体翻页键映射", "Page-turn key map", new Blocks.Stepper(a, KEYMAP_L, idx(KEYMAP_V, cfg.get("PAGE_KEYS_MAP"), 0), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("PAGE_KEYS_MAP=" + KEYMAP_V[i]); } })));
+            add(kr, Blocks.row(a, "翻页键功能互换", "Swap buttons", toggle("1".equals(cfg.get("PAGE_KEYS_SWAP")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("PAGE_KEYS_SWAP=" + (on ? 1 : 0)); } })));
-            add(kr, Blocks.row(a, "下一页键长按", "Next-page button long press", new Blocks.Stepper(a, KEYLONG_L, idx(KEYLONG_V, cfg.get("KEY_NEXT_LONG"), 1), new Blocks.Stepper.Listener() {
+            add(kr, Blocks.row(a, "下一页键长按", "Next long press", new Blocks.Stepper(a, KEYLONG_L, idx(KEYLONG_V, cfg.get("KEY_NEXT_LONG"), 1), new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { host("KEY_NEXT_LONG=" + KEYLONG_V[i]); } })));
-            add(kr, Blocks.row(a, "上一页键长按", "Prev-page button long press", new Blocks.Stepper(a, KEYLONG_L, idx(KEYLONG_V, cfg.get("KEY_PREV_LONG"), 2), new Blocks.Stepper.Listener() {
+            add(kr, Blocks.row(a, "上一页键长按", "Prev long press", new Blocks.Stepper(a, KEYLONG_L, idx(KEYLONG_V, cfg.get("KEY_PREV_LONG"), 2), new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { host("KEY_PREV_LONG=" + KEYLONG_V[i]); } })));
-            add(kr, Blocks.row(a, "翻页键长按时长", "Long-press hold threshold", new Blocks.Stepper(a, KEYLONG_MS_L, idx(KEYLONG_MS_V, cfg.get("KEY_LONG_MS"), 1), new Blocks.Stepper.Listener() {
+            add(kr, Blocks.row(a, "翻页键长按时长", "Long-press hold", new Blocks.Stepper(a, KEYLONG_MS_L, idx(KEYLONG_MS_V, cfg.get("KEY_LONG_MS"), 1), new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { host("KEY_LONG_MS=" + KEYLONG_MS_V[i]); } })));
             LinearLayout el = group(c, "边缘滑动调光 / 色温");
-            add(el, Blocks.row(a, "左右边缘滑动调光 / 色温", "Button-side edge brightness, opposite edge warmth", toggle(!"0".equals(cfg.get("G_EDGE_LIGHT")), new Icons.Toggle.Listener() {
+            add(el, Blocks.row(a, "左右边缘滑动调光 / 色温", "Edge light & warmth", toggle(!"0".equals(cfg.get("G_EDGE_LIGHT")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("G_EDGE_LIGHT=" + (on ? 1 : 0)); } })));
-            add(el, Blocks.row(a, "边缘调光 / 色温互换", "Swap brightness & warmth edges", toggle("1".equals(cfg.get("G_EDGE_LIGHT_SWAP")), new Icons.Toggle.Listener() {
+            add(el, Blocks.row(a, "边缘调光 / 色温互换", "Swap light edges", toggle("1".equals(cfg.get("G_EDGE_LIGHT_SWAP")), new Icons.Toggle.Listener() {
                 @Override public void onToggle(boolean on) { host("G_EDGE_LIGHT_SWAP=" + (on ? 1 : 0)); } })));
         }
         c.addView(Blocks.navRow(a, "更多手势设置", "底边上划返回 · 底边分三段 · 双指手势 · 四角长按 · 灵敏度", new View.OnClickListener() {
@@ -380,13 +386,13 @@ final class BlocksSettings {
             int sl = HostLink.num(st, "sleep", 600), bi = 1;
             if (sl <= 0) bi = SLEEP_S.length - 1;
             else for (int i = 0; i < SLEEP_S.length - 1; i++) if (Math.abs(SLEEP_S[i] - sl) < Math.abs(SLEEP_S[bi] - sl)) bi = i;
-            add(g, Blocks.row(a, "自动休眠", "Auto sleep (also sleeps while charging)", new Blocks.Stepper(a, SLEEP_L, bi, new Blocks.Stepper.Listener() {
+            add(g, Blocks.row(a, "自动休眠", "Auto sleep", new Blocks.Stepper(a, SLEEP_L, bi, new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { HostLink.cmd("sleeptime " + SLEEP_S[i]); } })));
         }
         if (HostLink.isKobo()) {
-            add(g, Blocks.row(a, "无操作自动息灯", "Frontlight idle timeout (wakes on touch)", new Blocks.Stepper(a, FLTO_L, idx(FLTO_V, cfg.get("FL_TIMEOUT"), 0), new Blocks.Stepper.Listener() {
+            add(g, Blocks.row(a, "无操作自动息灯", "Light timeout", new Blocks.Stepper(a, FLTO_L, idx(FLTO_V, cfg.get("FL_TIMEOUT"), 0), new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { host("FL_TIMEOUT=" + FLTO_V[i]); } })));
-            add(g, Blocks.row(a, "阅读静止期 CPU 限频", "Cap CPU to 792 MHz while reading idle", new Blocks.Stepper(a, IDLECAP_L, idx(IDLECAP_V, cfg.get("IDLE_CAP_MS"), 1), new Blocks.Stepper.Listener() {
+            add(g, Blocks.row(a, "阅读静止期 CPU 限频", "Idle CPU cap", new Blocks.Stepper(a, IDLECAP_L, idx(IDLECAP_V, cfg.get("IDLE_CAP_MS"), 1), new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { host("IDLE_CAP_MS=" + IDLECAP_V[i]); } })));
         }
         if (!HostLink.isKobo()) {
@@ -465,8 +471,33 @@ final class BlocksSettings {
             @Override public void onClick(View v) { BluetoothActivity.open(a); } }));
         add(n, Blocks.row(a, "DNS", "Domain name resolver", new Blocks.Stepper(a, DNS_L, idx(DNS_V, cfg.get("DNS_MODE"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("DNS_MODE=" + DNS_V[i]); } })));
+        if (HostLink.isKobo()) {
+            add(n, Blocks.row(a, "Wi-Fi 省电", "Wi-Fi power saving", new Blocks.Stepper(a, WIFIPS_L, idx(WIFIPS_V, cfg.get("WIFI_PS"), 0), new Blocks.Stepper.Listener() {
+                @Override public void onStep(int i) { host("WIFI_PS=" + WIFIPS_V[i]); } })));
+        }
         // 网络诊断：Wi-Fi / 域名解析 / 服务器 / 下载速度（宿主 netdiag 命令，结果 ctl/netdiag.status）
         c.addView(new TaskCards.Net(a), Blocks.gap(a, 14));
+        if (HostLink.isKobo()) {
+            LinearLayout u = group(c, "USB 电脑传输 (MTP)");
+            boolean mtpOn = !"0".equals(cfg.get("USB_MTP"));
+            boolean mtpConn = "1".equals(st.get("usbconn"));
+            boolean mtpRun = "1".equals(st.get("usbmtp"));
+            add(u, Blocks.row(a, "USB MTP 存储直连", "USB MTP transfer", toggle(mtpOn, new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) {
+                    host("USB_MTP=" + (on ? 1 : 0));
+                    a.handler().postDelayed(new Runnable() { @Override public void run() { if (h.current() == BlocksHome.S_STORAGE) { h.show(BlocksHome.S_STORAGE); a.changed(); } } }, 900);
+                } })));
+            String mtpMsg = mtpConn
+                ? "已连接电脑：可直接读写 VeraDroid（安卓存储）与 Kobo Onboard，传输中自动防休眠。"
+                : (mtpOn && mtpRun)
+                    ? "已就绪：插数据线连电脑即可直接传书、字体或 APK，无需退出系统（Mac 请使用 OpenMTP）。"
+                    : mtpOn
+                        ? "正在准备 USB MTP 服务…"
+                        : "已关闭：插线仅充电。";
+            TextView mtpNote = Ui.text(a, mtpMsg, 13, mtpConn);
+            mtpNote.setPadding(dp(12), dp(6), dp(12), dp(10));
+            add(u, mtpNote);
+        }
         LinearLayout w = group(c, "Web 文件管理");
         final Transfer t = Transfer.get(a);
         add(w, Blocks.row(a, "网页传书", "Web file manager", toggle(t.running(), new Icons.Toggle.Listener() {
@@ -589,11 +620,15 @@ final class BlocksSettings {
                     });
                 }
             }));
-            add(m, Blocks.navRow(a, "微信读书维护与状态看板", "查看内存 / 热点包 / WAL，一键清理日志与刷新加速编译", new View.OnClickListener() {
-                @Override public void onClick(View v) { wrMaintDialog(); } }));
+            boolean hasWeRead = a.findApp("com.tencent.weread.eink") != null;
+            add(m, Blocks.navRow(a, "系统运行状态与维护",
+                hasWeRead ? "内存 / CPU / USB / 蓝牙 · 微信读书压库与加速" : "内存 / ZRAM / CPU / USB / 蓝牙 · 一键释放内存",
+                new View.OnClickListener() {
+                    @Override public void onClick(View v) { wrMaintDialog(hasWeRead); }
+                }));
         }
         String[][] rows = {
-            { "系统与性能", kobo ? "小内存模式 · 应用预编译 · 立即优化" : "Wi-Fi 省电 · 低内存 · Kobo 界面 · 应用编译" },
+            { "系统与性能", kobo ? "应用预编译 · 立即优化" : "Wi-Fi 省电 · 低内存 · Kobo 界面 · 应用编译" },
             { "检查系统更新", "有新版本优先下载增量补丁" },
             { "使用统计", "电量和阅读时长，只在本机" },
             { "问题反馈", "连同系统日志一起上传" },
@@ -637,14 +672,14 @@ final class BlocksSettings {
         } catch (Throwable ignored) { return ""; }
     }
 
-    private void wrMaintDialog() {
+    private void wrMaintDialog(boolean hasWeRead) {
         HostLink.cmd("wrmaint status");
         LinearLayout box = new LinearLayout(a);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(0, dp(4), 0, 0);
         String init = readWrMaint();
-        final TextView info = Ui.text(a, init.length() > 0 ? init : "正在读取系统与微信读书运行状态…", 15, false);
-        info.setMinLines(6);
+        final TextView info = Ui.text(a, init.length() > 0 ? init : "正在读取系统运行状态…", 15, false);
+        info.setMinLines(hasWeRead ? 6 : 4);
         info.setLineSpacing(dp(4), 1.0f);
         info.setPadding(dp(12), dp(10), dp(12), dp(10));
         info.setBackground(Blocks.plain(a));
@@ -656,29 +691,41 @@ final class BlocksSettings {
                 if (s.length() > 0 && !s.contentEquals(info.getText())) info.setText(s);
             }
         };
-        LinearLayout row = new LinearLayout(a);
-        row.setPadding(0, dp(12), 0, 0);
-        row.addView(Blocks.button(a, "清理日志 / 压库", false, new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                info.setText("正在清理微信读书日志、残包并压缩数据库 WAL…");
-                HostLink.cmd("wrmaint wal");
-                hd.removeCallbacks(readStatus);
-                hd.postDelayed(readStatus, 1800);
-                hd.postDelayed(readStatus, 4000);
-            }
-        }), Blocks.weight(1));
-        row.addView(new View(a), Blocks.lp(dp(8), 1));
-        row.addView(Blocks.button(a, "刷新热点编译", false, new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                info.setText("已提交后台热点编译任务（约 1–2 分钟，完成后弹出提示）…");
-                HostLink.cmd("wrmaint profile");
-                hd.removeCallbacks(readStatus);
-                hd.postDelayed(readStatus, 1500);
-            }
-        }), Blocks.weight(1));
-        box.addView(row, Blocks.match());
+        if (hasWeRead) {
+            LinearLayout row = new LinearLayout(a);
+            row.setPadding(0, dp(12), 0, 0);
+            row.addView(Blocks.button(a, "清理微信读书 / 压库", false, new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    info.setText("正在清理微信读书日志、残包并压缩数据库 WAL…");
+                    HostLink.cmd("wrmaint wal");
+                    hd.removeCallbacks(readStatus);
+                    hd.postDelayed(readStatus, 1800);
+                    hd.postDelayed(readStatus, 4000);
+                }
+            }), Blocks.weight(1));
+            row.addView(new View(a), Blocks.lp(dp(8), 1));
+            row.addView(Blocks.button(a, "刷新微信读书编译", false, new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    info.setText("已提交后台热点编译任务（约 1–2 分钟，完成后弹出提示）…");
+                    HostLink.cmd("wrmaint profile");
+                    hd.removeCallbacks(readStatus);
+                    hd.postDelayed(readStatus, 1500);
+                }
+            }), Blocks.weight(1));
+            box.addView(row, Blocks.match());
+        }
         LinearLayout row2 = new LinearLayout(a);
-        row2.setPadding(0, dp(8), 0, 0);
+        row2.setPadding(0, dp(hasWeRead ? 8 : 12), 0, 0);
+        row2.addView(Blocks.button(a, "一键释放内存", false, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                info.setText("正在释放系统缓存与整理内存…");
+                HostLink.cmd("optimize");
+                hd.removeCallbacks(readStatus);
+                hd.postDelayed(new Runnable() { @Override public void run() { HostLink.cmd("wrmaint status"); } }, 1200);
+                hd.postDelayed(readStatus, 2000);
+            }
+        }), Blocks.weight(1));
+        row2.addView(new View(a), Blocks.lp(dp(8), 1));
         row2.addView(Blocks.button(a, "刷新状态", false, new View.OnClickListener() {
             @Override public void onClick(View v) {
                 HostLink.cmd("wrmaint status");
@@ -688,7 +735,7 @@ final class BlocksSettings {
         }), Blocks.weight(1));
         box.addView(row2, Blocks.match());
         android.app.Dialog d = new VeraDialog.Builder(a)
-            .title("微信读书维护与状态看板")
+            .title("系统运行状态与维护")
             .view(box)
             .positive("关闭", null)
             .show();

@@ -58,7 +58,7 @@ public class HomeActivity extends Activity {
     // “恢复默认设置”交给宿主恢复默认的设置项（显示、手势、返回方式）
     static final String[] RESET_KEYS = { "KFB_SETTLE", "KFB_MODE", "KFB_FLASH", "KFB_CONTRAST", "KFB_DITHER", "KFB_INVERT", "KFB_LIGHTF", "KFB_DARKEN", "KFB_GESTURES",
         "KFB_ECLIPSE", "KFB_DARKCRUSH", "KFB_HEAVY_FLASH", "KFB_GCN", "KFB_NEWWIN", "KFB_SKIA_OPT", "KFB_FONT_GAMMA", "KFB_IMG_DITHER", "KFB_SCROLLDU", "KFB_IMG",
-        "KFB_AUTO_ROTATE", "PAGE_KEYS_SWAP", "KEY_NEXT_LONG", "KEY_PREV_LONG", "KEY_LONG_MS", "IDLE_CAP_MS", "FL_TIMEOUT",
+        "KFB_AUTO_ROTATE", "PAGE_KEYS_MAP", "PAGE_KEYS_SWAP", "KEY_NEXT_LONG", "KEY_PREV_LONG", "KEY_LONG_MS", "IDLE_CAP_MS", "FL_TIMEOUT",
         "RETURN_MODE", "KFB_ANIM_MODE", "KFB_ANIM_STEPS", "KFB_ANIM_DIR", "KFB_ANIM_MIN", "KFB_SMOOTH", "KFB_PACE", "KFB_HOLD", "KFB_CLEAN", "KFB_REAGL_MIN",
         "G_TL", "G_TR", "G_BL", "G_BR", "G_EDGE_BACK", "G_EDGE_PANEL", "G_EDGE_LIGHT", "G_EDGE_LIGHT_SWAP", "G_EDGE_SENS", "GESTURE_HINT", "G_TWO_TAP", "G_TWO_LONG", "G_TWO_BACK", "G_TWO_SLIDE", "G_BACK_EXCLUDE",
         "G_EDGE_THIRDS", "G_EB_L", "G_EB_M", "G_EB_R", "G_EB_HOLD", "G_EB_HOLD_MS" };
@@ -395,7 +395,7 @@ public class HomeActivity extends Activity {
 
     private CtlWatch.Listener statusWatch;
 
-    private final Runnable updateNotice = new Runnable() { @Override public void run() { if (resumed && !isFinishing()) SysUpdate.maybeNotify(HomeActivity.this); } };
+    private final Runnable updateNotice = new Runnable() { @Override public void run() { if (!HostLink.isKobo() && resumed && !isFinishing()) SysUpdate.maybeNotify(HomeActivity.this); } };
 
     /** 这次离开主页是去开别的应用（不是自己的阅读器 / 设置页），回来时才取它的画面。 */
     private boolean leftForApp, ownStart;
@@ -1252,7 +1252,7 @@ public class HomeActivity extends Activity {
      * 重新读已装应用：查询、取名称 / 安装时间、排序、解码图标都在后台线程做，完了回主线程一次换掉列表再画网格。
      * 以前全在主线程：装了几十个应用时，回到主页 / 装卸应用都要卡一下。连着来几次时只用最后一次的结果。
      */
-    private void reload() {
+    void reload() {
         final int gen = ++reloadGen;
         final int mode = prefs.getInt("sort", 0);
         final String self = getPackageName();
@@ -1344,7 +1344,9 @@ public class HomeActivity extends Activity {
         boolean chg = live != null ? (live[1] == 1) : "1".equals(st.get("charging"));
         String lanip = st.get("lanip");
         boolean wifiConnected = "1".equals(st.get("wifi")) && lanip != null && lanip.trim().length() > 0;
+        boolean usbConn = "1".equals(st.get("usbconn"));
         StringBuilder batSb = new StringBuilder();
+        if (usbConn) batSb.append("USB  ");
         if (batStr != null) {
             if (chg) batSb.append("充电中 ");
             batSb.append(batStr).append("%");
@@ -2164,6 +2166,7 @@ public class HomeActivity extends Activity {
                 section(list, "实体翻页键与方向");
                 hostChoice(list, host, "屏幕方向", "0° / 180° 立即生效；90° / 270° 横屏需自动重启 Android。", "KFB_ROTATE", BlocksSettings.ROTATE_L, BlocksSettings.ROTATE_V, "0");
                 hostChoice(list, host, "重力感应自动旋转", "倒拿设备自动在 0° / 180° 间实时旋转，触摸与物理翻页键自动随动。", "KFB_AUTO_ROTATE", ONOFF_L, ONOFF_V, "0");
+                hostChoice(list, host, "实体翻页键映射", "设置实体上下翻页键发给应用的按键类型（立即生效）。", "PAGE_KEYS_MAP", BlocksSettings.KEYMAP_L, BlocksSettings.KEYMAP_V, "volume");
                 hostChoice(list, host, "翻页键功能互换", "对调上下两个实体翻页键的上一页 / 下一页功能，立即生效且随屏幕旋转同步调整。", "PAGE_KEYS_SWAP", ONOFF_L, ONOFF_V, "0");
                 hostChoice(list, host, "下一页键长按", "长按实体下一页键触发快捷功能。", "KEY_NEXT_LONG", BlocksSettings.KEYLONG_L, BlocksSettings.KEYLONG_V, "clear");
                 hostChoice(list, host, "上一页键长按", "长按实体上一页键触发快捷功能。", "KEY_PREV_LONG", BlocksSettings.KEYLONG_L, BlocksSettings.KEYLONG_V, "back");
@@ -2312,7 +2315,7 @@ public class HomeActivity extends Activity {
                     hostChoice(list, host, "回到 Kobo 的方式", "挂起：系统暂停在后台，再打开几秒就回到现在的界面，但 Kobo 可用内存会少一些。关闭：系统完全退出，内存全部还给 Kobo。", "RETURN_MODE", RETURN_L, RETURN_V, "freeze");
                 }
                 action(list, "系统与性能", kobo
-                        ? "小内存模式、应用预编译（进度和“全部优化”）。"
+                        ? "应用预编译（进度和“立即优化”）。"
                         : "Wi-Fi 省电、小内存模式、Kobo 界面怎么处置、应用预编译（进度和“全部优化”）。", "打开", new View.OnClickListener() {
                     @Override public void onClick(View v) { HostSettingsActivity.open(HomeActivity.this, "system"); }
                 });

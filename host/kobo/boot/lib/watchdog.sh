@@ -281,8 +281,9 @@ watchdog() {
             cur_st_bat=$(kobo_battery 2>/dev/null)
             kobo_is_charging && cur_st_chg=1 || cur_st_chg=0
             cur_st_ip=$(kobo_wifi_ip 2>/dev/null)
-            if [ "$cur_st_bat" != "$last_st_bat" ] || [ "$cur_st_chg" != "$last_st_chg" ] || [ "$cur_st_ip" != "$last_st_ip" ]; then
-                last_st_bat=$cur_st_bat; last_st_chg=$cur_st_chg; last_st_ip=$cur_st_ip
+            type usb_mtp_active >/dev/null 2>&1 && usb_mtp_active && cur_st_usb=1 || cur_st_usb=0
+            if [ "$cur_st_bat" != "$last_st_bat" ] || [ "$cur_st_chg" != "$last_st_chg" ] || [ "$cur_st_ip" != "$last_st_ip" ] || [ "$cur_st_usb" != "${last_st_usb:-}" ]; then
+                last_st_bat=$cur_st_bat; last_st_chg=$cur_st_chg; last_st_ip=$cur_st_ip; last_st_usb=$cur_st_usb
                 type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
             fi
         fi

@@ -342,7 +342,11 @@ container_start() {
             if [ "$wr_jm" = 2 ]; then
                 # Periodic offline WAL checkpoint(TRUNCATE) + PRAGMA optimize when -wal >= 2MB or >= 7 days
                 wr_name=$(basename "$wr_db")
-                wr_wal_sz=$(wc -c < "${wr_db}-wal" 2>/dev/null || echo 0)
+                if [ -f "${wr_db}-wal" ]; then
+                    wr_wal_sz=$(wc -c < "${wr_db}-wal" 2>/dev/null || echo 0)
+                else
+                    wr_wal_sz=0
+                fi
                 wr_stamp="$SYS/data/local/tmp/kobo-db-maint.$wr_name.stamp"
                 wr_now=$(date +%s 2>/dev/null || echo 0)
                 wr_last=$(stat -c %Y "$wr_stamp" 2>/dev/null || echo 0)

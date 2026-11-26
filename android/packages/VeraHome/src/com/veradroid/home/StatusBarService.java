@@ -126,8 +126,8 @@ public class StatusBarService extends Service {
             String clockText = text.length() == 0 ? now : now.length() == 0 ? text : text + "   " + now;
             if (!clockText.equals(String.valueOf(clock.getText()))) clock.setText(clockText);
         }
+        java.util.Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
         if (wifiIcon != null) {
-            java.util.Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
             String lanip = st.get("lanip");
             boolean wifiOn = "1".equals(st.get("wifi")) && lanip != null && lanip.trim().length() > 0;
             int wvis = wifiOn ? View.VISIBLE : View.GONE;
@@ -151,7 +151,8 @@ public class StatusBarService extends Service {
                 } catch (Throwable ignored) { }
             }
             if (p > 100) p = 100;
-            String battText = p >= 0 ? (charging ? "充电中 " + p + "%" : p + "%") : "";
+            boolean usbConn = "1".equals(st.get("usbconn"));
+            String battText = (usbConn ? "USB  " : "") + (p >= 0 ? (charging ? "充电中 " + p + "%" : p + "%") : "");
             if (!battText.equals(String.valueOf(batt.getText()))) batt.setText(battText);
             Stats.sampleBattery(this, p, charging);
         }

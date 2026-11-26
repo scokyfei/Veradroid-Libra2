@@ -322,6 +322,7 @@ public class HostService extends Service {
      * 拔线后在书库点“VeraDroid 启动”回来。充电器也会触发（分不出来），所以有“不用”和“不再询问”。锁屏时不问。
      */
     private void usbAsk() {
+        if (HostLink.isKobo()) return; // Kobo Libra 2 uses live USB MTP without leaving Android
         if (LockScreen.showing()) return;
         if (usbDialog != null && usbDialog.isShowing()) return;
         try {

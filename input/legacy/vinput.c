@@ -165,7 +165,7 @@ static long long gyro_since = 0;                          /* monotonic ms when g
 #define MSC_RAW_LANDSCAPE_LEFT  0x1a
 static int SWAP_XY = 0, FLIP_X = 0, FLIP_Y = 0;          /* raw touchscreen axis transform (e.g. Kobo Libra 2 Elan: --swap-xy) */
 static const char *KEYDEV = NULL, *SLEEP_FLAG = NULL;    /* optional hardware key device (Kobo gpio-keys) + sleep gate */
-static int keyfd = -1, KEY_SWAP = 0, KEY_SWAP_CLI = 0, KEY_MAP_PAGE = 0;   /* KEY_MAP_PAGE: 0 = volume keys (default), 1 = page keys */
+static int keyfd = -1, KEY_SWAP = 0, KEY_SWAP_CLI = 0, KEY_MAP_PAGE = 0, KEY_MAP_CLI = 0;   /* KEY_MAP_PAGE: 0 = volume, 1 = page, 2 = dpad */
 static char KEY_NEXT_LONG[32] = "clear", KEY_PREV_LONG[32] = "back";       /* physical page-key long-press actions */
 static int KEY_LONG_MS = 500;
 struct pk_state { int active; int code; long long t0; int fired; };
@@ -211,7 +211,7 @@ static void gconf_load(void)
     BOOST_MS = 150; BOOST_KHZ = 0; SCROLL_PX = 20; PASS_PX = 12; FAST_DRAG = 1; HELD_REPLAY = 0; TAP_PX = 28;
     IDLE_CAP_MS = 10000; IDLE_CAP_KHZ = 792000; FL_TIMEOUT = 0;
     G_EDGE_THIRDS = 0; G_EB_HOLD_MS = 500;
-    G_AUTO_ROTATE = 0; KEY_SWAP = KEY_SWAP_CLI;
+    G_AUTO_ROTATE = 0; KEY_SWAP = KEY_SWAP_CLI; KEY_MAP_PAGE = KEY_MAP_CLI;
     snprintf(KEY_NEXT_LONG, sizeof(KEY_NEXT_LONG), "clear");
     snprintf(KEY_PREV_LONG, sizeof(KEY_PREV_LONG), "back");
     KEY_LONG_MS = 500;
@@ -263,6 +263,11 @@ static void gconf_load(void)
             else if (!strcmp(line, "G_BACK_EXCLUDE")) { snprintf(G_BACK_EXCLUDE, sizeof(G_BACK_EXCLUDE), "%s", strcmp(v, "none") ? v : ""); }
             else if (!strcmp(line, "AUTO_ROTATE")) { G_AUTO_ROTATE = b; if (!G_AUTO_ROTATE) gyro_want = -1; }
             else if (!strcmp(line, "KEY_SWAP")) { KEY_SWAP = b; }
+            else if (!strcmp(line, "KEY_MAP")) {
+                if (!strcmp(v, "page")) KEY_MAP_PAGE = 1;
+                else if (!strcmp(v, "dpad")) KEY_MAP_PAGE = 2;
+                else KEY_MAP_PAGE = 0;
+            }
             else if (!strcmp(line, "KEY_NEXT_LONG")) { snprintf(KEY_NEXT_LONG, sizeof(KEY_NEXT_LONG), "%.31s", v); }
             else if (!strcmp(line, "KEY_PREV_LONG")) { snprintf(KEY_PREV_LONG, sizeof(KEY_PREV_LONG), "%.31s", v); }
             else if (!strcmp(line, "KEY_LONG_MS")) { KEY_LONG_MS = atoi(v); if (KEY_LONG_MS < 200 || KEY_LONG_MS > 2000) KEY_LONG_MS = 500; }
@@ -1668,7 +1673,7 @@ static int setup_uinput_keys(void)
     if (kfd < 0) return -1;
     ioctl(kfd, UI_SET_EVBIT, EV_KEY);
     ioctl(kfd, UI_SET_EVBIT, EV_SYN);
-    static const int keys[] = { KEY_BACK, KEY_HOME, KEY_MENU, KEY_VOLUMEUP, KEY_VOLUMEDOWN, KEY_POWER, KEY_PAGEUP, KEY_PAGEDOWN };
+    static const int keys[] = { KEY_BACK, KEY_HOME, KEY_MENU, KEY_VOLUMEUP, KEY_VOLUMEDOWN, KEY_POWER, KEY_PAGEUP, KEY_PAGEDOWN, KEY_LEFT, KEY_RIGHT };
     for (unsigned i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) ioctl(kfd, UI_SET_KEYBIT, keys[i]);
     struct uinput_user_dev dev;
     memset(&dev, 0, sizeof(dev));
@@ -1881,8 +1886,9 @@ static void handle_page_key(int code)
     if (is_sleeping()) return;
     gconf_load();
     int is_next = pk_is_next(code);
-    int out_key = KEY_MAP_PAGE ? (is_next ? KEY_PAGEDOWN : KEY_PAGEUP)
-                               : (is_next ? KEY_VOLUMEDOWN : KEY_VOLUMEUP);
+    int out_key = KEY_MAP_PAGE == 1 ? (is_next ? KEY_PAGEDOWN : KEY_PAGEUP)
+                : KEY_MAP_PAGE == 2 ? (is_next ? KEY_RIGHT : KEY_LEFT)
+                                    : (is_next ? KEY_VOLUMEDOWN : KEY_VOLUMEUP);
     logf_("hw key %d -> key %d (rot=%d swap=%d)", code, out_key, ROT, KEY_SWAP);
     idle_thaw();
     activity_touch();
@@ -2016,7 +2022,11 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--flip-y")) FLIP_Y = 1;
         else if (!strcmp(argv[i], "--keydev") && i + 1 < argc) KEYDEV = argv[++i];
         else if (!strcmp(argv[i], "--key-swap")) { KEY_SWAP = KEY_SWAP_CLI = 1; }
-        else if (!strcmp(argv[i], "--key-map") && i + 1 < argc) { KEY_MAP_PAGE = !strcmp(argv[++i], "page"); }
+        else if (!strcmp(argv[i], "--key-map") && i + 1 < argc) {
+            const char *km = argv[++i];
+            KEY_MAP_CLI = !strcmp(km, "page") ? 1 : !strcmp(km, "dpad") ? 2 : 0;
+            KEY_MAP_PAGE = KEY_MAP_CLI;
+        }
         else if (!strcmp(argv[i], "--sleep-flag") && i + 1 < argc) SLEEP_FLAG = argv[++i];
         else if (!strcmp(argv[i], "--vw") && i + 1 < argc) VW = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--tapdev") && i + 1 < argc) TAPDEV = argv[++i];

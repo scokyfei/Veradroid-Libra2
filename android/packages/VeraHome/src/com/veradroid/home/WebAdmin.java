@@ -1016,9 +1016,10 @@ final class WebAdmin {
         o.put("settings", new JSONObject(HostLink.kv(HostLink.KFB + "settings")));
         o.put("status", new JSONObject(HostLink.kv(HostLink.CTL + "status")));
         SharedPreferences p = Store.prefs(ctx, "home");
-        o.put("appAutoUpdate", p.getBoolean("autoupdate", true));
+        boolean kobo = HostLink.isKobo();
+        o.put("appAutoUpdate", !kobo && p.getBoolean("autoupdate", true));
         Map<String, String> h = HostReq.kv(sysinfoOrLast());
-        if (h.containsKey("autoupdate")) o.put("hostAutoUpdate", "1".equals(h.get("autoupdate")));
+        if (h.containsKey("autoupdate")) o.put("hostAutoUpdate", !kobo && "1".equals(h.get("autoupdate")));
         if (h.containsKey("vdversion")) o.put("vdversion", h.get("vdversion"));
         try { o.put("home", ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0).versionName); } catch (Exception ignored) { }
         return o;
@@ -1057,6 +1058,7 @@ final class WebAdmin {
     }
 
     private JSONObject setAutoUpdate(String which, boolean on) throws Exception {
+        if (HostLink.isKobo()) return Transfer.obj("ok", false, "msg", "Kobo 版已禁用在线 OTA，请使用离线升级包更新");
         if ("app".equals(which)) {
             Store.prefs(ctx, "home").edit().putBoolean("autoupdate", on).commit();
             return Transfer.obj("ok", true);

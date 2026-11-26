@@ -203,7 +203,7 @@ final class BlocksHome {
         }
         case FILES: return caps + "|" + files.sig();
         case APPS: return appsSig(caps, a.appsVersion());
-        case ME: return caps + "|" + Stats.monthMs(a) / 60000 + "|" + Stats.bookmarkCount(a) + "|" + Lib.version() + "|" + prefs.getString("name", "VeraDroid");
+        case ME: return caps + "|" + Stats.monthMs(a) / 60000 + "|" + Stats.bookmarkCount(a) + "|" + Lib.version() + "|" + prefs.getString("name", "VeraDroid") + "|" + BluetoothActivity.supported();
         case S_LIBRARY: return caps + "|" + Lib.version() + "|" + libSort;
         default: return caps + "|" + settings.sig(key);
         }
@@ -993,6 +993,9 @@ final class BlocksHome {
         TextView sortBtn = Blocks.button(a, "排序：" + sorts[Math.max(0, Math.min(4, prefs.getInt("sort", 0)))], false, new View.OnClickListener() {
             @Override public void onClick(View v) { a.setAppSort((prefs.getInt("sort", 0) + 1) % 5); } });
         tools.addView(sortBtn);
+        View spApk = new View(a); tools.addView(spApk, Blocks.lp(dp(8), 1));
+        tools.addView(Blocks.button(a, "本地安装 APK", false, new View.OnClickListener() {
+            @Override public void onClick(View v) { localApkDialog(); } }));
         tools.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1));
         int nh = hidden().size();
         if (nh > 0) tools.addView(Blocks.button(a, showHidden ? "藏起隐藏的应用" : "显示隐藏的（" + nh + "）", false, new View.OnClickListener() {
@@ -1091,6 +1094,128 @@ final class BlocksHome {
             c.addView(tag, 0);
         }
         return c;
+    }
+
+    /** 扫描本机常见目录里的 .apk 文件（USB MTP / 网页传书放入的包），一键静默安装。 */
+    private void localApkDialog() {
+        final String[][] dirs = {
+            { "/data/media/0/Download", "Download" },
+            { "/data/media/0", "根目录" },
+            { "/data/media/0/.upload", "已上传" },
+            { "/data/media/0/Books", "Books" }
+        };
+        final List<java.io.File> found = new ArrayList<java.io.File>();
+        final List<String> tags = new ArrayList<String>();
+        final java.util.Set<String> seen = new java.util.HashSet<String>();
+        for (String[] d : dirs) {
+            java.io.File dir = new java.io.File(d[0]);
+            java.io.File[] list = dir.listFiles();
+            if (list == null) continue;
+            for (java.io.File f : list) {
+                if (!f.isFile()) continue;
+                String n = f.getName();
+                if (!n.toLowerCase(java.util.Locale.US).endsWith(".apk") || n.startsWith(".")) continue;
+                String key;
+                try { key = f.getCanonicalPath(); } catch (Throwable e) { key = f.getAbsolutePath(); }
+                if (!seen.add(key)) continue;
+                found.add(f);
+                tags.add(d[1]);
+            }
+        }
+        if (found.isEmpty()) {
+            new VeraDialog.Builder(a).title("本地安装 APK")
+                .message("未找到 .apk 安装包。\n\n请先通过以下任一方式放入：\n1. 插数据线连电脑（USB MTP），拖入 VeraDroid/Download 或根目录；\n2. 使用「设置 → 网页传书」从手机/电脑浏览器上传。")
+                .positive("知道了", null).show();
+            return;
+        }
+        // Sort newest first while keeping tags aligned
+        Integer[] order = new Integer[found.size()];
+        for (int i = 0; i < order.length; i++) order[i] = i;
+        java.util.Arrays.sort(order, new java.util.Comparator<Integer>() {
+            @Override public int compare(Integer x, Integer y) {
+                long tx = found.get(x).lastModified(), ty = found.get(y).lastModified();
+                return tx == ty ? 0 : (ty > tx ? 1 : -1);
+            }
+        });
+        final java.io.File[] files = new java.io.File[order.length];
+        String[] labels = new String[order.length];
+        for (int i = 0; i < order.length; i++) {
+            java.io.File f = found.get(order[i]);
+            files[i] = f;
+            String sz = String.format(java.util.Locale.US, "%.1f MB", f.length() / 1048576.0);
+            labels[i] = f.getName() + "  (" + sz + " · " + tags.get(order[i]) + ")";
+        }
+        new VeraDialog.Builder(a).title("本地安装 APK（共 " + files.length + " 个）")
+            .items(labels, new VeraDialog.OnPick() {
+                @Override public void onPick(int w) {
+                    final java.io.File apk = files[w];
+                    new VeraDialog.Builder(a).title("安装应用")
+                        .message("确认静默安装：\n" + apk.getName() + "？")
+                        .negative("取消", null)
+                        .positive("安装", new Runnable() {
+                            @Override public void run() { installLocalApk(apk); }
+                        }).show();
+                }
+            }).negative("取消", null).show();
+    }
+
+    private void installLocalApk(final java.io.File src) {
+        VeraToast.show(a, "正在安装 " + src.getName() + "…");
+        new Thread(new Runnable() {
+            @Override public void run() {
+                java.io.File tmpCopy = null;
+                try {
+                    String safeName = "local_" + System.currentTimeMillis() + ".apk";
+                    java.io.File upDir = new java.io.File("/data/media/0/.upload");
+                    if (!upDir.isDirectory()) upDir.mkdirs();
+                    tmpCopy = new java.io.File(upDir, safeName);
+                    java.io.FileInputStream in = new java.io.FileInputStream(src);
+                    java.io.FileOutputStream out = new java.io.FileOutputStream(tmpCopy);
+                    try {
+                        byte[] buf = new byte[65536];
+                        int n;
+                        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                    } finally {
+                        try { in.close(); } catch (Throwable ignored) { }
+                        try { out.close(); } catch (Throwable ignored) { }
+                    }
+                    java.io.File resFile = new java.io.File(HostLink.CTL + "inst." + safeName);
+                    if (resFile.exists()) resFile.delete();
+                    HostLink.cmd("install /data/media/0/.upload/" + safeName);
+                    String res = null;
+                    long deadline = System.currentTimeMillis() + 90000L;
+                    while (System.currentTimeMillis() < deadline) {
+                        if (resFile.exists()) {
+                            java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(resFile));
+                            try { res = br.readLine(); } finally { try { br.close(); } catch (Throwable ignored) { } }
+                            resFile.delete();
+                            break;
+                        }
+                        try { Thread.sleep(500); } catch (InterruptedException ignored) { break; }
+                    }
+                    final String finalRes = res;
+                    final boolean ok = finalRes != null && finalRes.contains("Success");
+                    a.runOnUiThread(new Runnable() {
+                        @Override public void run() {
+                            if (ok) {
+                                VeraToast.show(a, "安装成功：" + src.getName());
+                                a.reload();
+                                invalidate(APPS);
+                                if (cur == APPS) { show(APPS); a.changed(); }
+                            } else {
+                                VeraToast.show(a, "安装失败：" + (finalRes == null ? "超时，请查看系统日志" : finalRes));
+                            }
+                        }
+                    });
+                } catch (final Throwable e) {
+                    a.runOnUiThread(new Runnable() {
+                        @Override public void run() { VeraToast.show(a, "安装出错：" + e.getMessage()); }
+                    });
+                } finally {
+                    if (tmpCopy != null) tmpCopy.delete();
+                }
+            }
+        }, "local-apk").start();
     }
 
     private boolean showHidden;
@@ -1243,9 +1368,9 @@ final class BlocksHome {
             { "显示与阅读画质", "前光 · 刷新档位 · 文字笔锋 · 夜间与残影" },
             { "按键与手势操控", "实体翻页键 · 边缘滑调光 · 旋转 · 全局手势" },
             { "电源与省电", "休眠息灯 · 静止限频 · 屏保锁屏 · 时间" },
-            { "网络与传书存储", BluetoothActivity.supported() ? "Wi-Fi · 蓝牙 · 网页传书 · 存储空间" : "Wi-Fi · 网页传书 · 存储空间" },
+            { "网络与传书存储", HostLink.isKobo() ? (BluetoothActivity.supported() ? "Wi-Fi · 蓝牙 · USB MTP · 网页传书 · 存储" : "Wi-Fi · USB MTP · 网页传书 · 存储") : (BluetoothActivity.supported() ? "Wi-Fi · 蓝牙 · 网页传书 · 存储空间" : "Wi-Fi · 网页传书 · 存储空间") },
             { "桌面与外观", "首页卡片 · 快捷面板 · 风格字重 · 网格图标" },
-            { "系统维护与关于", "微信读书维护看板 · 性能编译 · 日志 · 关于" } };
+            { "系统维护与关于", HostLink.isKobo() ? "运行状态看板 · 商店账号 · 编译优化 · 关于" : "性能编译 · 更新 · 日志 · 关于" } };
         final int[] keys = { S_DISPLAY, S_CONTROLS, S_POWER, S_STORAGE, S_UI, S_ABOUT };
         for (int i = 0; i < rows.length; i++) {
             final int k = keys[i];
