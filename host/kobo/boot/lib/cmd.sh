@@ -247,6 +247,7 @@ cmd_listen() {
         wifilist) ( wifi_list ) & ;;
         wifiscan) ( wifi_scan ) & ;;
         wificonnect) ( wifi_connect "$a" ) & ;;
+        bt)      type bt_cmd >/dev/null 2>&1 && bt_cmd "$a" ;;
         dns)
             case "$a" in
                 auto|aliyun|tencent|google)

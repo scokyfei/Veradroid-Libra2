@@ -235,7 +235,7 @@ bat_poke_tick() {
 # Protect tiny host daemon processes from being picked by OOM/LMK alongside Android foreground apps.
 host_oom_protect() {
     [ -n "${HOST_OOM_ADJ--800}" ] || return 0
-    for ho_n in cmd watchdog guard sleep input epd; do
+    for ho_n in cmd watchdog guard sleep input epd umtprd bt; do
         ho_p=$(cat $W/$ho_n.pid 2>/dev/null)
         case "$ho_p" in ''|*[!0-9]*) continue ;; esac
         [ "$(cat /proc/$ho_p/oom_score_adj 2>/dev/null)" = "${HOST_OOM_ADJ--800}" ] || echo "${HOST_OOM_ADJ--800}" > /proc/$ho_p/oom_score_adj 2>/dev/null
@@ -256,7 +256,7 @@ watchdog() {
         lmk_kernel_tune 2>/dev/null || true
         host_oom_protect
         var_guard
-        log_cap $W/epd.log 262144; log_cap $W/input.log 131072; log_cap $W/input.err 65536
+        log_cap $W/epd.log 262144; log_cap $W/input.log 131072; log_cap $W/input.err 65536; log_cap $W/umtprd.log 131072; log_cap $W/bt.log 65536
         if [ ! -f $W/saver_frozen ] && [ ! -f $W/frozen ]; then
             # 命令监听没了（FIFO 建不起来、被杀）：桌面的“返回 Kindle”、设置、手势全都没反应，只能重启 Kindle。重新起一个。
             alive $W/cmd.pid || { t "cmd listener gone, restarting it"; cmd_listen & echo $! > $W/cmd.pid; }

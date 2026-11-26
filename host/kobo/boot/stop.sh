@@ -5,7 +5,7 @@
 VD=${VD:-$(cd "$(dirname "$0")/.." && pwd)}
 export VD
 . "$VD/boot/lib/common.sh"
-for m in settings memory freeze framework container input network; do
+for m in settings memory freeze framework container bt input network usb; do
     [ -f "$VD/boot/lib/$m.sh" ] && . "$VD/boot/lib/$m.sh"
 done
 cd / 2>/dev/null || true
@@ -68,6 +68,7 @@ for f in watchdog guard sleep cmd boot afterboot compile diagboot; do rm -f "$W/
 rm -rf "$W/compile.quit" "$W/compile.guard" "$W/compile.lock" "$W/compile.queue" "$W/booted" "$W/pkglist.stamp" "$W/wifi.rx" "$W/wifi.busy"
 
 croot=$(chroot_root)
+type usb_mtp_stop >/dev/null 2>&1 && usb_mtp_stop
 input_stop
 display_stop
 

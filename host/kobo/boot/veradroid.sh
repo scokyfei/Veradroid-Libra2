@@ -27,7 +27,7 @@ case "$1" in
         fi ;;
 esac
 
-for m in settings memory slim freeze kmod framework container input network sleep status cmd watchdog afterboot splash bootwatch diagboot compile energy tz bgnice saver lock storage webadmin progress; do
+for m in settings memory slim freeze kmod framework container bt input network usb sleep status cmd watchdog afterboot splash bootwatch diagboot compile energy tz bgnice saver lock storage webadmin progress; do
     [ -f "$VD/boot/lib/$m.sh" ] && . "$VD/boot/lib/$m.sh"
 done
 
@@ -37,7 +37,7 @@ if ! { [ -f "$W/frozen" ] && kill -0 "$(cat "$W/pid" 2>/dev/null)" 2>/dev/null; 
 fi
 settings_load
 
-if [ "$1" = "--in-chroot" ]; then HOSTNS=1 run_in_ns "$2" "$3" "$4"; exit 1; fi
+if [ "$1" = "--in-chroot" ]; then HOSTNS=1 run_in_ns "$2" "$3" "$4" "$5"; exit 1; fi
 
 [ -f "$LOG" ] && [ "$(wc -c < "$LOG" 2>/dev/null || echo 0)" -gt 1048576 ] && {
     tail -c 524288 "$LOG" > "$LOG.tmp" 2>/dev/null && mv -f "$LOG.tmp" "$LOG"
@@ -221,6 +221,8 @@ echo "$VD" > "$W/vd"
 container_start || { sh "$VD/boot/stop.sh" >/dev/null 2>&1; exit 1; }
 bat_baseline
 net_start
+type usb_mtp_start >/dev/null 2>&1 && usb_mtp_start
+type bt_restore_boot >/dev/null 2>&1 && bt_restore_boot
 echo "$APP" > "$X/ctl/app"
 splash_update 20
 dedup_start

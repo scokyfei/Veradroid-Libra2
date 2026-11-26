@@ -82,6 +82,10 @@ settings_defaults() {
     KEY_PREV_LONG=back
     KEY_LONG_MS=500
     USB_ASK=0
+    USB_MTP=1
+    BT_BRIDGE=auto
+    BT_PT_MAP=volume
+    BT_PT_SWAP=0
     WIFI_PS=auto
     APP_COMPILE=auto
     COMPILE_RUNNING=auto

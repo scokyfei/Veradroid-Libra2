@@ -4,10 +4,7 @@
 #   - Grabs gpio-keys (193 upper page, 194 lower page, 116 power button)
 #   - Exposes virtual uinput devices veradroid-touch and veradroid-keys to Android
 
-bt_start() { :; }
-bt_release() { :; }
-bt_grab() { :; }
-bt_stop() { :; }
+type bt_start >/dev/null 2>&1 || { bt_start() { :; }; bt_release() { :; }; bt_grab() { :; }; bt_stop() { :; }; }
 
 input_sysname() {
     for d in /sys/class/input/input*; do

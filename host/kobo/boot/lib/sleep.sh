@@ -111,6 +111,20 @@ kobo_deep_suspend() {
     kobo_is_charging && return 1
     [ -f "$W/saver_nofreeze" ] && return 1
 
+    # Pause USB MTP and Bluetooth radio before mem suspend so they cannot block suspend or drain battery.
+    if type usb_mtp_running >/dev/null 2>&1 && usb_mtp_running; then
+        echo 1 > "$W/sleep.mtp"
+        usb_mtp_stop 2>/dev/null || true
+    else
+        rm -f "$W/sleep.mtp"
+    fi
+    if type bt_is_on >/dev/null 2>&1 && bt_is_on; then
+        echo 1 > "$W/sleep.bt"
+        bt_radio_off 2>/dev/null || true
+    else
+        rm -f "$W/sleep.bt"
+    fi
+
     # Power off SDIO Wi-Fi (8723ds + sdio_wifi_pwr) so the radio cannot block suspend or leak current.
     if [ "$(kobo_wifi_enabled)" = 1 ]; then
         echo 1 > "$W/sleep.wifi"
@@ -233,7 +247,8 @@ kobo_deep_suspend() {
 }
 
 sleep_transfer_busy() {
-    [ -f "$W/fwd.id" ] || alive "$W/installing" || [ -f "$W/compile.lock" ] || alive "$W/compile.guard"
+    [ -f "$W/fwd.id" ] || alive "$W/installing" || [ -f "$W/compile.lock" ] || alive "$W/compile.guard" \
+        || { type usb_mtp_active >/dev/null 2>&1 && usb_mtp_active; }
 }
 
 kobo_enter_sleep() {
@@ -298,6 +313,20 @@ kobo_exit_sleep() {
             type wifi_ps_set >/dev/null 2>&1 && wifi_ps_set on
             type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
             t "sleep: wifi restored after wakeup"
+        ) </dev/null >>"$LOG" 2>&1 &
+    fi
+    if [ -f "$W/sleep.mtp" ]; then
+        rm -f "$W/sleep.mtp"
+        ( type usb_mtp_start >/dev/null 2>&1 && usb_mtp_start ) </dev/null >>"$LOG" 2>&1 &
+    fi
+    if [ -f "$W/sleep.bt" ]; then
+        rm -f "$W/sleep.bt"
+        (
+            if type bt_radio_on >/dev/null 2>&1 && bt_radio_on; then
+                type bt_bridge_start >/dev/null 2>&1 && bt_bridge_start
+                type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
+                t "sleep: bluetooth restored after wakeup"
+            fi
         ) </dev/null >>"$LOG" 2>&1 &
     fi
     t "sleep: woke up and redrew screen"

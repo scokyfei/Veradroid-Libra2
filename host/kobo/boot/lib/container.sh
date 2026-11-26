@@ -420,7 +420,7 @@ io.write(m)
         echo 0 > "$W/uiderr.lines"
     fi
     freezer_setup
-    setsid busybox unshare -m sh "$VD/boot/veradroid.sh" --in-chroot "$KFB_TOUCH" "$KFB_KEYS_VIRT" "$KFB_KEYS" </dev/null >>"$LOG" 2>&1 &
+    setsid busybox unshare -m sh "$VD/boot/veradroid.sh" --in-chroot "$KFB_TOUCH" "$KFB_KEYS_VIRT" "$KFB_KEYS" "$KFB_BTKEYS" </dev/null >>"$LOG" 2>&1 &
     P=$!
     echo "$P" > "$W/pid"
     echo chroot > "$W/mode"
@@ -434,7 +434,7 @@ binder_repair() {
 }
 
 run_in_ns() {
-    TOUCH=$1 KEYS=$2 PTKEYS=$3
+    TOUCH=$1 KEYS=$2 PTKEYS=$3 BTKEYS=$4
     mount --make-rprivate / 2>/dev/null || true
     mkdir -p "$R$KLIB_MP" 2>/dev/null || true
     mount --bind "$R" "$R" || exit 1
@@ -467,10 +467,11 @@ run_in_ns() {
     mkdir -p "$R/dev/socket" "$R/dev/input" "$R/dev/kfb" "$R/dev/pts" "$R/dev/__properties__"
     mkdir -p "$R/dev/vdshm" && chmod 1777 "$R/dev/vdshm"
 
-    for d in "$TOUCH" "$KEYS" "$PTKEYS"; do [ -c "$d" ] && chmod 666 "$d" 2>/dev/null || true; done
+    for d in "$TOUCH" "$KEYS" "$PTKEYS" "$BTKEYS"; do [ -c "$d" ] && chmod 666 "$d" 2>/dev/null || true; done
     [ -n "$TOUCH" ]  && { touch "$R/dev/input/event0"; mount --bind "$TOUCH"  "$R/dev/input/event0"; }
     [ -n "$KEYS" ]   && { touch "$R/dev/input/event1"; mount --bind "$KEYS"   "$R/dev/input/event1"; }
     [ -n "$PTKEYS" ] && { touch "$R/dev/input/event2"; mount --bind "$PTKEYS" "$R/dev/input/event2"; }
+    [ -n "$BTKEYS" ] && { touch "$R/dev/input/event3"; mount --bind "$BTKEYS" "$R/dev/input/event3"; }
 
     mount --bind "$X" "$R/dev/kfb"
     [ -e /dev/fb0 ] && { touch "$R/dev/epd" "$R/dev/fb0"; mount --bind /dev/fb0 "$R/dev/epd"; mount --bind /dev/fb0 "$R/dev/fb0"; }

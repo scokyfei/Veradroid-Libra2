@@ -165,7 +165,8 @@ static int remap(int code) {
  * 下一页 2（从右往左滑入），上一页 3。只是提示，不强制动画；显示桥不在时什么都不做。
  */
 static void epd_dir(int d) {
-    int fd = open("/dev/shm/veradroid/kfb/epd.fifo", O_WRONLY | O_NONBLOCK);
+    int fd = open("/tmp/veradroid/kfb/epd.fifo", O_WRONLY | O_NONBLOCK);
+    if (fd < 0) fd = open("/dev/shm/veradroid/kfb/epd.fifo", O_WRONLY | O_NONBLOCK);
     if (fd < 0) return;
     char b[16];
     int n = snprintf(b, sizeof b, "DIR %d\n", d > 0 ? 2 : 3);
