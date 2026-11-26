@@ -51,6 +51,18 @@ if [ -n "${BIONIC_LIBC:-}" ] && [ -f "$BIONIC_LIBC" ]; then
         -fno-asynchronous-unwind-tables -Wl,-soname,libkobo_madvise.so \
         "$TOP/tools/kobo/libkobo_madvise.c" "$BIONIC_LIBC" $EXTRA_DL \
         -o "$OUT/libkobo_madvise.so"
+    if [ -n "${AOSP_HDR:-}" ] && [ -f "$AOSP_HDR/hardware/audio.h" ]; then
+        echo "[3c/5] audio.primary.kindle.so (Android 7.1 BlueALSA A2DP HAL)"
+        "$ZIG" cc -target arm-linux-gnueabi -mcpu=cortex_a9 -mfloat-abi=softfp -mfpu=neon -O2 \
+            -fPIC -fno-stack-protector -fno-unwind-tables -fno-asynchronous-unwind-tables \
+            -I"$AOSP_HDR" -Wno-gnu-designator \
+            -c "$TOP/tools/kobo/audio_kobo.c" -o "$OUT/.audio_kobo.o"
+        "$ZIG" cc -target arm-linux-gnueabi -mcpu=cortex_a9 -mfloat-abi=softfp -mfpu=neon \
+            -shared -nostdlib -Wl,-soname,audio.primary.kindle.so -Wl,--no-undefined \
+            "$OUT/.audio_kobo.o" "$BIONIC_LIBC" \
+            -o "$OUT/audio.primary.kindle.so"
+        rm -f "$OUT/.audio_kobo.o"
+    fi
 fi
 
 if [ -n "${E2FSPROGS_TAR:-}" ] && [ -f "$E2FSPROGS_TAR" ]; then

@@ -96,7 +96,9 @@ final class BlocksSettings {
         case BlocksHome.S_STORAGE: return cfg + "|" + st.get("wifi") + "|" + st.get("lanip") + "|" + st.get("ssh") + "|" + st.get("usbmtp") + "|" + st.get("usbconn") + "|" + Transfer.get(a).running() + "|" + prefs.getInt("xfer_idle", 30) + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
         case BlocksHome.S_UI: return prefs.getString("name", "VeraDroid") + "|" + prefs.getString("quick", "") + "|" + prefs.getString("panelname", "") + "|" + Fonts.weight(a) + "|" + Blocks.caps(a) + "|" + Blocks.anim(a) + "|" + Blocks.on(a);
         case BlocksHome.S_CARDS: return prefs.getString(BlocksCards.KEY, BlocksCards.DEFAULT) + prefs.getString("blk_quick", "") + prefs.getString("wx_city", "") + prefs.getString("blk_readers", "") + a.appsVersion();
-        default: return prefs.getString("name", "VeraDroid") + "|" + Token.bound(a) + "|" + Token.user(a) + "|" + a.appsVersion() + "|" + (System.currentTimeMillis() / 60000);
+        default: return prefs.getString("name", "VeraDroid") + "|" + Token.bound(a) + "|" + Token.user(a) + "|" + a.appsVersion()
+            + "|" + st.get("sysversion") + "|" + st.get("offline_upd") + "|" + st.get("offline_upd_file") + "|" + st.get("offline_upd_newer")
+            + "|" + (System.currentTimeMillis() / 60000);
         }
     }
 
@@ -353,7 +355,7 @@ final class BlocksSettings {
         LinearLayout hm = group(c, "首页与快捷面板");
         add(hm, Blocks.navRow(a, "首页卡片", "继续阅读 · 天气 · 日历 · 小部件排序与内容", new View.OnClickListener() {
             @Override public void onClick(View v) { h.push(BlocksHome.S_CARDS); } }));
-        add(hm, Blocks.navRow(a, "下拉面板的快捷开关", "最多 5 个：" + quickNames(), new View.OnClickListener() {
+        add(hm, Blocks.navRow(a, "下拉面板的快捷开关", "最多 " + BlocksPanel.MAX_TILES + " 个：" + quickNames(), new View.OnClickListener() {
             @Override public void onClick(View v) { a.quickDialog(); } }));
         String devName = prefs.getString("name", "VeraDroid");
         if (devName.length() == 0) devName = "VeraDroid";
@@ -467,7 +469,7 @@ final class BlocksSettings {
         String ipPart = !wifiOn ? "未连接（Wi-Fi 已关）" : (ip == null || ip.trim().length() == 0 ? "未连接" : ip.trim());
         String sshPart = sshPort > 0 ? "SSH 运行中 (:" + sshPort + ")" : "SSH 未运行";
         add(n, Blocks.row(a, "当前 IP / SSH", "IP address · SSH", Ui.text(a, ipPart + "  ·  " + sshPart, 14, false)));
-        if (BluetoothActivity.supported()) add(n, Blocks.navRow(a, "蓝牙翻页器", "扫描、配对、连接", new View.OnClickListener() {
+        if (BluetoothActivity.supported()) add(n, Blocks.navRow(a, "蓝牙设备", "翻页器 · 蓝牙耳机 / 音箱（A2DP 音频）", new View.OnClickListener() {
             @Override public void onClick(View v) { BluetoothActivity.open(a); } }));
         add(n, Blocks.row(a, "DNS", "Domain name resolver", new Blocks.Stepper(a, DNS_L, idx(DNS_V, cfg.get("DNS_MODE"), 0), new Blocks.Stepper.Listener() {
             @Override public void onStep(int i) { host("DNS_MODE=" + DNS_V[i]); } })));
@@ -626,6 +628,21 @@ final class BlocksSettings {
                 new View.OnClickListener() {
                     @Override public void onClick(View v) { wrMaintDialog(hasWeRead); }
                 }));
+            final Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
+            final String curVer = st.get("sysversion") != null && st.get("sysversion").length() > 0 ? st.get("sysversion") : h.version();
+            final String updVer = st.get("offline_upd") != null ? st.get("offline_upd") : "";
+            final String updFile = st.get("offline_upd_file") != null ? st.get("offline_upd_file") : "";
+            final String updSrc = st.get("offline_upd_src") != null ? st.get("offline_upd_src") : "";
+            final boolean updNewer = "1".equals(st.get("offline_upd_newer"));
+            String updSub = updVer.length() > 0
+                ? ("发现升级包 v" + updVer + "（" + updFile + "）" + (updNewer ? " · 点击重启升级" : " · 不高于当前版本"))
+                : ("当前 v" + curVer + " · 放入升级包后可一键离线升级");
+            add(m, Blocks.navRow(a, "离线系统升级", updSub, new View.OnClickListener() {
+                @Override public void onClick(View v) { offlineUpgradeDialog(curVer, updVer, updFile, updSrc, updNewer); }
+            }));
+            add(m, Blocks.navRow(a, "导出诊断日志包", "一键打包日志到 Kobo 盘根目录（插 USB 线可直接拷出）", new View.OnClickListener() {
+                @Override public void onClick(View v) { diagExportDialog(); }
+            }));
         }
         String[][] rows = {
             { "系统与性能", kobo ? "应用预编译 · 立即优化" : "Wi-Fi 省电 · 低内存 · Kobo 界面 · 应用编译" },
@@ -745,6 +762,98 @@ final class BlocksSettings {
             }
         });
         hd.postDelayed(readStatus, 700);
+    }
+
+    private void offlineUpgradeDialog(String curVer, String updVer, String updFile, String updSrc, final boolean updNewer) {
+        if (updVer.length() == 0) {
+            new VeraDialog.Builder(a)
+                .title("离线系统升级")
+                .message("当前系统版本：v" + curVer + "\n\n未检测到升级包。请通过 USB MTP 或网页传书将升级包（Veradroid-Libra2-x.y.z-upgrade.zip）放入以下任一目录后，点击「重新扫描」：\n• Kobo Onboard/.adds/Veradroid-Libra2/update/\n• VeraDroid/Download/\n\n升级保留全部已安装应用、书籍与设置。")
+                .negative("重新扫描", new Runnable() {
+                    @Override public void run() {
+                        HostLink.cmd("offlineupd check");
+                        VeraToast.show(a, "正在重新扫描升级包…");
+                        a.handler().postDelayed(new Runnable() {
+                            @Override public void run() {
+                                if (h.current() == BlocksHome.S_ABOUT) { h.invalidate(BlocksHome.S_ABOUT); h.show(BlocksHome.S_ABOUT); a.changed(); }
+                            }
+                        }, 800);
+                    }
+                })
+                .positive("知道了", null)
+                .show();
+            return;
+        }
+        String loc = "download".equals(updSrc) ? "VeraDroid/Download/" : ".adds/Veradroid-Libra2/update/";
+        String msg = "当前版本：v" + curVer
+            + "\n检测到升级包：v" + updVer
+            + "\n文件：" + loc + updFile
+            + (updNewer
+                ? "\n\n点击「立即重启升级」后系统会自动校验 SHA-256 并完成增量升级，保留全部应用、书籍与设置（约 30 秒后自动回到桌面）。"
+                : "\n\n提示：该升级包版本号不高于当前系统（v" + curVer + "）。如确实需要覆盖重装，可点击「强制重装」。");
+        new VeraDialog.Builder(a)
+            .title("离线系统升级")
+            .message(msg)
+            .negative("稍后", null)
+            .positive(updNewer ? "立即重启升级" : "强制重装", new Runnable() {
+                @Override public void run() {
+                    new java.io.File(HostLink.CTL + "offlineupd.result").delete();
+                    HostLink.cmd(updNewer ? "offlineupd apply" : "offlineupd force");
+                    VeraToast.show(a, "正在准备离线升级并重启系统…");
+                    a.handler().postDelayed(new Runnable() {
+                        @Override public void run() {
+                            Map<String, String> r = HostLink.kv(HostLink.CTL + "offlineupd.result");
+                            if ("0".equals(r.get("ok"))) {
+                                String err = r.get("error");
+                                new VeraDialog.Builder(a).title("升级准备失败")
+                                    .message(err != null && err.length() > 0 ? err : "升级包校验失败")
+                                    .positive("知道了", null).show();
+                            }
+                        }
+                    }, 3500);
+                }
+            })
+            .show();
+    }
+
+    private void diagExportDialog() {
+        final java.io.File out = new java.io.File(HostLink.CTL + "diag.export");
+        out.delete();
+        HostLink.cmd("diagexport");
+        VeraToast.show(a, "正在收集日志并打包到 Kobo 根目录…");
+        final android.os.Handler hd = new android.os.Handler(android.os.Looper.getMainLooper());
+        final long start = System.currentTimeMillis();
+        final Runnable poll = new Runnable() {
+            @Override public void run() {
+                if (a.isFinishing()) return;
+                if (out.isFile() && out.length() > 0) {
+                    Map<String, String> r = HostLink.kv(out.getPath());
+                    if ("1".equals(r.get("ok"))) {
+                        String fn = r.get("file") != null ? r.get("file") : "veradroid-diag.tar.gz";
+                        String kb = r.get("size_kb") != null ? r.get("size_kb") : "?";
+                        new VeraDialog.Builder(a)
+                            .title("诊断日志已导出")
+                            .message("已打包到 Kobo 盘根目录：\n" + fn + "（" + kb + " KB）\n\n直接插数据线连接电脑，打开「Kobo Onboard」根目录即可拷出（最多自动保留最近 3 份）。")
+                            .positive("知道了", null)
+                            .show();
+                    } else {
+                        String err = r.get("error");
+                        new VeraDialog.Builder(a)
+                            .title("导出失败")
+                            .message(err != null && err.length() > 0 ? err : "无法写入诊断包")
+                            .positive("知道了", null)
+                            .show();
+                    }
+                    return;
+                }
+                if (System.currentTimeMillis() - start > 30000L) {
+                    VeraToast.show(a, "诊断日志仍在后台打包，请稍后查看 Kobo 根目录");
+                    return;
+                }
+                hd.postDelayed(this, 800);
+            }
+        };
+        hd.postDelayed(poll, 1200);
     }
 
     // ------------------------------------------------------------------ 首页卡片

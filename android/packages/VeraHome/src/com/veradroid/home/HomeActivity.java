@@ -384,7 +384,7 @@ public class HomeActivity extends Activity {
                     handler.post(new Runnable() { @Override public void run() {
                         if (!resumed || isFinishing()) return;
                         refreshStatus();
-                        if (blocks != null && Blocks.on(HomeActivity.this) && blocks.current() == BlocksHome.S_STORAGE) blocks.dataChanged();
+                        if (blocks != null && Blocks.on(HomeActivity.this) && (blocks.current() == BlocksHome.S_STORAGE || blocks.current() == BlocksHome.S_ABOUT)) blocks.dataChanged();
                     } });
                 }
             };
@@ -2105,7 +2105,7 @@ public class HomeActivity extends Activity {
         case 0:
             wifiSwitch(list);
             // 蓝牙芯片归 Kobo（Android 里没有蓝牙服务）：宿主说这台机器有 Kobo 的蓝牙栈才显示，配对、连接都经宿主做
-            if (BluetoothActivity.supported()) action(list, "蓝牙翻页器", "扫描、配对、连接蓝牙翻页器，选翻页键发成什么键。", "打开", new View.OnClickListener() {
+            if (BluetoothActivity.supported()) action(list, "蓝牙设备", "扫描、配对、连接蓝牙翻页器或蓝牙耳机/音箱（A2DP 音频）。", "打开", new View.OnClickListener() {
                 @Override public void onClick(View v) { BluetoothActivity.open(HomeActivity.this); }
             });
             hostChoice(list, host, "DNS", "自动用 Wi-Fi 给的 DNS；也可以固定成阿里/腾讯/Google。改完立即生效，下次开机沿用。", "DNS_MODE", DNS_L, DNS_V, "auto");

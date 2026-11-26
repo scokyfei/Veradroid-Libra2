@@ -38,6 +38,8 @@ display_prepare() {
     esac
     echo "libra2" > "$X/model"
     hwc_prepare
+    rm -f "$X/audio.fifo" "$X/audio.active"
+    mkfifo -m 666 "$X/audio.fifo" 2>/dev/null || true
     chmod -R 777 "$X"
     t "display: prepared ${viewWidth}x${viewHeight} (${deviceName}), rot=$(rot_deg)"
 }
@@ -253,6 +255,15 @@ container_start() {
         if [ -w "$R/init.kindle.rc" ] && ! grep -q 'libkobo_madvise.so' "$R/init.kindle.rc" 2>/dev/null; then
             sed -i 's|export LD_PRELOAD /system/lib/libvdshim.so|export LD_PRELOAD /system/lib/libvdshim.so:/system/lib/libkobo_madvise.so|' "$R/init.kindle.rc" \
                 && t "container: enabled libkobo_madvise.so in init.kindle.rc LD_PRELOAD"
+        fi
+    fi
+    # Install Kobo BlueALSA primary Audio HAL so AudioFlinger can stream 44.1kHz PCM to /dev/kfb/audio.fifo
+    if [ -f "$VD/bin/audio.primary.kindle.so" ] && [ -d "$R/system/lib/hw" ]; then
+        if ! cmp -s "$VD/bin/audio.primary.kindle.so" "$R/system/lib/hw/audio.primary.kindle.so"; then
+            cp "$VD/bin/audio.primary.kindle.so" "$R/system/lib/hw/audio.primary.kindle.so.new" \
+                && chmod 644 "$R/system/lib/hw/audio.primary.kindle.so.new" \
+                && mv -f "$R/system/lib/hw/audio.primary.kindle.so.new" "$R/system/lib/hw/audio.primary.kindle.so" \
+                && t "container: installed audio.primary.kindle.so (BlueALSA A2DP HAL)"
         fi
     fi
     # Install Kobo-rebranded VeraHome.apk when staged in $VD/bin/VeraHome.apk
@@ -509,10 +520,25 @@ run_in_ns() {
     chmod 777 "$R/data/media" "$R/data/media/0" "$R/data/media/0/Books" "$R/data/local/tmp" 2>/dev/null || true
     upload_dir_fix 2>/dev/null || true
 
-    # Bind Kobo Documents safely outside /data/media/0 (symlinked from KindleLibrary)
-    if [ -d "$DOCS_DIR" ] && [ -d "$R$KLIB_MP" ]; then
+    # Bind Kobo Books / Documents safely outside /data/media/0 (preserving KindleLibrary compat + clean KoboBooks alias)
+    _kdoc=
+    if [ -d "$DOCS_DIR" ]; then _kdoc=$DOCS_DIR
+    elif [ -d /mnt/onboard/Books ]; then _kdoc=/mnt/onboard/Books
+    fi
+    if [ -n "$_kdoc" ] && [ -d "$R$KLIB_MP" ]; then
         if klib_link "$R/data"; then
-            mount --bind "$DOCS_DIR" "$R$KLIB_MP" 2>/dev/null || true
+            mount --bind "$_kdoc" "$R$KLIB_MP" 2>/dev/null || true
+        fi
+    fi
+    if [ -d /mnt/onboard/Books ]; then
+        mkdir -p "$R/kobo_books" 2>/dev/null || true
+        mount --bind /mnt/onboard/Books "$R/kobo_books" 2>/dev/null || true
+        if [ -L "$R/data/media/0/KoboBooks" ] || [ ! -e "$R/data/media/0/KoboBooks" ]; then
+            ln -sfn /kobo_books "$R/data/media/0/KoboBooks" 2>/dev/null || true
+        fi
+    elif [ -n "$_kdoc" ]; then
+        if [ -L "$R/data/media/0/KoboBooks" ] || [ ! -e "$R/data/media/0/KoboBooks" ]; then
+            ln -sfn "$KLIB_MP" "$R/data/media/0/KoboBooks" 2>/dev/null || true
         fi
     fi
 

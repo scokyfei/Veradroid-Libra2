@@ -111,7 +111,9 @@ if [ -z "${VERADROID_NO_AUTOUPDATE:-}" ] && [ -f "$VD/boot/lib/localupdate.sh" ]
         [ -f "$_upz" ] || continue
         t "update: applying offline package ${_upz##*/}"
         storage_umount 2>/dev/null || true
-        if sh "$VD/boot/lib/localupdate.sh" install --quiet; then
+        _upf=
+        if [ -f "$VD/update/.force" ]; then _upf=--force; rm -f "$VD/update/.force" 2>/dev/null || true; fi
+        if sh "$VD/boot/lib/localupdate.sh" install $_upf --quiet; then
             t "update: applied successfully, re-executing updated veradroid.sh"
             rm -f "$W/starting/pid"; rmdir "$W/starting" 2>/dev/null || true
             trap - EXIT

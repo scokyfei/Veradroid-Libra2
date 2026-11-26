@@ -79,6 +79,7 @@ kobo-sdcard
 umtprd
 vdbtkeys
 hwcomposer.kindle.so
+audio.primary.kindle.so
 libkobo_madvise.so
 kobo-weread-opt.jar
 ethernet-service-wifi.jar
@@ -150,8 +151,8 @@ EOF
               "$vd/bin/vdsqueeze" "$vd/bin/e2fsck" "$vd/bin/mke2fs" "$vd/bin/resize2fs" \
               "$vd/bin/fbink" "$vd/bin/fbdepth" "$vd/bin/fbink-img" "$vd/bin/kobo-sdcard" \
               "$vd/bin/umtprd" "$vd/bin/vdbtkeys"
-    chmod 644 "$vd/bin/VeraHome.apk" "$vd/bin/hwcomposer.kindle.so" "$vd/bin/libkobo_madvise.so" \
-              "$vd/bin/kobo-weread-opt.jar" "$vd/bin/ethernet-service-wifi.jar"
+    chmod 644 "$vd/bin/VeraHome.apk" "$vd/bin/hwcomposer.kindle.so" "$vd/bin/audio.primary.kindle.so" \
+              "$vd/bin/libkobo_madvise.so" "$vd/bin/kobo-weread-opt.jar" "$vd/bin/ethernet-service-wifi.jar"
 
     # Root README for end users (ASCII filename avoids Windows/BusyBox unzip mojibake)
     cat > "$root/README-INSTALL.txt" <<EOF

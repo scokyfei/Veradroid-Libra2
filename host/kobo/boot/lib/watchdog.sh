@@ -111,6 +111,78 @@ diag_save() {
     t "diagnostics saved: $d"
 }
 
+# Compact one-tap diagnostic archive written directly to /mnt/onboard/veradroid-diag-YYYYMMDD-HHMMSS.tar.gz
+# so users can grab it over USB MTP (Kobo Onboard root) without needing SSH.
+diag_export() {
+    _ts=$(date +%Y%m%d-%H%M%S)
+    _name="veradroid-diag-${_ts}"
+    _stage="/tmp/${_name}"
+    _out="/mnt/onboard/${_name}.tar.gz"
+    rm -rf "$_stage"
+    mkdir -p "$_stage" 2>/dev/null || {
+        { echo "ok=0"; echo "error=无法创建临时目录"; } > "$X/ctl/diag.export.tmp" && mv -f "$X/ctl/diag.export.tmp" "$X/ctl/diag.export"
+        return 1
+    }
+    {
+        echo "VeraDroid-Libra2 Diagnostic Bundle"
+        echo "time=$(date '+%F %T')"
+        echo "version=$(head -1 "$VD/VERSION" 2>/dev/null)"
+        echo "firmware=$(kobo_firmware 2>/dev/null)"
+        echo "kernel=$(uname -a 2>/dev/null)"
+        echo "uptime=$(cat /proc/uptime 2>/dev/null)"
+        echo "battery=$(kobo_battery 2>/dev/null)% charging=$(kobo_is_charging && echo 1 || echo 0)"
+    } > "$_stage/README.txt" 2>/dev/null
+    for _f in "$LOG" "$VD/logs/last-stop.log" "$VD/logs/fsck.log" "$VD/logs/resize.log" "$VD/logs/localupdate.log" /tmp/veradroid-stop.log; do
+        [ -f "$_f" ] && tail -c 131072 "$_f" > "$_stage/${_f##*/}" 2>/dev/null || true
+    done
+    for _f in "$W/epd.log" "$W/input.log" "$W/input.err" "$W/umtprd.log" "$W/bt.log" "$W/bt-hci.log" "$W/bluetoothd.log" "$W/bt-pair.log" "$W/bt-audio.log" "$W/bluealsa.log" "$W/bt.state" "$X/ctl/status" "$X/ctl/bt.list" "$X/settings" "$X/gestures" "$SYS/settings.conf"; do
+        [ -f "$_f" ] && tail -c 65536 "$_f" > "$_stage/run-${_f##*/}" 2>/dev/null || true
+    done
+    dmesg 2>/dev/null | tail -n 500 > "$_stage/dmesg.txt" 2>/dev/null || true
+    cat /proc/meminfo > "$_stage/meminfo.txt" 2>/dev/null || true
+    cat /proc/mounts > "$_stage/mounts.txt" 2>/dev/null || true
+    cat /proc/modules > "$_stage/modules.txt" 2>/dev/null || true
+    cat /sys/block/zram0/mm_stat > "$_stage/zram.txt" 2>/dev/null || true
+    cat /proc/net/rtl8723ds/wlan0/ps_info > "$_stage/wifi-ps.txt" 2>/dev/null || true
+    df -h > "$_stage/df.txt" 2>/dev/null || true
+    ps > "$_stage/ps.txt" 2>/dev/null || true
+    hciconfig -a > "$_stage/hciconfig.txt" 2>/dev/null || true
+
+    _cpid=$(cat "$W/pid" 2>/dev/null)
+    if [ -n "$_cpid" ] && kill -0 "$_cpid" 2>/dev/null && [ ! -f "$W/frozen" ]; then
+        vd_timeout 8 adb_sh 'export PATH=/system/bin:/system/xbin; logcat -d -t 500 -v threadtime' > "$_stage/android-logcat.txt" 2>&1 || true
+        vd_timeout 6 adb_sh 'export PATH=/system/bin:/system/xbin; logcat -b crash -d -v threadtime' > "$_stage/android-crash.txt" 2>&1 || true
+        vd_timeout 8 adb_sh 'export PATH=/system/bin:/system/xbin; dumpsys media.audio_flinger' > "$_stage/android-audio.txt" 2>&1 || true
+        vd_timeout 8 adb_sh 'export PATH=/system/bin:/system/xbin; dumpsys meminfo' > "$_stage/android-meminfo.txt" 2>&1 || true
+        vd_timeout 6 adb_sh 'export PATH=/system/bin:/system/xbin; getprop' > "$_stage/android-getprop.txt" 2>&1 || true
+    fi
+
+    if tar -czf "$_out.tmp" -C /tmp "$_name" 2>/dev/null && mv -f "$_out.tmp" "$_out" 2>/dev/null; then
+        # Keep only the 3 newest diagnostic archives on /mnt/onboard
+        _cnt=0
+        for _old in $(ls -1t /mnt/onboard/veradroid-diag-*.tar.gz 2>/dev/null); do
+            _cnt=$((_cnt + 1))
+            [ "$_cnt" -gt 3 ] && rm -f "$_old" 2>/dev/null || true
+        done
+        _kb=$(( ($(wc -c < "$_out" 2>/dev/null || echo 0) + 1023) / 1024 ))
+        {
+            echo "ok=1"
+            echo "file=${_name}.tar.gz"
+            echo "path=${_out}"
+            echo "size_kb=${_kb}"
+            echo "ts=$(date +%s)"
+        } > "$X/ctl/diag.export.tmp" && chmod 644 "$X/ctl/diag.export.tmp" 2>/dev/null && mv -f "$X/ctl/diag.export.tmp" "$X/ctl/diag.export"
+        t "diag_export: wrote $_out (${_kb} KB)"
+    else
+        rm -f "$_out.tmp" 2>/dev/null || true
+        { echo "ok=0"; echo "error=打包失败（检查 Kobo 存储空间）"; } > "$X/ctl/diag.export.tmp" \
+            && chmod 644 "$X/ctl/diag.export.tmp" 2>/dev/null \
+            && mv -f "$X/ctl/diag.export.tmp" "$X/ctl/diag.export"
+        t "diag_export: failed writing $_out"
+    fi
+    rm -rf "$_stage" 2>/dev/null || true
+}
+
 # 返回 Kobo：Kobo Libra 2 默认完整停止以释放挂载供 USB 存储使用。
 do_exit() {
     settings_load
@@ -235,7 +307,7 @@ bat_poke_tick() {
 # Protect tiny host daemon processes from being picked by OOM/LMK alongside Android foreground apps.
 host_oom_protect() {
     [ -n "${HOST_OOM_ADJ--800}" ] || return 0
-    for ho_n in cmd watchdog guard sleep input epd umtprd bt; do
+    for ho_n in cmd watchdog guard sleep input epd umtprd bt bluealsa; do
         ho_p=$(cat $W/$ho_n.pid 2>/dev/null)
         case "$ho_p" in ''|*[!0-9]*) continue ;; esac
         [ "$(cat /proc/$ho_p/oom_score_adj 2>/dev/null)" = "${HOST_OOM_ADJ--800}" ] || echo "${HOST_OOM_ADJ--800}" > /proc/$ho_p/oom_score_adj 2>/dev/null
@@ -256,7 +328,7 @@ watchdog() {
         lmk_kernel_tune 2>/dev/null || true
         host_oom_protect
         var_guard
-        log_cap $W/epd.log 262144; log_cap $W/input.log 131072; log_cap $W/input.err 65536; log_cap $W/umtprd.log 131072; log_cap $W/bt.log 65536
+        log_cap $W/epd.log 262144; log_cap $W/input.log 131072; log_cap $W/input.err 65536; log_cap $W/umtprd.log 131072; log_cap $W/bt.log 65536; log_cap $W/bt-audio.log 65536; log_cap $W/bluealsa.log 65536
         if [ ! -f $W/saver_frozen ] && [ ! -f $W/frozen ]; then
             # 命令监听没了（FIFO 建不起来、被杀）：桌面的“返回 Kindle”、设置、手势全都没反应，只能重启 Kindle。重新起一个。
             alive $W/cmd.pid || { t "cmd listener gone, restarting it"; cmd_listen & echo $! > $W/cmd.pid; }
@@ -282,8 +354,13 @@ watchdog() {
             kobo_is_charging && cur_st_chg=1 || cur_st_chg=0
             cur_st_ip=$(kobo_wifi_ip 2>/dev/null)
             type usb_mtp_active >/dev/null 2>&1 && usb_mtp_active && cur_st_usb=1 || cur_st_usb=0
-            if [ "$cur_st_bat" != "$last_st_bat" ] || [ "$cur_st_chg" != "$last_st_chg" ] || [ "$cur_st_ip" != "$last_st_ip" ] || [ "$cur_st_usb" != "${last_st_usb:-}" ]; then
-                last_st_bat=$cur_st_bat; last_st_chg=$cur_st_chg; last_st_ip=$cur_st_ip; last_st_usb=$cur_st_usb
+            if type bt_is_on >/dev/null 2>&1 && bt_is_on; then
+                # Auto-attach / detach A2DP audio bridge if a paired headset auto-connected or powered off
+                type bt_audio_sync >/dev/null 2>&1 && bt_audio_sync
+            fi
+            cur_st_bta=$(cat "$W/bt.audio.name" 2>/dev/null)
+            if [ "$cur_st_bat" != "$last_st_bat" ] || [ "$cur_st_chg" != "$last_st_chg" ] || [ "$cur_st_ip" != "$last_st_ip" ] || [ "$cur_st_usb" != "${last_st_usb:-}" ] || [ "$cur_st_bta" != "${last_st_bta:-}" ]; then
+                last_st_bat=$cur_st_bat; last_st_chg=$cur_st_chg; last_st_ip=$cur_st_ip; last_st_usb=$cur_st_usb; last_st_bta=$cur_st_bta
                 type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
             fi
         fi

@@ -73,7 +73,7 @@ public class BluetoothActivity extends Activity {
         root.setBackgroundColor(Color.WHITE);
         root.setPadding(dp(18), dp(12), dp(18), dp(12));
         blk = Blocks.on(this);
-        if (blk) Blocks.headInto(this, root, "Bluetooth / page turner", "蓝牙翻页器", Blocks.button(this, "扫描", true, new View.OnClickListener() {
+        if (blk) Blocks.headInto(this, root, "Bluetooth / devices", "蓝牙设备", Blocks.button(this, "扫描", true, new View.OnClickListener() {
             @Override public void onClick(View v) { scan(); }
         }));
         else {
@@ -82,7 +82,7 @@ public class BluetoothActivity extends Activity {
         hd.addView(Icons.bar(this, Icons.Kind.BACK, 28, new View.OnClickListener() {
             @Override public void onClick(View v) { finish(); }
         }));
-        TextView t = Ui.text(this, "蓝牙翻页器", 24, true); t.setPadding(dp(10), 0, 0, 0);
+        TextView t = Ui.text(this, "蓝牙设备", 24, true); t.setPadding(dp(10), 0, 0, 0);
         hd.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         hd.addView(Ui.button(this, "扫描", 16, true, new View.OnClickListener() {
             @Override public void onClick(View v) { scan(); }
@@ -220,14 +220,18 @@ public class BluetoothActivity extends Activity {
             }
         }
         String bb = st.get("btbridge");
+        String audio = st.get("btaudio");
+        String audioLine = (audio != null && audio.length() > 0)
+            ? "蓝牙音频 (A2DP)：已连接 " + audio + "（听书 / 朗读直接输出）\n"
+            : (on ? "蓝牙音频 (A2DP)：待机（连上蓝牙耳机/音箱自动输出）\n" : "");
         if ("1".equals(st.get("bt"))) {
-            set(bridge, names.length() > 0 ? "按键转发：运行中，正在接收 " + names : "按键转发：运行中，等翻页器连上（按一下它的键）");
+            set(bridge, audioLine + (names.length() > 0 ? "按键转发：运行中，正在接收 " + names : "按键转发：运行中，等翻页器连上（按一下它的键）"));
             bridgeBtn.setVisibility(View.GONE);
         } else if ("0".equals(bb)) {
-            set(bridge, "按键转发：已关闭");
+            set(bridge, audioLine + "按键转发：已关闭");
             bridgeBtn.setVisibility(View.VISIBLE);
         } else {
-            set(bridge, "按键转发：未启动（配对或连上翻页器后自动启动）");
+            set(bridge, audioLine + "按键转发：未启动（配对或连上翻页器后自动启动）");
             bridgeBtn.setVisibility(View.GONE);
         }
     }
@@ -249,7 +253,7 @@ public class BluetoothActivity extends Activity {
         if (np == 0) hint("还没有配对过的设备。");
         for (String[] d : devices) if ("1".equals(d[2])) list.addView(row(d));
         header("附近的设备");
-        if (nn == 0) hint(busy && "scan".equals(busyOp) ? "正在找…" : "让翻页器进入配对模式（多数是长按开关键或配对键几秒，指示灯快闪），再点右上角“扫描”。");
+        if (nn == 0) hint(busy && "scan".equals(busyOp) ? "正在找…" : "让翻页器或蓝牙耳机/音箱进入配对模式（指示灯快闪），再点右上角“扫描”。");
         for (String[] d : devices) if (!"1".equals(d[2])) list.addView(row(d));
         hint("点设备：配对 / 连接；点已连接的设备：断开；长按已配对的设备：取消配对。");
     }
@@ -383,9 +387,9 @@ public class BluetoothActivity extends Activity {
         else if ("unsupported".equals(e)) msg = "这台 Kobo 没有蓝牙。";
         else if ("lipc".equals(e)) msg = "Kobo 的蓝牙服务没有响应，请稍后再试；一直不行就回 Kobo 的设置里关开一次蓝牙。";
         else if ("badmac".equals(e)) msg = "设备地址不对。";
-        else if ("scan".equals(op)) msg = ok ? "扫描完成：找到 " + devices.size() + " 个设备。没看到翻页器就让它重新进入配对模式再扫一次。" : "扫描失败。";
+        else if ("scan".equals(op)) msg = ok ? "扫描完成：找到 " + devices.size() + " 个设备。没看到设备就让它重新进入配对模式再扫一次。" : "扫描失败。";
         else if ("bond".equals(op)) {
-            if (ok) msg = "已配对并连接：" + name + "。打开阅读应用按翻页器试试。";
+            if (ok) msg = "已配对并连接：" + name + "。翻页器可直接按键，耳机/音箱可直接听书播放。";
             else if ("notconnected".equals(e)) msg = "已配对：" + name + "。按一下翻页器的键让它连上。";
             else if ("failed".equals(e)) msg = "配对失败：" + name + " 拒绝了配对。让它重新进入配对模式再点一次。";
             else msg = "配对超时：确认 " + name + " 在配对模式（指示灯快闪），再点一次。";

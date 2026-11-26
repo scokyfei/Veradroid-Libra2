@@ -153,7 +153,8 @@ usb_max_packet_size 0x200
 EOF
 
     : > "$W/umtprd.log"
-    UMTPRD_HIDE="$SYSTEM_IMG:$SYS" "$VD/bin/umtprd" -conf "$W/umtprd.conf" >>"$W/umtprd.log" 2>&1 </dev/null &
+    _hide="$SYSTEM_IMG:$SYS:$SYS/data/media/0/KindleLibrary:$SYS/data/media/0/KindleFonts:$SYS/data/media/0/KoboBooks"
+    UMTPRD_HIDE="$_hide" "$VD/bin/umtprd" -conf "$W/umtprd.conf" >>"$W/umtprd.log" 2>&1 </dev/null &
     echo $! > "$W/umtprd.pid"
 
     # Wait for umtprd to write FunctionFS descriptors to ep0 and create ep1..ep3

@@ -137,6 +137,48 @@ cmd_listen() {
         poweroff) do_poweroff ;;
         sleep)   [ -p "$W/power.fifo" ] && ( echo sleep > "$W/power.fifo" ) & ;;
         diag)    ( diag_save; touch "$X/ctl/diag.done"; chmod 644 "$X/ctl/diag.done" 2>/dev/null ) & ;;
+        diagexport) ( diag_export ) </dev/null >>"$LOG" 2>&1 & ;;
+        offlineupd)
+            case "$a" in
+                check|'') status_write ;;
+                apply|force)
+                    ou_hit=$(offline_upd_find || true)
+                    if [ -z "$ou_hit" ]; then
+                        { echo "ok=0"; echo "error=未检测到离线升级包"; } > "$X/ctl/offlineupd.result.tmp" \
+                            && chmod 644 "$X/ctl/offlineupd.result.tmp" 2>/dev/null \
+                            && mv -f "$X/ctl/offlineupd.result.tmp" "$X/ctl/offlineupd.result"
+                        status_write
+                    else
+                        _ou_p=${ou_hit%%	*}; _ou_rest=${ou_hit#*	}
+                        _ou_v=${_ou_rest%%	*}; _ou_s=${_ou_rest#*	}
+                        _ou_bn=${_ou_p##*/}
+                        mkdir -p "$VD/update" 2>/dev/null || true
+                        _ou_dst="$VD/update/$_ou_bn"
+                        _ou_ok=1
+                        if [ "$_ou_s" != update ]; then
+                            t "offlineupd: staging $_ou_p -> $_ou_dst"
+                            if ! cp "$_ou_p" "$_ou_dst.tmp" 2>/dev/null || ! mv -f "$_ou_dst.tmp" "$_ou_dst" 2>/dev/null; then
+                                rm -f "$_ou_dst.tmp" 2>/dev/null || true
+                                _ou_ok=0
+                            fi
+                        fi
+                        if [ "$_ou_ok" = 1 ] && command -v unzip >/dev/null 2>&1 && ! unzip -tq "$_ou_dst" >/dev/null 2>&1; then
+                            [ "$_ou_s" != update ] && rm -f "$_ou_dst" 2>/dev/null || true
+                            _ou_ok=0
+                            _ou_err="压缩包损坏或下载不完整"
+                        fi
+                        if [ "$_ou_ok" = 1 ]; then
+                            [ "$a" = force ] && touch "$VD/update/.force" 2>/dev/null || rm -f "$VD/update/.force" 2>/dev/null || true
+                            [ "$_ou_s" != update ] && rm -f "$_ou_p" 2>/dev/null || true
+                            t "offlineupd: applying $_ou_bn (v$_ou_v, mode=$a) via restart"
+                            do_restart
+                        else
+                            { echo "ok=0"; echo "error=${_ou_err:-复制升级包失败（存储空间不足？）}"; } > "$X/ctl/offlineupd.result.tmp" \
+                                && chmod 644 "$X/ctl/offlineupd.result.tmp" 2>/dev/null \
+                                && mv -f "$X/ctl/offlineupd.result.tmp" "$X/ctl/offlineupd.result"
+                        fi
+                    fi ;;
+            esac ;;
         clear)   epd_send FULL ;;
         screenshot)
             mkdir -p "$SYS/data/media/0/Screenshots"
@@ -272,7 +314,14 @@ wrmaint_status() {
         _usb="已就绪"
     fi
     _bt="关"
-    type bt_is_on >/dev/null 2>&1 && bt_is_on && _bt="开"
+    if type bt_is_on >/dev/null 2>&1 && bt_is_on; then
+        _ba=$(cat "$W/bt.audio.name" 2>/dev/null)
+        if [ -n "$_ba" ] && alive "$W/bt-audio.pid"; then
+            _bt="开（音频：$_ba）"
+        else
+            _bt="开"
+        fi
+    fi
     _wr="$SYS/data/data/com.tencent.weread.eink"
     _has_wr=0
     [ -d "$_wr" ] && _has_wr=1

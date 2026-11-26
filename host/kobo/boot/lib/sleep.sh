@@ -246,8 +246,16 @@ kobo_deep_suspend() {
     return $rc
 }
 
+audio_active() {
+    [ -f "$X/audio.active" ] || return 1
+    _am=$(stat -c %Y "$X/audio.active" 2>/dev/null || echo 0)
+    _an=$(date +%s)
+    [ "$_am" -gt 0 ] && [ $((_an - _am)) -lt 10 ]
+}
+
 sleep_transfer_busy() {
     [ -f "$W/fwd.id" ] || alive "$W/installing" || [ -f "$W/compile.lock" ] || alive "$W/compile.guard" \
+        || audio_active \
         || { type usb_mtp_active >/dev/null 2>&1 && usb_mtp_active; }
 }
 
@@ -324,6 +332,7 @@ kobo_exit_sleep() {
         (
             if type bt_radio_on >/dev/null 2>&1 && bt_radio_on; then
                 type bt_bridge_start >/dev/null 2>&1 && bt_bridge_start
+                type bt_audio_sync >/dev/null 2>&1 && bt_audio_sync
                 type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
                 t "sleep: bluetooth restored after wakeup"
             fi

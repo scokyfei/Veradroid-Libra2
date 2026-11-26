@@ -53,8 +53,8 @@ final class BlocksPanel {
         } catch (Throwable t) { return ""; }
     }
 
-    /** 方块面板一排最多 5 个（Kobo 的快捷设置也是 5 个）。 */
-    static final int MAX_TILES = 5;
+    /** 方块面板一排最多 6 个（Wi-Fi / 蓝牙 / 夜间 / 清残影 / 设置 / 清后台 可同排显示）。 */
+    static final int MAX_TILES = 6;
 
     private final Context ctx;
     private final WindowManager wm;
@@ -182,6 +182,7 @@ final class BlocksPanel {
                 @Override public void onClick(View v) { action(id); }
             });
             if ("wifi".equals(id)) t.setOnLongClickListener(new View.OnLongClickListener() { @Override public boolean onLongClick(View v) { finish(); WifiActivity.open(ctx); return true; } });
+            else if ("bt".equals(id)) t.setOnLongClickListener(new View.OnLongClickListener() { @Override public boolean onLongClick(View v) { finish(); BluetoothActivity.open(ctx); return true; } });
             tiles.put(id, t);
             LinearLayout.LayoutParams lp = Blocks.weight(1);
             if (row.getChildCount() > 0) lp.leftMargin = dp(8);
@@ -507,7 +508,12 @@ final class BlocksPanel {
     /** 和经典面板的快捷开关做同样的事（同样的宿主命令和设置键）。 */
     private void action(String id) {
         if ("wifi".equals(id)) { wifiOn = wifiOn == 1 ? 0 : 1; HostLink.cmd("wifi " + wifiOn); paintTiles(); }
-        else if ("bt".equals(id)) { finish(); BluetoothActivity.open(ctx); }
+        else if ("bt".equals(id)) {
+            btOn = btOn == 1 ? 0 : 1;
+            HostLink.cmd(btOn == 1 ? "bt enable" : "bt disable");
+            paintTiles();
+            VeraToast.show(ctx, btOn == 1 ? "正在打开蓝牙…（长按管理设备）" : "正在关闭蓝牙…");
+        }
         else if ("invert".equals(id)) { invertOn = invertOn == 1 ? 0 : 1; HostLink.cmd("invert"); paintTiles(); }
         else if ("clear".equals(id)) {
             // 先收起面板、等它从屏幕上下去（约 0.5 秒）再整屏刷新：以前面板还在时就刷，刷完收起面板又在那块留下残影

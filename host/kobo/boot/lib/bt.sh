@@ -9,10 +9,132 @@ BT_HCI_BIN=/sbin/rtk_hciattach
 BT_UART=/dev/ttymxc1
 BT_DAEMON=/libexec/bluetooth/bluetoothd
 BT_CTL=/bin/bluetoothctl
+BT_BLUEALSA=/bin/bluealsa
+BT_APLAY=/bin/aplay
 
 bt_supported() {
     [ "${VD_BT_FORCE:-0}" = 1 ] && return 0
     [ -f "$BT_PWR_KO" ] && [ -x "$BT_HCI_BIN" ] && [ -x "$BT_DAEMON" ] && [ -x "$BT_CTL" ]
+}
+
+bt_audio_supported() {
+    [ -x "$BT_BLUEALSA" ] && [ -x "$BT_APLAY" ]
+}
+
+bt_audio_fifo_ensure() {
+    [ -d "$X" ] || return 0
+    if [ ! -p "$X/audio.fifo" ]; then
+        rm -f "$X/audio.fifo" 2>/dev/null || true
+        mkfifo -m 666 "$X/audio.fifo" 2>/dev/null || true
+    fi
+    chmod 666 "$X/audio.fifo" 2>/dev/null || true
+}
+
+bt_bluealsa_start() {
+    bt_audio_supported || return 0
+    bt_audio_fifo_ensure
+    if alive "$W/bluealsa.pid" || pidof bluealsa >/dev/null 2>&1; then
+        return 0
+    fi
+    : > "$W/bluealsa.log"
+    "$BT_BLUEALSA" -i hci0 -p a2dp-source --a2dp-force-audio-cd --initial-volume=85 >>"$W/bluealsa.log" 2>&1 </dev/null &
+    echo $! > "$W/bluealsa.pid"
+    usleep 200000
+    if alive "$W/bluealsa.pid"; then
+        t "bt: bluealsa a2dp-source started (pid=$(cat "$W/bluealsa.pid"))"
+    else
+        t "bt: bluealsa failed to start (see $W/bluealsa.log)"
+    fi
+}
+
+bt_bluealsa_stop() {
+    p=$(cat "$W/bluealsa.pid" 2>/dev/null)
+    [ -n "$p" ] && kill "$p" 2>/dev/null || true
+    killall -q -TERM bluealsa 2>/dev/null || true
+    i=0
+    while pidof bluealsa >/dev/null 2>&1 && [ $i -lt 10 ]; do usleep 100000; i=$((i + 1)); done
+    killall -q -KILL bluealsa 2>/dev/null || true
+    rm -f "$W/bluealsa.pid"
+}
+
+bt_audio_stop() {
+    p=$(cat "$W/bt-audio.pid" 2>/dev/null)
+    if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then
+        kill "$p" 2>/dev/null || true
+        usleep 100000
+        kill -9 "$p" 2>/dev/null || true
+    fi
+    killall -q -TERM aplay 2>/dev/null || true
+    usleep 100000
+    killall -q -KILL aplay 2>/dev/null || true
+    rm -f "$W/bt-audio.pid" "$W/bt.audio.mac" "$W/bt.audio.name" "$X/audio.active"
+}
+
+bt_audio_start() { # $1 = MAC, $2 = display name
+    mac=$1; name=$2
+    bt_audio_supported || return 0
+    bt_mac_ok "$mac" || return 1
+    bt_bluealsa_start
+    bt_audio_fifo_ensure
+
+    cur_mac=$(cat "$W/bt.audio.mac" 2>/dev/null)
+    if [ "$cur_mac" = "$mac" ] && alive "$W/bt-audio.pid"; then
+        return 0
+    fi
+    bt_audio_stop
+    printf '%s\n' "$mac" > "$W/bt.audio.mac"
+    printf '%s\n' "${name:-$mac}" > "$W/bt.audio.name"
+    : > "$W/bt-audio.log"
+    (
+        while [ -f "$W/bt.audio.mac" ] && bt_is_on; do
+            m=$(cat "$W/bt.audio.mac" 2>/dev/null)
+            [ "$m" = "$mac" ] || break
+            if ! vd_timeout 3 "$BT_CTL" info "$mac" 2>/dev/null | grep -q 'Connected: yes'; then
+                rm -f "$W/bt.audio.mac" "$W/bt.audio.name" "$X/audio.active"
+                type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
+                break
+            fi
+            bt_audio_fifo_ensure
+            "$BT_APLAY" -q -D "bluealsa:DEV=$mac,PROFILE=a2dp" -f S16_LE -r 44100 -c 2 < "$X/audio.fifo" >>"$W/bt-audio.log" 2>&1
+            rc=$?
+            [ "$rc" = 0 ] && usleep 200000 || sleep 1
+        done
+        rm -f "$W/bt-audio.pid" "$X/audio.active"
+    ) </dev/null >>"$W/bt-audio.log" 2>&1 &
+    echo $! > "$W/bt-audio.pid"
+    t "bt: A2DP audio bridge active for ${name:-$mac} ($mac)"
+}
+
+# Scan connected paired devices for an A2DP Sink (UUID 0000110b) and keep the FIFO->aplay bridge synced.
+bt_audio_sync() {
+    bt_audio_supported || return 0
+    if ! bt_is_on; then
+        bt_audio_stop
+        return 0
+    fi
+    found_mac=
+    found_name=
+    _pfile="$W/bt.audio.scan.$$"
+    vd_timeout 5 "$BT_CTL" paired-devices 2>/dev/null | sed -n 's/^Device \([0-9A-Fa-f:]\{17\}\) \(.*\)$/\1\t\2/p' > "$_pfile"
+    while IFS="$(printf '\t')" read -r mac rawname; do
+        umac=$(printf '%s' "$mac" | tr 'a-f' 'A-F')
+        bt_mac_ok "$umac" || continue
+        info=$(vd_timeout 3 "$BT_CTL" info "$umac" 2>/dev/null)
+        printf '%s\n' "$info" | grep -q 'Connected: yes' || continue
+        printf '%s\n' "$info" | grep -qiE '0000110b|Audio Sink' || continue
+        alias_n=$(printf '%s\n' "$info" | sed -n 's/^[[:space:]]*Alias: //p' | head -1)
+        [ -n "$alias_n" ] && rawname=$alias_n
+        found_mac=$umac
+        found_name=$(bt_sanitize_name "$rawname")
+        break
+    done < "$_pfile"
+    rm -f "$_pfile"
+
+    if [ -n "$found_mac" ]; then
+        bt_audio_start "$found_mac" "${found_name:-$found_mac}"
+    elif [ -f "$W/bt.audio.mac" ] || alive "$W/bt-audio.pid"; then
+        bt_audio_stop
+    fi
 }
 
 bt_mac_ok() {
@@ -100,7 +222,11 @@ bt_radio_on() {
     "$BT_CTL" power on >/dev/null 2>&1 || true
     i=0
     while [ $i -lt 15 ]; do
-        bt_is_on && { t "bt: radio powered on (hci0)"; return 0; }
+        bt_is_on && {
+            bt_bluealsa_start
+            t "bt: radio powered on (hci0)"
+            return 0
+        }
         usleep 200000
         i=$((i + 1))
     done
@@ -109,6 +235,8 @@ bt_radio_on() {
 }
 
 bt_radio_off() {
+    bt_audio_stop
+    bt_bluealsa_stop
     if pidof bluetoothd >/dev/null 2>&1; then
         "$BT_CTL" power off >/dev/null 2>&1 || true
         usleep 200000
@@ -260,6 +388,7 @@ bt_restore_boot() {
     (
         if bt_radio_on; then
             bt_bridge_start
+            bt_audio_sync
             bt_list_write
             type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
         fi
@@ -376,6 +505,11 @@ bt_status_lines() {
     echo "btmap=${BT_PT_MAP:-volume}"
     echo "btswap=${BT_PT_SWAP:-0}"
     echo "btbridge=${BT_BRIDGE:-auto}"
+    _ba=
+    if bt_is_on && [ -f "$W/bt.audio.name" ] && alive "$W/bt-audio.pid"; then
+        _ba=$(cat "$W/bt.audio.name" 2>/dev/null)
+    fi
+    echo "btaudio=$_ba"
 }
 
 bt_do_enable() {
@@ -385,6 +519,7 @@ bt_do_enable() {
     if bt_radio_on; then
         echo 1 > "$SYS/bt.enabled" 2>/dev/null || true
         bt_bridge_start
+        bt_audio_sync
         bt_list_write
         type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
         bt_result_write state=done op=power on=1 ok=1
@@ -480,6 +615,7 @@ bt_do_bond() {
     bt_list_write
     if [ "$paired" = 1 ]; then
         bt_bridge_start
+        bt_audio_sync
         type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
         if [ "$conn" = 1 ]; then
             bt_result_write state=done op=bond "mac=$mac" ok=1
@@ -522,6 +658,7 @@ bt_do_connect() {
     bt_list_write
     if [ "$conn" = 1 ]; then
         bt_bridge_start
+        bt_audio_sync
         type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
         bt_result_write state=done op=connect "mac=$mac" ok=1
     else
@@ -544,6 +681,7 @@ bt_do_disconnect() {
     bt_result_write state=running op=disconnect "mac=$mac" secs=10
     vd_timeout 8 "$BT_CTL" disconnect "$mac" >/dev/null 2>&1 || true
     sleep 1
+    bt_audio_sync
     bt_list_write
     type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
     if vd_timeout 3 "$BT_CTL" info "$mac" 2>/dev/null | grep -q 'Connected: yes'; then
@@ -568,6 +706,7 @@ bt_do_unbond() {
     vd_timeout 8 "$BT_CTL" disconnect "$mac" >/dev/null 2>&1 || true
     vd_timeout 8 "$BT_CTL" remove "$mac" >/dev/null 2>&1 || true
     sleep 1
+    bt_audio_sync
     bt_list_write
     type status_write >/dev/null 2>&1 && status_write 2>/dev/null || true
     if vd_timeout 3 "$BT_CTL" info "$mac" 2>/dev/null | grep -q 'Paired: yes'; then
