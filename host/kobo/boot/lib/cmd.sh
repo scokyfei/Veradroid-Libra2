@@ -270,7 +270,6 @@ cmd_listen() {
                   case "$r" in *Success*) type compile_watch >/dev/null 2>&1 && compile_watch ;; esac ) &
             fi ;;
         saver)   type saver_cmd >/dev/null 2>&1 && saver_cmd "$a" ;;
-        netdiag) type vp_netdiag >/dev/null 2>&1 && ( vp_netdiag "$X/ctl/netdiag.status" ) </dev/null >/dev/null 2>&1 & ;;
         storage)
             type st_cmd >/dev/null 2>&1 && case "$a" in
                 info) ( st_cmd info ) & ;;

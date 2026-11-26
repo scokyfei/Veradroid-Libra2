@@ -23,12 +23,11 @@ import java.util.Map;
  *   update.status   系统更新（安装器 bootstrap.sh、离线更新 localupdate.sh、桌面“检查并更新”）
  *   apkinst.status  安装 APK（传书网页 / 商店 / OTA 走宿主 install 命令，veradroid/apps 文件夹走 after_boot）
  *   compile.status  后台优化应用（compile.sh）
- *   netdiag.status  网络诊断（宿主 netdiag 命令）
  * 只靠 {@link CtlWatch}（ctl 目录唯一的 FileObserver）知道文件变了，不另开监听。墨水屏：一张卡片最多 2 秒重画一次，
  * 只给内容变了的字 setText；进行中的卡片每 5 秒走一次“已用时间”（只改那一行字）。
  */
 final class TaskCards {
-    static final String UPDATE = "update.status", APK = "apkinst.status", COMPILE = "compile.status", NET = "netdiag.status";
+    static final String UPDATE = "update.status", APK = "apkinst.status", COMPILE = "compile.status";
 
     private TaskCards() { }
 
@@ -344,49 +343,6 @@ final class TaskCards {
                 return pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
             } catch (Throwable t) { return pkg; }
         }
-    }
-
-    /** 网络诊断（存储与连接）：按钮发宿主 netdiag，结果一行一项，最后一句结论。 */
-    static final class Net extends Base {
-        Net(Context c) {
-            super(c, NET, 8, false);
-            bar.setVisibility(GONE);
-            TextView go = Blocks.button(c, "开始诊断", true, new View.OnClickListener() {
-                @Override public void onClick(View v) {
-                    HostLink.cmd("netdiag");
-                    set(head, "网络诊断 · 正在检查");
-                    set(title, "正在检查…");
-                    set(l1, "Wi-Fi → 域名解析 → 服务器 → 下载速度，大约 20 秒");
-                    set(l2, "");
-                }
-            });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
-            lp.topMargin = Ui.dp(c, 10);
-            extra.addView(go, lp);
-        }
-        @Override void bind(Map<String, String> m) {
-            String state = m.get("state");
-            if (state == null) {
-                set(head, "网络诊断");
-                setCaps(caps, "Network check");
-                set(title, "网络好不好，一查就知道");
-                set(l1, "检查 Wi-Fi、域名解析、能不能连上 VeraDroid 服务器，再测几秒下载速度。只连我们自己的服务器。");
-                set(l2, ""); set(pct, ""); set(steps, ""); set(elapsed, "");
-                return;
-            }
-            boolean act = active(state);
-            set(head, act ? "网络诊断 · 正在检查" : "网络诊断 · 结果");
-            setCaps(caps, "Network check");
-            String c = m.get("conclusion");
-            set(title, act ? "正在检查…" : c == null ? "" : c);
-            set(pct, "");
-            set(l1, act ? m.get("line1") : m.get("lines"));
-            set(l2, act ? m.get("lines") : m.get("line2"));
-            set(steps, "");
-            long e = elapsedNow(m);
-            set(elapsed, act && e >= 0 ? "已用 " + mmss(e) : "");
-        }
-        @Override String staleText(long age) { return "诊断 " + age + " 秒没有结果：再点一次开始诊断"; }
     }
 
     /** 我的 页：后台在做的事（更新 / 装应用 / 优化应用），每样一张小卡片，没有就整块不显示。 */

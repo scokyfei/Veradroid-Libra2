@@ -477,8 +477,6 @@ final class BlocksSettings {
             add(n, Blocks.row(a, "Wi-Fi 省电", "Wi-Fi power saving", new Blocks.Stepper(a, WIFIPS_L, idx(WIFIPS_V, cfg.get("WIFI_PS"), 0), new Blocks.Stepper.Listener() {
                 @Override public void onStep(int i) { host("WIFI_PS=" + WIFIPS_V[i]); } })));
         }
-        // 网络诊断：Wi-Fi / 域名解析 / 服务器 / 下载速度（宿主 netdiag 命令，结果 ctl/netdiag.status）
-        c.addView(new TaskCards.Net(a), Blocks.gap(a, 14));
         if (HostLink.isKobo()) {
             LinearLayout u = group(c, "USB 电脑传输 (MTP)");
             boolean mtpOn = !"0".equals(cfg.get("USB_MTP"));
