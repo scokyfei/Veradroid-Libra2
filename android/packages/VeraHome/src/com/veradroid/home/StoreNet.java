@@ -107,4 +107,94 @@ final class StoreNet {
         if (bytes < (1 << 20)) return Math.max(1, bytes >> 10) + " KB";
         return bytes < (10 << 20) ? String.format("%.1f MB", bytes / 1048576.0) : (bytes >> 20) + " MB";
     }
+
+    /** Query string carrying device_id and account token for authenticated store/font downloads. */
+    static String downloadQuery(android.content.Context c) {
+        return "device_id=" + enc(Update.deviceId(c)) + "&token=" + enc(Token.get(c));
+    }
+
+    /** Short account status label for store buttons and settings rows. */
+    static String accountLabel(android.content.Context c) {
+        if (!Token.bound(c)) return "登录账号";
+        String u = Token.user(c);
+        return u.length() > 0 ? u : "已绑定";
+    }
+
+    /**
+     * Unified 6-digit bind-code login / unbind dialog shared by StoreActivity, FontStoreActivity,
+     * BlocksSettings, and HomeActivity.
+     */
+    static void bindDialog(final android.app.Activity a, final String reason, final Runnable onChanged) {
+        if (a == null || a.isFinishing()) return;
+        if (Token.bound(a) && (reason == null || reason.length() == 0)) {
+            String user = Token.user(a);
+            StringBuilder info = new StringBuilder();
+            info.append("当前状态：已绑定");
+            if (user.length() > 0) info.append("（").append(user).append("）");
+            info.append("\n设备 ID：").append(Update.deviceId(a));
+            info.append("\n\n可在商店直接下载应用与字体。");
+            new VeraDialog.Builder(a)
+                .title("商店账号")
+                .message(info.toString())
+                .items(new String[] { "更换绑定账号（输入新绑定码）", "退出账号绑定" }, new VeraDialog.OnPick() {
+                    @Override public void onPick(int which) {
+                        if (which == 0) {
+                            bindCodeDialog(a, "输入新的 6 位绑定码以切换账号。", onChanged);
+                        } else if (which == 1) {
+                            Token.clear(a);
+                            VeraToast.show(a, "已退出账号绑定");
+                            if (onChanged != null) onChanged.run();
+                        }
+                    }
+                })
+                .negative("关闭", null)
+                .show();
+            return;
+        }
+        bindCodeDialog(a, reason, onChanged);
+    }
+
+    static void bindCodeDialog(final android.app.Activity a, String reason, final Runnable onChanged) {
+        if (a == null || a.isFinishing()) return;
+        final android.widget.EditText input = new android.widget.EditText(a);
+        input.setHint("6 位数字绑定码");
+        input.setSingleLine(true);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        input.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(6) });
+        input.setTextSize(22);
+        input.setTextColor(android.graphics.Color.BLACK);
+        input.setTypeface(Fonts.typeface(a));
+        input.setBackground(Ui.frame(a, false));
+        int p = Ui.dp(a, 12);
+        input.setPadding(p, Ui.dp(a, 10), p, Ui.dp(a, 10));
+
+        StringBuilder msg = new StringBuilder();
+        if (reason != null && reason.length() > 0) msg.append(reason).append("\n\n");
+        msg.append("请先在手机或电脑浏览器打开 veradroid.wenjin.jp 注册并登录，在“我的设备”生成 6 位绑定码，填到这里即可下载商店应用与字体。");
+
+        new VeraDialog.Builder(a)
+            .title("绑定商店账号")
+            .message(msg.toString())
+            .view(input)
+            .negative("取消", null)
+            .positive("绑定", new Runnable() {
+                @Override public void run() {
+                    final String code = input.getText().toString().trim();
+                    if (!code.matches("\\d{6}")) { VeraToast.show(a, "请输入 6 位数字绑定码"); return; }
+                    VeraToast.show(a, "正在验证绑定码…");
+                    Update.bind(a, code, new Update.BindResult() {
+                        @Override public void done(final boolean ok, String message) {
+                            if (a.isFinishing()) return;
+                            VeraToast.show(a, message);
+                            new VeraDialog.Builder(a)
+                                .title(ok ? "绑定成功" : "绑定失败")
+                                .message(message)
+                                .positive("知道了", new Runnable() {
+                                    @Override public void run() { if (ok && onChanged != null) onChanged.run(); }
+                                }).show();
+                        }
+                    });
+                }
+            }).show();
+    }
 }

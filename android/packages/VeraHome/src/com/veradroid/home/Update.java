@@ -35,6 +35,8 @@ final class Update {
     private Update() { }
 
     static void maybe(final Context c) {
+        // Kobo builds use offline upgrade packages; never pull upstream Kindle VeraHome OTA.
+        if (HostLink.isKobo()) return;
         final SharedPreferences p = Store.prefs(c, "home");
         if (!p.getBoolean("autoupdate", true)) return;
         long now = System.currentTimeMillis();
@@ -139,6 +141,10 @@ final class Update {
 
     /** Check for a VeraHome APK update immediately (manual "check now"). */
     static void now(final Context c) {
+        if (HostLink.isKobo()) {
+            VeraToast.show(c, "Kobo 版请使用离线升级包更新");
+            return;
+        }
         new Thread(new Runnable() {
             @Override public void run() {
                 String msg;
@@ -173,10 +179,13 @@ final class Update {
                     body.put("version_code", c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionCode);
                     body.put("version_name", c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionName);
                     JSONObject j = postJson(BASE + "/api/device/bind", body.toString());
-                    ok = j.optBoolean("ok", false);
+                    String tok = j.optString("token", "").trim();
+                    ok = j.optBoolean("ok", false) && tok.length() > 0;
                     if (ok) {
-                        Token.put(c, j.optString("token", ""));
-                        msg = "已绑定这台 Kobo";
+                        Token.put(c, tok);
+                        String u = j.optString("username", "").trim();
+                        if (u.length() > 0) Token.putUser(c, u);
+                        msg = u.length() > 0 ? "已绑定账号：" + u : "已绑定这台 Kobo";
                     } else {
                         msg = j.optString("error", "绑定失败");
                     }

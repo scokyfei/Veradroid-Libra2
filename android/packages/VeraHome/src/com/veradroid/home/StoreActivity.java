@@ -45,6 +45,7 @@ public class StoreActivity extends Activity {
     private volatile java.util.Map<String, Integer> installedVersions = java.util.Collections.emptyMap();
     private LinearLayout list;
     private TextView status;
+    private android.widget.Button accountBtn;
     // 一次只下载 / 安装一个，进度和结果放在静态字段里（Scribe 用户：商店装微信读书“失败”，同一个 APK 侧载能装）：
     //  - 以前下载线程只往开着的那个界面上写字：用户离开商店（或界面被系统重建）以后，进度和失败原因谁也看不到；
     //  - 再点一次“安装”会再起一条线程，两条线程往同一个文件里写，SHA-256 必然失败；
@@ -113,9 +114,15 @@ public class StoreActivity extends Activity {
         actions.addView(Ui.button(this, "搜索", 16, false, new View.OnClickListener() {
             @Override public void onClick(View v) { searchDialog(); }
         }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        actions.addView(Ui.button(this, "应用更新", 16, false, new View.OnClickListener() {
-            @Override public void onClick(View v) { Update.now(StoreActivity.this); }
-        }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        accountBtn = Ui.button(this, StoreNet.accountLabel(this), 16, false, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                StoreNet.bindDialog(StoreActivity.this, null, new Runnable() {
+                    @Override public void run() { updateAccountBtn(); batch = 1; load(); }
+                });
+            }
+        });
+        accountBtn.setSingleLine(true);
+        actions.addView(accountBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         page.addView(actions);
         Blocks.restyle(this, page, title, actions, "Store / e-ink apps");
 
@@ -200,6 +207,10 @@ public class StoreActivity extends Activity {
         return Token.get(this);
     }
 
+    private void updateAccountBtn() {
+        if (accountBtn != null) accountBtn.setText(StoreNet.accountLabel(this));
+    }
+
     private void load() {
         final String t = token();
         final int myCat = cat, myTag = tagIdx, myBatch = batch;
@@ -219,6 +230,8 @@ public class StoreActivity extends Activity {
                         + (reqTag.length() > 0 ? "&tag=" + enc(reqTag) : "")
                         + "&device_id=" + enc(Update.deviceId(StoreActivity.this)) + "&token=" + enc(t);
                     JSONObject j = get(url);
+                    String uname = j.optString("username", "").trim();
+                    if (uname.length() > 0) Token.putUser(StoreActivity.this, uname);
                     JSONArray cs = j.optJSONArray("categories");
                     if (cs != null) for (int i = 0; i < cs.length(); i++) {
                         JSONObject c = cs.getJSONObject(i);
@@ -274,6 +287,7 @@ public class StoreActivity extends Activity {
                         }
                     }
                     if (tcChanged) tagBarRender();
+                    updateAccountBtn();
                     render();
                     icons(got);
                 } });
@@ -457,6 +471,12 @@ public class StoreActivity extends Activity {
     }
 
     private void install(final App a) {
+        if (!Token.bound(this)) {
+            StoreNet.bindDialog(this, "下载“" + a.name + "”前需先绑定商店账号。", new Runnable() {
+                @Override public void run() { updateAccountBtn(); install(a); }
+            });
+            return;
+        }
         if (!jobPkg.compareAndSet(null, a.pkg)) {
             String m = "正在处理另一个应用，等它下载 / 安装完再点" + (jobMsg != null ? "：" + jobMsg : "");
             status.setText(m); VeraToast.show(this, "上一个还没装完");
@@ -536,6 +556,27 @@ public class StoreActivity extends Activity {
             }
             out.setReadable(true, false);
             say("下载完成，正在安装 " + a.name + " …（大应用可能要好几分钟）");
+        } catch (Dl.HttpError e) {
+            if (e.isBindRequired()) {
+                Dl.clear(out);
+                jobDone("需要绑定账号后才能下载（" + reason(e) + "）", false);
+                ui.post(new Runnable() {
+                    @Override public void run() {
+                        StoreActivity s = live;
+                        if (s != null && !s.isFinishing()) {
+                            StoreNet.bindDialog(s, "服务器要求绑定账号后方可下载（如之前已绑定，请重新生成绑定码绑定）。", new Runnable() {
+                                @Override public void run() {
+                                    StoreActivity s2 = live;
+                                    if (s2 != null && !s2.isFinishing()) { s2.updateAccountBtn(); s2.install(a); }
+                                }
+                            });
+                        }
+                    }
+                });
+                return;
+            }
+            err = reason(e);
+            if (out != null && (err == null || !err.startsWith("下载失败"))) Dl.clear(out);
         } catch (Exception e) {
             err = reason(e);
             // 下了一半的留着（再点安装从断点继续）；校验失败 / 大小不对的删掉
@@ -583,12 +624,12 @@ public class StoreActivity extends Activity {
                 before = Dl.have(out);
                 continue;
             } catch (Dl.HttpError e) {
-                if (e.code == 404 || e.code == 403) {
+                if (e.code == 404 || e.code == 403 || e.code == 401) {
                     if (e.mirror) {
                         say("镜像源返回 " + e.code + "，自动切回主站继续…");
                         continue;
                     }
-                    throw e;   // 主站也没有 / 没权限：重试也没用
+                    throw e;   // 主站也没有 / 需要绑定账号：重试也没用
                 }
                 last = e;
             } catch (java.io.IOException e) {
@@ -634,6 +675,7 @@ public class StoreActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         live = this;
+        updateAccountBtn();
         if (jobMsg != null && status != null) status.setText(jobMsg);
         if (!apps.isEmpty()) refreshInstalled(true);
         StatusBarService.setSuppressed(true);

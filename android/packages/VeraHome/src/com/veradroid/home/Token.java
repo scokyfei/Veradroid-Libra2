@@ -24,6 +24,20 @@ final class Token {
         } catch (Exception e) { return ""; }
     }
 
+    static boolean bound(Context c) {
+        return get(c).length() > 0;
+    }
+
+    static String user(Context c) {
+        String u = Store.prefs(c, "home").getString("device_user", "");
+        return u == null ? "" : u.trim();
+    }
+
+    static void putUser(Context c, String u) {
+        if (u == null) u = "";
+        Store.prefs(c, "home").edit().putString("device_user", u.trim()).commit();
+    }
+
     static void put(Context c, String t) {
         Store.prefs(c, "home").edit().putString("device_token", t).commit();
         try {
@@ -37,7 +51,7 @@ final class Token {
     }
 
     static void clear(Context c) {
-        Store.prefs(c, "home").edit().remove("device_token").commit();
+        Store.prefs(c, "home").edit().remove("device_token").remove("device_user").commit();
         try { FILE.delete(); } catch (Exception ignored) { }
     }
 }

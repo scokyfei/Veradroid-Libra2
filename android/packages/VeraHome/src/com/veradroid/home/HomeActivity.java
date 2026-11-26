@@ -1828,35 +1828,9 @@ public class HomeActivity extends Activity {
     }
 
     private void bindDialog() {
-        final EditText input = new EditText(this);
-        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        input.setHint("6 位绑定码");
-        input.setSingleLine(true);
-        input.setTextSize(22);
-        input.setTypeface(Fonts.typeface(this));
-        input.setBackground(Ui.frame(this, false));
-        input.setPadding(dp(12), dp(10), dp(12), dp(10));
-        new VeraDialog.Builder(this)
-            .title("绑定账号")
-            .message("先在 veradroid.wenjin.jp 注册，登录后在“我的设备”生成绑定码。")
-            .view(input)
-            .negative("取消", null)
-            .positive("绑定", new Runnable() {
-                @Override public void run() {
-                    final String code = input.getText().toString().trim();
-                    if (!code.matches("\\d{6}")) { say("请输入 6 位数字"); return; }
-                    Update.bind(HomeActivity.this, code, new Update.BindResult() {
-                        @Override public void done(boolean ok, String message) {
-                            say(message);
-                            new VeraDialog.Builder(HomeActivity.this)
-                                .title(ok ? "绑定成功" : "绑定失败")
-                                .message(message)
-                                .positive("知道了", new Runnable() { @Override public void run() { if (ok) showSettings(); } })
-                                .show();
-                        }
-                    });
-                }
-            }).show();
+        StoreNet.bindDialog(this, null, new Runnable() {
+            @Override public void run() { showSettings(); }
+        });
     }
 
     /** 电源菜单：立即休眠 / 返回 Kobo / 关机，替代 Android 原生关机提示。 */
@@ -2290,6 +2264,15 @@ public class HomeActivity extends Activity {
             break;
         case 5: {
             boolean kobo = HostLink.isKobo();
+            if (kobo) {
+                section(list, "商店账号");
+                String accDesc = Token.bound(this)
+                    ? "当前已绑定" + (Token.user(this).length() > 0 ? "（" + Token.user(this) + "）" : "") + "，可在软件商店和字体商店直接下载。"
+                    : "在 veradroid.wenjin.jp 注册登录后，在“我的设备”生成 6 位绑定码，填到这里即可下载商店应用与字体。";
+                action(list, "商店账号", accDesc, Token.bound(this) ? "管理" : "绑定", new View.OnClickListener() {
+                    @Override public void onClick(View v) { bindDialog(); }
+                });
+            }
             if (!kobo) {
                 section(list, "账号与更新");
                 action(list, "绑定账号", "在网站“我的设备”生成 6 位绑定码，填到这里；绑定后可以在后台看到机器和版本。", "绑定", new View.OnClickListener() {

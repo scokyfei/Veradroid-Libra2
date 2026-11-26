@@ -92,7 +92,7 @@ final class BlocksSettings {
         case BlocksHome.S_STORAGE: return cfg + "|" + st.get("wifi") + "|" + st.get("lanip") + "|" + st.get("ssh") + "|" + Transfer.get(a).running() + "|" + prefs.getInt("xfer_idle", 30) + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
         case BlocksHome.S_UI: return prefs.getString("name", "VeraDroid") + "|" + prefs.getString("quick", "") + "|" + prefs.getString("panelname", "") + "|" + Fonts.weight(a) + "|" + Blocks.caps(a) + "|" + Blocks.anim(a) + "|" + Blocks.on(a);
         case BlocksHome.S_CARDS: return prefs.getString(BlocksCards.KEY, BlocksCards.DEFAULT) + prefs.getString("blk_quick", "") + prefs.getString("wx_city", "") + prefs.getString("blk_readers", "") + a.appsVersion();
-        default: return prefs.getString("name", "VeraDroid") + "|" + (System.currentTimeMillis() / 60000);
+        default: return prefs.getString("name", "VeraDroid") + "|" + Token.bound(a) + "|" + Token.user(a) + "|" + (System.currentTimeMillis() / 60000);
         }
     }
 
@@ -579,6 +579,16 @@ final class BlocksSettings {
         LinearLayout m = group(c, "维护与性能");
         boolean kobo = HostLink.isKobo();
         if (kobo) {
+            String accSub = Token.bound(a)
+                ? "已绑定" + (Token.user(a).length() > 0 ? "（" + Token.user(a) + "）" : "") + " · 点击更换或退出绑定"
+                : "未绑定 · 绑定 veradroid.wenjin.jp 账号后可下载商店应用与字体";
+            add(m, Blocks.navRow(a, "商店账号", accSub, new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    StoreNet.bindDialog(a, null, new Runnable() {
+                        @Override public void run() { h.show(h.current()); a.changed(); }
+                    });
+                }
+            }));
             add(m, Blocks.navRow(a, "微信读书维护与状态看板", "查看内存 / 热点包 / WAL，一键清理日志与刷新加速编译", new View.OnClickListener() {
                 @Override public void onClick(View v) { wrMaintDialog(); } }));
         }

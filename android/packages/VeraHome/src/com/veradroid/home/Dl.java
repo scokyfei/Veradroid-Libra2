@@ -273,7 +273,7 @@ final class Dl {
             h.setRequestProperty("User-Agent", "VeraDroid/Store");
             h.setRequestProperty("Range", "bytes=" + from + "-" + to);
             int code = h.getResponseCode();
-            if (code == 404 || code == 403) throw new HttpError(code, h, mirror, url);
+            if (code == 404 || code == 403 || code == 401) throw new HttpError(code, h, mirror, url);
             if (code != 206) throw new java.io.IOException("HTTP " + code);
             InputStream in = h.getInputStream();
             FileOutputStream fo = new FileOutputStream(f, true);
@@ -351,19 +351,31 @@ final class Dl {
         final int code;
         final boolean mirror;
         final String src;
+        final String errorCode;
         HttpError(int code, HttpURLConnection h, boolean mirror, String src) {
-            super(message(code, h));
+            this(code, parse(code, h), mirror, src);
+        }
+        private HttpError(int code, String[] parsed, boolean mirror, String src) {
+            super(parsed[0]);
             this.code = code;
+            this.errorCode = parsed[1];
             this.mirror = mirror;
             this.src = src;
         }
-        private static String message(int code, HttpURLConnection h) {
+        boolean isBindRequired() {
+            if (mirror) return false;
+            if (code == 401 || "bind_required".equals(errorCode)) return true;
+            String m = getMessage();
+            return code == 403 && m != null && (m.contains("绑定") || m.contains("登录"));
+        }
+        private static String[] parse(int code, HttpURLConnection h) {
             try {
                 InputStream in = h.getErrorStream();
-                if (in == null) return "HTTP " + code;
+                if (in == null) return new String[] { "HTTP " + code, "" };
                 byte[] b = readAll(in);
-                return new org.json.JSONObject(new String(b, "UTF-8")).optString("error", "HTTP " + code);
-            } catch (Exception e) { return "HTTP " + code; }
+                org.json.JSONObject j = new org.json.JSONObject(new String(b, "UTF-8"));
+                return new String[] { j.optString("error", "HTTP " + code), j.optString("code", "") };
+            } catch (Exception e) { return new String[] { "HTTP " + code, "" }; }
         }
     }
 

@@ -47,6 +47,7 @@ public class FontStoreActivity extends Activity {
     private final List<Item> items = new ArrayList<Item>();
     private LinearLayout list, tabs;
     private TextView status;
+    private android.widget.Button accountBtn;
     private int tab;                 // 0 商店，1 本机字体
     private String query = "";
     private int batch = 1, batches = 1, total = -1;
@@ -105,6 +106,15 @@ public class FontStoreActivity extends Activity {
         actions.addView(Ui.button(this, "搜索", 16, false, new View.OnClickListener() {
             @Override public void onClick(View v) { searchDialog(); }
         }), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        accountBtn = Ui.button(this, StoreNet.accountLabel(this), 16, false, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                StoreNet.bindDialog(FontStoreActivity.this, null, new Runnable() {
+                    @Override public void run() { updateAccountBtn(); }
+                });
+            }
+        });
+        accountBtn.setSingleLine(true);
+        actions.addView(accountBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         page.addView(actions);
         Blocks.restyle(this, page, title, actions, "Fonts / shared by users");
 
@@ -459,21 +469,33 @@ public class FontStoreActivity extends Activity {
 
     // ------------------------------------------------------------------ 下载
 
+    private void updateAccountBtn() {
+        if (accountBtn != null) accountBtn.setText(StoreNet.accountLabel(this));
+    }
+
     private void download(final Item it) {
+        if (!Token.bound(this)) {
+            StoreNet.bindDialog(this, "下载字体“" + it.name + "”前需先绑定商店账号。", new Runnable() {
+                @Override public void run() { updateAccountBtn(); download(it); }
+            });
+            return;
+        }
         if (it.file == null || !it.file.matches("[A-Za-z0-9._-]{1,80}") || !isFont(it.file)) { VeraToast.show(this, "这个字体的文件名不对，不能下载"); return; }
         if (!jobId.compareAndSet(-1, it.id > 0 ? it.id : 1)) { VeraToast.show(this, "上一个字体还没下完"); return; }
         say("正在下载 " + it.name + " …");
         render();
+        final String authQuery = StoreNet.downloadQuery(getApplicationContext());
         new Thread(new Runnable() { @Override public void run() {
             Thread awake = StoreNet.keepAwake();
             String err = null;
+            boolean needBind = false;
             File part = new File(DIR, "." + it.file + ".part");     // 点开头：字体列表不认，下了一半的不会被当成字体
             try {
                 File dir = new File(DIR);
                 if (!dir.isDirectory() && !dir.mkdirs()) throw new Exception("无法创建字体目录");
                 long free = new android.os.StatFs(DIR).getAvailableBytes();
                 if (it.size > 0 && free < it.size * 2 + (16L << 20)) throw new Exception("存储空间不够：需要约 " + ((it.size * 2 >> 20) + 16) + " MB，现在剩 " + (free >> 20) + " MB");
-                List<String> cands = Dl.candidates(it.download, "", mirrors);
+                List<String> cands = Dl.candidates(it.download, authQuery, mirrors);
                 final long t0 = System.currentTimeMillis();
                 Dl.Progress p = new Dl.Progress() { @Override public void on(long done, long total, boolean mirror) {
                     if (total > 0) say("正在下载 " + it.name + " … " + (done * 100 / total) + "%（" + StoreNet.mb(done) + " / " + StoreNet.mb(total) + (mirror ? "，镜像" : "") + "）");
@@ -489,10 +511,14 @@ public class FontStoreActivity extends Activity {
                         say("镜像下载太慢（" + (e.bps >> 10) + " KB/s），切换下载源继续…");
                         continue;
                     } catch (Dl.HttpError e) {
-                        if (e.code == 404 || e.code == 403) {
+                        if (e.code == 404 || e.code == 403 || e.code == 401) {
                             if (e.mirror) {
                                 say("镜像源返回 " + e.code + "，切回主站继续下载…");
                                 continue;
+                            }
+                            if (e.isBindRequired()) {
+                                needBind = true;
+                                throw new Exception("需要绑定账号后才能下载（" + StoreActivity.reason(e) + "）");
                             }
                             throw new Exception("这个字体已经从商店下架了");
                         }
@@ -504,7 +530,7 @@ public class FontStoreActivity extends Activity {
                 say("正在核对下载的文件…");
                 if (!StoreNet.sha256(part).equalsIgnoreCase(it.sha)) {
                     Dl.clear(part);
-                    Dl.fetchOnce(Dl.candidates(it.download, "", null), part, it.size, p);     // 只从主站再下一次
+                    Dl.fetchOnce(Dl.candidates(it.download, authQuery, null), part, it.size, p);     // 只从主站再下一次
                     if (!StoreNet.sha256(part).equalsIgnoreCase(it.sha)) { Dl.clear(part); throw new Exception("SHA-256 校验失败（下载的文件损坏，请重试）"); }
                 }
                 try { Typeface.createFromFile(part); } catch (Throwable t) { Dl.clear(part); throw new Exception("这个字体在本机打不开"); }
@@ -514,11 +540,12 @@ public class FontStoreActivity extends Activity {
                 out.setReadable(true, false);
                 remember(it);
             } catch (Throwable e) {
-                err = e instanceof Exception && e.getMessage() != null && (e.getMessage().startsWith("下载失败") || e.getMessage().contains("存储空间") || e.getMessage().contains("下架") || e.getMessage().contains("校验") || e.getMessage().contains("打不开") || e.getMessage().contains("无法"))
+                err = e instanceof Exception && e.getMessage() != null && (e.getMessage().startsWith("下载失败") || e.getMessage().startsWith("需要绑定") || e.getMessage().contains("存储空间") || e.getMessage().contains("下架") || e.getMessage().contains("校验") || e.getMessage().contains("打不开") || e.getMessage().contains("无法"))
                     ? e.getMessage() : "下载失败：" + StoreActivity.reason(e);
             } finally { awake.interrupt(); jobId.set(-1); }
             final String msg = err != null ? err : "已下载 " + it.name + "，点“使用”可以设为系统字体或阅读字体";
             final boolean ok = err == null;
+            final boolean promptBind = needBind;
             jobMsg = msg;
             new Handler(Looper.getMainLooper()).post(new Runnable() { @Override public void run() {
                 FontStoreActivity a = live;
@@ -527,6 +554,14 @@ public class FontStoreActivity extends Activity {
                 a.tabsRender();
                 a.render();
                 VeraToast.show(a, msg.length() > 60 ? msg.substring(0, 60) + "…" : msg);
+                if (promptBind) {
+                    StoreNet.bindDialog(a, "服务器要求绑定账号后方可下载字体（如之前已绑定，请重新生成绑定码绑定）。", new Runnable() {
+                        @Override public void run() {
+                            FontStoreActivity a2 = live;
+                            if (a2 != null && !a2.isFinishing()) { a2.updateAccountBtn(); a2.download(it); }
+                        }
+                    });
+                }
             } });
         } }, "FontDownload").start();
     }
@@ -544,6 +579,7 @@ public class FontStoreActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         live = this;
+        updateAccountBtn();
         if (jobMsg != null && status != null) status.setText(jobMsg);
         StatusBarService.setSuppressed(true);
         StatusBarService.refresh(this);
