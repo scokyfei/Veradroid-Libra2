@@ -41,13 +41,20 @@ wifi_ps_set() {
     iwconfig "$d" power "$([ "$1" = off ] && echo off || echo on)" 2>/dev/null || true
 }
 
+wifi_ssh_active() {
+    # Detect any ESTABLISHED (01) TCP session on local SSH port 2222 (08AE) or 22 (0016).
+    [ -r /proc/net/tcp ] && awk 'NR>1 && $4=="01" && ($2 ~ /:08AE$/ || $2 ~ /:0016$/) { found=1; exit } END { exit !found }' /proc/net/tcp 2>/dev/null && return 0
+    [ -r /proc/net/tcp6 ] && awk 'NR>1 && $4=="01" && ($2 ~ /:08AE$/ || $2 ~ /:0016$/) { found=1; exit } END { exit !found }' /proc/net/tcp6 2>/dev/null && return 0
+    return 1
+}
+
 wifi_ps_off() {
-    [ -f "$W/wifi.ps" ] && return 0
-    if [ "$(wifi_ps_state)" = on ]; then
-        wifi_ps_set off
-        touch "$W/wifi.ps"
-        t "wifi: power saving off"
+    if [ -f "$W/wifi.ps" ] && [ "$(wifi_ps_state)" = off ]; then
+        return 0
     fi
+    wifi_ps_set off
+    touch "$W/wifi.ps"
+    t "wifi: power saving off"
     return 0
 }
 
@@ -69,8 +76,8 @@ wifi_ps_tick() {
     esac
     [ -f "$W/sleeping" ] || [ -f "$W/saver_frozen" ] && return 0
     # Adaptive Wi-Fi power saving on RTL8723DS:
-    # Keep LPS=0 during active interaction (<15s since last touch/key) or downloads (>64 KB/tick);
-    # drop to LPS=2 (saves ~70-80 mA) during idle reading pauses (>=15s since last input).
+    # Keep LPS=0 while charging, during an active SSH session, active interaction (<15s), or downloads (>64 KB/tick);
+    # drop to LPS=2 (saves ~70-80 mA) during battery idle reading pauses (>=15s since last input).
     d=$(wifi_dev)
     rx=$(cat "/sys/class/net/$d/statistics/rx_bytes" 2>/dev/null || echo 0)
     prev=$(cat "$W/wifi.rx" 2>/dev/null || echo "$rx")
@@ -79,10 +86,16 @@ wifi_ps_tick() {
     now_s=$(date +%s 2>/dev/null || echo 0)
     last_s=$(stat -c %Y "$W/lastinput" 2>/dev/null || echo 0)
     idle_s=$((now_s - last_s))
-    if [ -f "$W/fwd.id" ] || alive "$W/installing" || [ "$delta" -gt 65536 ] || { [ "$last_s" -gt 0 ] && [ "$idle_s" -lt 15 ]; }; then
+    if { type kobo_is_charging >/dev/null 2>&1 && kobo_is_charging; } || wifi_ssh_active \
+        || [ -f "$W/fwd.id" ] || alive "$W/installing" || [ "$delta" -gt 65536 ] \
+        || { [ "$last_s" -gt 0 ] && [ "$idle_s" -lt 15 ]; }; then
         wifi_ps_off
     else
-        [ -f "$W/wifi.ps" ] && rm -f "$W/wifi.ps" && wifi_ps_set lps && t "wifi: idle (${idle_s}s) -> LPS=2 (ips=0)"
+        if [ -f "$W/wifi.ps" ] || [ "$(wifi_ps_state)" = off ]; then
+            rm -f "$W/wifi.ps"
+            wifi_ps_set lps
+            t "wifi: idle (${idle_s}s) -> LPS=2 (ips=0)"
+        fi
     fi
     return 0
 }
@@ -127,9 +140,15 @@ hostnet_fix_rules() {
 net_start() {
     hostnet_fix_rules
     hostnet_write
-    # Default to awake power-saving LPS=2 (ips=0); adaptive wifi_ps_tick() boosts to LPS=0 on interaction/downloads.
+    # Default to awake power-saving LPS=2 (ips=0); stay at LPS=0 while charging or during SSH.
     case "${WIFI_PS:-auto}" in
         off) wifi_ps_off ;;
+        auto)
+            if { type kobo_is_charging >/dev/null 2>&1 && kobo_is_charging; } || wifi_ssh_active; then
+                wifi_ps_off
+            else
+                wifi_ps_set lps
+            fi ;;
         *)   wifi_ps_set lps ;;
     esac
     if [ ! -f "$W/net.rmem.state" ] && [ -w /proc/sys/net/core/rmem_max ]; then

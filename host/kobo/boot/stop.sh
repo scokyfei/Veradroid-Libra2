@@ -8,6 +8,7 @@ export VD
 for m in settings memory freeze framework container input network; do
     [ -f "$VD/boot/lib/$m.sh" ] && . "$VD/boot/lib/$m.sh"
 done
+cd / 2>/dev/null || true
 
 STALE=; [ "$1" = "--stale" ] && STALE=1
 RS=; [ -f "$W/restarting" ] && RS=1
@@ -102,6 +103,7 @@ freezer_cleanup
 
 if [ -n "$STALE" ]; then
     rm -rf "$W/kfb"
+    sys_holders_kill
     storage_umount
     exit 0
 fi
@@ -112,14 +114,16 @@ zram_restore 2>/dev/null || true
 wifi_ps_restore 2>/dev/null || true
 rm -f "$W/cmdline"
 
+# Release $SYS and detach loop device BEFORE restarting Nickel/udevadm so USB mass storage can mount cleanly.
+rm -rf "$W/kfb"
+sys_holders_kill
+storage_umount
+[ -z "$RS" ] && userstore_check stop || true
+sync
+
 if [ -n "$RS" ]; then
     rm -f "$W/restarting"
 else
     framework_start
 fi
-
-rm -rf "$W/kfb"
-sys_holders_kill
-storage_umount
-[ -z "$RS" ] && userstore_check stop || true
 echo stopped
