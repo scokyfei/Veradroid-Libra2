@@ -25,7 +25,8 @@ bgnice_tick() {
             while read -r bt bo; do [ -d /proc/$bp/task/$bt ] && renice "$bo" -p "$bt" >/dev/null 2>&1; done < "$f"
             # 降着的时候新开的线程继承了 BG_NICE，没有记录：放回 0
             for tt in /proc/$bp/task/[0-9]*; do
-                bt=${tt##*/}; grep -q "^$bt " "$f" && continue
+                [ -f "$f" ] || break
+                bt=${tt##*/}; grep -q "^$bt " "$f" 2>/dev/null && continue
                 { read -r ts < $tt/stat; } 2>/dev/null || continue
                 [ "$(echo "${ts##*) }" | awk '{print $17}')" = "${BG_NICE_SET:-10}" ] && renice 0 -p "$bt" >/dev/null 2>&1
             done
@@ -34,12 +35,32 @@ bgnice_tick() {
     done
     [ "$bn" = 0 ] && return 0
     [ -n "$zy" ] || return 0
+    fg_now=$(cat "$X/fg" 2>/dev/null || true)
+    [ "$fg_now" = "com.tencent.weread.eink" ] || rm -f "$W/ime.trimmed" 2>/dev/null || true
     for d in /proc/[0-9]*; do
         bp=${d#/proc/}
-        [ -f $W/bgnice/$bp ] && continue
-        { read -r bs < $d/stat; } 2>/dev/null || continue
+        { read -r bs < "$d/stat"; } 2>/dev/null || continue
         bpp=${bs##*) }; bpp=${bpp#* }; bpp=${bpp%% *}     # 第 4 个字段 ppid（命令名里可能有空格，从 ") " 后面数）
         case " $zy " in *" $bpp "*) ;; *) continue ;; esac
+        # Reclaim idle IME caches & cached helper processes while reading in WeRead (zygote children only, zero kernel-thread forks)
+        if [ "$fg_now" = "com.tencent.weread.eink" ] && [ -r "$d/cmdline" ]; then
+            cm=$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null)
+            cm=${cm%% *}
+            case "$cm" in
+                com.veradroid.ime)
+                    iadj=$(cat "$d/oom_score_adj" 2>/dev/null || echo 0)
+                    irss=$(awk '/^VmRSS:/{print $2}' "$d/status" 2>/dev/null || echo 0)
+                    if [ "${iadj:-0}" -ge 200 ] 2>/dev/null && [ "${irss:-0}" -gt 8192 ] 2>/dev/null \
+                        && [ "$(cat "$W/ime.trimmed" 2>/dev/null)" != "$bp" ]; then
+                        echo "$bp" > "$W/ime.trimmed"
+                        ( adb_sh "am send-trim-memory com.veradroid.ime COMPLETE" >/dev/null 2>&1 || true ) &
+                    fi ;;
+                com.android.defcontainer|com.android.statementservice|com.android.externalstorage)
+                    hadj=$(cat "$d/oom_score_adj" 2>/dev/null || echo 0)
+                    [ "${hadj:-0}" -ge 700 ] 2>/dev/null && { kill "$bp" 2>/dev/null || true; continue; } ;;
+            esac
+        fi
+        [ -f $W/bgnice/$bp ] && continue
         badj=$(cat $d/oom_score_adj 2>/dev/null)
         [ -n "$badj" ] && [ "$badj" -ge "$ba" ] 2>/dev/null || continue
         : > $W/bgnice/$bp.tmp
@@ -53,28 +74,6 @@ bgnice_tick() {
         done
         mv -f $W/bgnice/$bp.tmp $W/bgnice/$bp
     done
-    # Reclaim idle IME caches & cached helper processes while reading in WeRead
-    if [ "$(cat "$X/fg" 2>/dev/null)" = "com.tencent.weread.eink" ]; then
-        for d in /proc/[0-9]*; do
-            cm=$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null | awk '{print $1}')
-            case "$cm" in
-                com.veradroid.ime)
-                    ip=${d#/proc/}
-                    iadj=$(cat "$d/oom_score_adj" 2>/dev/null || echo 0)
-                    irss=$(awk '/^VmRSS:/{print $2}' "$d/status" 2>/dev/null || echo 0)
-                    if [ "${iadj:-0}" -ge 200 ] 2>/dev/null && [ "${irss:-0}" -gt 8192 ] 2>/dev/null \
-                        && [ "$(cat "$W/ime.trimmed" 2>/dev/null)" != "$ip" ]; then
-                        echo "$ip" > "$W/ime.trimmed"
-                        ( adb_sh "am send-trim-memory com.veradroid.ime COMPLETE" >/dev/null 2>&1 || true ) &
-                    fi ;;
-                com.android.defcontainer|com.android.statementservice|com.android.externalstorage)
-                    hadj=$(cat "$d/oom_score_adj" 2>/dev/null || echo 0)
-                    [ "${hadj:-0}" -ge 700 ] 2>/dev/null && kill "${d#/proc/}" 2>/dev/null || true ;;
-            esac
-        done
-    else
-        rm -f "$W/ime.trimmed" 2>/dev/null || true
-    fi
     return 0
 }
 # 停止 / 冻结前：全部放回（BG_NICE=0 的那一次 tick）

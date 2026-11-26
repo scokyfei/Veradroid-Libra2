@@ -24,7 +24,7 @@ settings_defaults() {
     PAGE_KEYS_MAP=volume
     PAGE_KEYS_SWAP=0
     G_TL=none; G_TR=none; G_BL=kindle; G_BR=none
-    BOOST_MS=150
+    BOOST_MS=400
     BOOST_KHZ=0
     KFB_SCROLLDELAY=500
     KFB_SCROLLSTYLE=1

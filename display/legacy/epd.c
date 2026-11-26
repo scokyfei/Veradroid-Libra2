@@ -2653,8 +2653,12 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
             if (held_page >= 0 && held_why == 3 && mode != M_FULL) {
                 /* a page-count flash is waiting for the picture to settle: this newer picture replaces it, the wait
                    starts again (up to flash_max_ms after the flip began); nothing is drawn in between */
+                int fq = flash_quiet_ms;
+#ifdef FBINK_FOR_KOBO
+                if (g_reader_mode && !g_scroll && fq > 60) fq = 60;
+#endif
                 held_page = page;
-                held_until = nowt2 + flash_quiet_ms;
+                held_until = nowt2 + fq;
                 if (held_until > flash_t0 + flash_max_ms) held_until = flash_t0 + flash_max_ms;
                 continue;
             }
@@ -2663,7 +2667,13 @@ static int cmd_run(const char *shm, const char *fifo, const char *ctl)
             int r = show_page(fbmem, page, mode, mode == M_FULL, !was_hold && !was_paced, !(was_paced && nowt2 >= held_until));
             if (r && !was_hold && !was_paced) held_t0 = nowt2;
             if (r == 1) { held_page = page; held_mode = mode; held_why = 1; held_until = nowt2 + hold_ms; }
-            if (r == 3) { held_page = page; held_mode = M_FULL; held_why = 3; flash_t0 = nowt2; held_until = nowt2 + flash_quiet_ms; }
+            if (r == 3) {
+                int fq = flash_quiet_ms;
+#ifdef FBINK_FOR_KOBO
+                if (g_reader_mode && !g_scroll && fq > 60) fq = 60;
+#endif
+                held_page = page; held_mode = M_FULL; held_why = 3; flash_t0 = nowt2; held_until = nowt2 + fq;
+            }
             if (r && g_tlog)
                 fprintf(stderr, "[%lld] epd: kept back (%s)\n", now_ms(), r == 1 ? "small change" : r == 3 ? "page-count flash, waiting for the picture to settle" : "panel busy");
             if (r == 2) { held_page = page; held_mode = mode; held_why = 2; if (!was_paced) held_until = nowt2 + 700; }

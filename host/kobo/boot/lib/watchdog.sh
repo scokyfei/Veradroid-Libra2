@@ -217,6 +217,7 @@ do_poweroff() {
 
 # /tmp tmpfs 日志限额：显示桥每刷一次写一行，超过上限就留后一半
 log_cap() {   # log_cap <文件> <字节>
+    [ -f "$1" ] || return 0
     sz=$(wc -c < "$1" 2>/dev/null || echo 0)
     [ "$sz" -gt "$2" ] 2>/dev/null || return 0
     tail -c $(($2 / 2)) "$1" > "$1.tmp" 2>/dev/null && cat "$1.tmp" > "$1"; rm -f "$1.tmp"
@@ -301,6 +302,8 @@ watchdog() {
     last_st_bat=
     last_st_chg=
     last_st_ip=
+    last_bg_fg=
+    last_bg_t=0
     while :; do
         if [ -f $W/saver_frozen ] || [ -f $W/frozen ]; then sleep_for=60; else sleep_for=20; fi
         sleep $sleep_for
@@ -327,7 +330,14 @@ watchdog() {
         # Wi-Fi 省电（network.sh）、新装 / 更新的应用排队预编译（compile.sh）、电量记录（energy.sh）
         if [ ! -f $W/saver_frozen ] && [ ! -f $W/frozen ]; then
             type wifi_ps_tick >/dev/null 2>&1 && wifi_ps_tick
-            [ -f $W/booted ] && type bgnice_tick >/dev/null 2>&1 && bgnice_tick     # 后台应用降优先级（bgnice.sh）
+            if [ -f $W/booted ] && type bgnice_tick >/dev/null 2>&1; then
+                cur_bg_fg=$(cat "$X/fg" 2>/dev/null || true)
+                cur_bg_t=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
+                if [ "$cur_bg_fg" != "$last_bg_fg" ] || [ $((cur_bg_t - last_bg_t)) -ge 60 ]; then
+                    last_bg_fg=$cur_bg_fg; last_bg_t=$cur_bg_t
+                    bgnice_tick
+                fi
+            fi
             [ -f $W/booted ] && type compile_watch >/dev/null 2>&1 && compile_watch
             cur_st_bat=$(kobo_battery 2>/dev/null)
             kobo_is_charging && cur_st_chg=1 || cur_st_chg=0

@@ -119,7 +119,7 @@ static const char *LOGF = "/dev/null", *ACT = "", *FLAGF = NULL, *INJECT = NULL,
 static int G_EDGE_BACK = 1, G_EDGE_PANEL = 1, G_EDGE_LIGHT = 1, G_EDGE_LIGHT_SWAP = 0, G_TWO_TAP = 1, G_TWO_LONG = 1, G_TWO_BACK = 1, G_TWO_SLIDE = 1;
 static int G_TAP = 1, G_TAP_KEY = KEY_VOLUMEDOWN;   /* bezel double tap (gesture_tap) -> this key, see the header */
 static int tapfd = -1;
-static int BOOST_MS = 150, BOOST_KHZ = 0, SCROLL_PX = 20, PASS_PX = 12;   /* touch boost / scroll hints, see the header */
+static int BOOST_MS = 400, BOOST_KHZ = 0, SCROLL_PX = 20, PASS_PX = 12;   /* touch boost / scroll hints, see the header */
 #define BOOST_HOLD_MAX_MS 1500                               /* hard cap on scaling_min_freq hold during long press / dropped lift */
 static int TAP_PX = 28;       /* gconf TAP_PX: tap dead zone (px on a 1272 px wide panel, scaled), see dz_forward; 0 = off */
 static int HELD_REPLAY = 0;   /* gconf HELD_REPLAY=1: replay held frames raw instead of compacting to one down (+ lift) */
@@ -208,7 +208,7 @@ static void gconf_load(void)
     gconf_sig = sig;
     G_EDGE_BACK = G_EDGE_PANEL = G_EDGE_LIGHT = G_TWO_TAP = G_TWO_LONG = G_TWO_BACK = G_TWO_SLIDE = 1; G_EDGE_LIGHT_SWAP = 0; G_BACK_EXCLUDE[0] = 0; G_EDGE_SENS = 1;
     G_TAP = 1; G_TAP_KEY = KEY_VOLUMEDOWN; snprintf(G_CORNERS, sizeof(G_CORNERS), "all");
-    BOOST_MS = 150; BOOST_KHZ = 0; SCROLL_PX = 20; PASS_PX = 12; FAST_DRAG = 1; HELD_REPLAY = 0; TAP_PX = 28;
+    BOOST_MS = 400; BOOST_KHZ = 0; SCROLL_PX = 20; PASS_PX = 12; FAST_DRAG = 1; HELD_REPLAY = 0; TAP_PX = 28;
     IDLE_CAP_MS = 10000; IDLE_CAP_KHZ = 792000; FL_TIMEOUT = 0;
     G_EDGE_THIRDS = 0; G_EB_HOLD_MS = 500;
     G_AUTO_ROTATE = 0; KEY_SWAP = KEY_SWAP_CLI; KEY_MAP_PAGE = KEY_MAP_CLI;
@@ -242,7 +242,7 @@ static void gconf_load(void)
                         if (okv) snprintf(G_EB[i], sizeof(G_EB[i]), "%.23s", v);
                     }
             }
-            else if (!strcmp(line, "BOOST_MS")) { BOOST_MS = atoi(v); if (BOOST_MS < 0 || BOOST_MS > 2000) BOOST_MS = 150; }
+            else if (!strcmp(line, "BOOST_MS")) { BOOST_MS = atoi(v); if (BOOST_MS < 0 || BOOST_MS > 2000) BOOST_MS = 400; }
             else if (!strcmp(line, "BOOST_KHZ")) { BOOST_KHZ = atoi(v); if (BOOST_KHZ < 0) BOOST_KHZ = 0; }
             else if (!strcmp(line, "IDLE_CAP_MS")) { IDLE_CAP_MS = atoi(v); if (IDLE_CAP_MS < 0 || IDLE_CAP_MS > 120000) IDLE_CAP_MS = 10000; }
             else if (!strcmp(line, "IDLE_CAP_KHZ")) { IDLE_CAP_KHZ = atoi(v); if (IDLE_CAP_KHZ < 0) IDLE_CAP_KHZ = 792000; }
@@ -1972,6 +1972,12 @@ static void keydev_read(void)
                         pk_down[is_next].active = 0;
                         handle_page_key(ev.code);      /* no long-press bound: fire immediately on press */
                     } else {
+                        /* Pre-lift 792 MHz idle cap and ramp to full 996 MHz on press-down so the
+                           CPU is already at peak clock the instant release fires the page turn. */
+                        idle_thaw();
+                        activity_touch();
+                        boost_begin();
+                        if (boost_on) boost_until = now_ms() + BOOST_MS;
                         pk_down[is_next].active = 1;
                         pk_down[is_next].code = ev.code;
                         pk_down[is_next].t0 = now_ms();

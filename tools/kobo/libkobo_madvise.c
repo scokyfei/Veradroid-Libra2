@@ -387,13 +387,16 @@ static void tune_weread_threads(void)
             continue;
         unsigned int tid = (unsigned int)parse_uint(ent->d_name);
         if (tid == 0) continue;
-        if (str_starts(comm, "WRCommonPool") ||
-            str_starts(comm, "WRNetworkPool")) {
-            /* Put WRCommonPool & WRNetworkPool at nice 10: yields 90% CPU to main (nice 0)
-               and 99.6% to TypeSetting (nice -6), yet stays strictly above :seg (nice 19)
-               so a stop-the-world MS GC or SQLiteConnectionPool lock held by WRCommonPool
-               is never starved by :seg dictionary loading. Never touch Bugly-ThreadMonitor0. */
+        if (str_starts(comm, "WRNetworkPool")) {
+            /* Keep WRNetworkPool at nice 10 (background sync yields to UI). */
             setpriority(PRIO_PROCESS, tid, 10);
+        } else if (str_starts(comm, "WRCommonPool")) {
+            /* WeRead creates WRCommonPool at THREAD_PRIORITY_BACKGROUND (nice 10), yet runs
+               PageCursorWindow.preFillWindow() and SQLiteConnectionPool work on it while holding
+               monitors that the UI thread acquires on page turns (causing 686ms priority-inversion
+               stalls on single-core Cortex-A9). Raise to nice 2 so locks release promptly without
+               preempting UI (0) or TypeSetting (-6). */
+            setpriority(PRIO_PROCESS, tid, 2);
         } else if (str_starts(comm, "TypeSetting")) {
             /* Give chapter typesetting near-UI priority (-6) so TOC chapter jumps
                win the single Cortex-A9 core over background pools. */
@@ -981,14 +984,17 @@ static void configure_weread_art_heap(const char *proc, int (*say)(int, const ch
         (heap[0x5c / 4] == 1u || heap[0x5c / 4] == 2u) &&
         heap[0x2d8 / 4] >= (512u << 10) && heap[0x2d8 / 4] <= (32u << 20)) {
         /* Keep Concurrent Mark-Sweep (CMS) active on Kobo Libra 2 single-core Cortex-A9!
-           Forcing non-concurrent stop-the-world MS GC with 8 MB max_free caused 2-4s UI freezes
-           and InputDispatcher ANRs whenever GC overlapped with eMMC page faults / typesetting.
-           With CMS + 4m-12m free window (0.75 util), heap stays lean (~42 MB) while UI pauses
-           stay under ~30 ms. */
-        heap[0x2d8 / 4] = 4u << 20;       /* min_free_ = 4 MB */
-        heap[0x2dc / 4] = 12u << 20;      /* max_free_ = 12 MB */
-        if (set_util) set_util(heap, 0.75f);
-        if (say) say(4, "KoboWeRead", "ART_HEAP proc=%s gctype=CMS minfree=4m maxfree=12m growth=96m", proc);
+           Main process (~18-32 MB live) gets a 10m-20m / 0.62 free window (still guarded by
+           MemoryTrim when MemAvailable < 150 MB and hard 96 MB growth cap) so neither initial
+           chapter layout (~18 MB live) nor continuous reading (~30 MB live) hits 0%-free sticky
+           GC storms. :seg (~4 MB live) stays tight at 4m-8m / 0.75. */
+        int is_main = proc && str_eq(proc, "main");
+        heap[0x2d8 / 4] = (is_main ? 10u : 4u) << 20;
+        heap[0x2dc / 4] = (is_main ? 20u : 8u) << 20;
+        float util = is_main ? 0.62f : 0.75f;
+        if (set_util) set_util(heap, util);
+        if (say) say(4, "KoboWeRead", "ART_HEAP proc=%s gctype=CMS minfree=%um maxfree=%um util=%.2f growth=96m",
+                     proc ? proc : "?", is_main ? 10u : 4u, is_main ? 20u : 8u, (double)util);
     } else if (say) {
         say(4, "KoboWeRead", "ART_HEAP proc=%s skipped cap=%u growth=%u fg=%u",
             proc, heap[0xec / 4], heap[0xf0 / 4], heap[0x5c / 4]);
@@ -1091,7 +1097,7 @@ static void *weread_opt_thread(void *unused)
 #ifdef __ARM_NEON
         refresh_font_gamma();
 #endif
-        int step = (ticks < 30) ? 2 : 3;
+        int step = (ticks < 30) ? 2 : 15;
         usleep((unsigned int)step * 1000000u);
         ticks += step;
     }
