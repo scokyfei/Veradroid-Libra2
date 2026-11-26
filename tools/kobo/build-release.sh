@@ -21,6 +21,7 @@ export COPYFILE_DISABLE=1
 
 TOP=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 OUT_DIR=${1:-$TOP/dist}
+case "$OUT_DIR" in /*) ;; *) OUT_DIR="$PWD/$OUT_DIR" ;; esac
 BIN_DIR=${BIN_DIR:-$TOP/build/kobo-bin}
 EXTRA_BIN_DIR=${EXTRA_BIN_DIR:-}
 LEGACY_DIR=${LEGACY_DIR:-}
@@ -181,10 +182,10 @@ ${PKG_NAME} (Kobo Libra 2 / N418)  v${VER} (${pkg_type})
 二、增量升级（使用 upgrade 升级包，保留全部应用/书籍/设置）
 ----------------------------------------------------------------
 方式 A（推荐，无需覆盖目录）：
-  将 ${PKG_NAME}-${VER}-upgrade.zip 直接放入 Kobo 的：
-    .adds/${PKG_NAME}/update/
-  弹出 USB 后，点击 NickelMenu「${PKG_NAME} 检查更新」/ KOReader「应用离线升级包」，
-  或直接启动 ${PKG_NAME}，系统会自动校验 SHA-256 并完成增量升级（失败自动回滚）。
+  将 ${PKG_NAME}-${VER}-upgrade.zip 通过 USB MTP 或网页传书放入：
+    .adds/${PKG_NAME}/update/  或  VeraDroid/Download/
+  在桌面「我的 → 系统维护与关于 → 离线系统升级」即可一键检测并重启升级；
+  也可退出后在 NickelMenu「${PKG_NAME} 检查更新」/ KOReader「应用离线升级包」中触发（自动校验 SHA-256，失败自动回滚）。
 
 方式 B（USB 直接覆盖）：
   将升级包内的「.adds」目录直接解压覆盖到 Kobo 根目录即可。

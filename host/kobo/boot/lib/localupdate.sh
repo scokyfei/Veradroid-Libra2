@@ -152,7 +152,8 @@ fail() {
 
 lg "starting offline update: $BN ($CURVER -> $NEWVER)"
 command -v unzip >/dev/null 2>&1 || fail "系统缺少 unzip 命令"
-unzip -tq "$ZIP" >/dev/null 2>&1 || fail "压缩包损坏或下载不完整"
+# Kobo BusyBox unzip does not support -t; verify central directory via -lq (extraction checks CRC32 + SHA256SUMS below)
+unzip -lq "$ZIP" >/dev/null 2>&1 || fail "压缩包损坏或下载不完整"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE" || fail "无法创建临时解压目录"

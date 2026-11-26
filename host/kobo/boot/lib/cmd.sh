@@ -163,7 +163,7 @@ cmd_listen() {
                                 _ou_ok=0
                             fi
                         fi
-                        if [ "$_ou_ok" = 1 ] && command -v unzip >/dev/null 2>&1 && ! unzip -tq "$_ou_dst" >/dev/null 2>&1; then
+                        if [ "$_ou_ok" = 1 ] && command -v unzip >/dev/null 2>&1 && ! unzip -lq "$_ou_dst" >/dev/null 2>&1; then
                             [ "$_ou_s" != update ] && rm -f "$_ou_dst" 2>/dev/null || true
                             _ou_ok=0
                             _ou_err="压缩包损坏或下载不完整"
