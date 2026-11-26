@@ -231,7 +231,7 @@ final class TaskCards {
         }
 
         String staleText(long age) {
-            return "已经 " + (age / 60) + " 分钟没有新的进度：可能已经中断。可以过一会儿再试一次，日志在 Kobo 的 veradroid/logs/install.log（老版本在根目录的 veradroid-install.log）。"; // root-legacy
+            return "已经 " + (age / 60) + " 分钟没有新的进度：可能已经中断。可以过一会儿再试一次，日志在 Kobo 盘的 .adds/Veradroid-Libra2/logs/veradroid.log。";
         }
 
         void showIf(boolean v) { int x = v ? VISIBLE : GONE; if (getVisibility() != x) setVisibility(x); }

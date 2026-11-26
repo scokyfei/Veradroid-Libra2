@@ -138,6 +138,7 @@ cmd_listen() {
         sleep)   [ -p "$W/power.fifo" ] && ( echo sleep > "$W/power.fifo" ) & ;;
         diag)    ( diag_save; touch "$X/ctl/diag.done"; chmod 644 "$X/ctl/diag.done" 2>/dev/null ) & ;;
         diagexport) ( diag_export ) </dev/null >>"$LOG" 2>&1 & ;;
+        cfgbackup)  ( cfg_backup_cmd "$a" ) </dev/null >>"$LOG" 2>&1 & ;;
         offlineupd)
             case "$a" in
                 check|'') status_write ;;
@@ -397,5 +398,149 @@ wrmaint_cmd() {
         *)
             wrmaint_status
             ;;
+    esac
+}
+
+# ---- One-tap Configuration Backup & Restore ($VD/backup/veradroid-cfg-*.tar.gz) ----
+
+cfg_backup_write_result() {
+    _tmp="$X/ctl/cfgbackup.result.tmp.$$"
+    : > "$_tmp"
+    for _kv in "$@"; do printf '%s\n' "$_kv" >> "$_tmp"; done
+    chmod 644 "$_tmp" 2>/dev/null || true
+    mv -f "$_tmp" "$X/ctl/cfgbackup.result" 2>/dev/null || rm -f "$_tmp"
+}
+
+cfg_backup_list() {
+    mkdir -p "$VD/backup" 2>/dev/null || true
+    _tmp="$X/ctl/cfgbackup.list.tmp.$$"
+    : > "$_tmp"
+    for _f in $(ls -1t "$VD/backup"/veradroid-cfg-*.tar.gz 2>/dev/null); do
+        [ -f "$_f" ] || continue
+        _bn=${_f##*/}
+        _kb=$(( ($(wc -c < "$_f" 2>/dev/null || echo 0) + 1023) / 1024 ))
+        _dt=$(printf '%s' "$_bn" | sed -n 's/^veradroid-cfg-\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)-\([0-9]\{2\}\)\([0-9]\{2\}\)[0-9]\{2\}\.tar\.gz$/\1-\2-\3 \4:\5/p')
+        printf '%s\t%s\t%s\n' "$_bn" "$_kb" "${_dt:-$_bn}" >> "$_tmp"
+    done
+    chmod 644 "$_tmp" 2>/dev/null || true
+    mv -f "$_tmp" "$X/ctl/cfgbackup.list" 2>/dev/null || rm -f "$_tmp"
+}
+
+cfg_backup_save() {
+    mkdir -p "$VD/backup" 2>/dev/null || true
+    _ts=$(date +%Y%m%d-%H%M%S)
+    _bn="veradroid-cfg-${_ts}.tar.gz"
+    _st="/tmp/vd-cfg-save.$$"
+    rm -rf "$_st"
+    mkdir -p "$_st/prefs" 2>/dev/null || { cfg_backup_write_result ok=0 op=save "error=无法创建临时目录"; return 1; }
+    {
+        echo "time=$(date '+%F %T')"
+        echo "version=$(head -1 "$VD/VERSION" 2>/dev/null)"
+        echo "model=libra2"
+    } > "$_st/meta.txt"
+    [ -f "$SYS/settings.conf" ] && cp "$SYS/settings.conf" "$_st/settings.conf" 2>/dev/null || true
+    [ -f "$SYS/settings.apps" ] && cp "$SYS/settings.apps" "$_st/settings.apps" 2>/dev/null || true
+    [ -f "$SYS/data/media/0/Screensaver/.vd-saver" ] && cp "$SYS/data/media/0/Screensaver/.vd-saver" "$_st/vd-saver" 2>/dev/null || true
+    _sp="$SYS/data/data/com.veradroid.home/shared_prefs"
+    if [ -d "$_sp" ]; then
+        for _xml in "$_sp"/*.xml; do
+            [ -f "$_xml" ] || continue
+            case "${_xml##*/}" in
+                *token*|*lock*|*pin*) continue ;;
+            esac
+            cp "$_xml" "$_st/prefs/" 2>/dev/null || true
+        done
+    fi
+    _out="$VD/backup/$_bn"
+    if tar -czf "$_out.tmp" -C "$_st" . 2>/dev/null && mv -f "$_out.tmp" "$_out" 2>/dev/null; then
+        # Keep newest 10 config backups
+        _cnt=0
+        for _old in $(ls -1t "$VD/backup"/veradroid-cfg-*.tar.gz 2>/dev/null); do
+            _cnt=$((_cnt + 1))
+            [ "$_cnt" -gt 10 ] && rm -f "$_old" 2>/dev/null || true
+        done
+        _kb=$(( ($(wc -c < "$_out" 2>/dev/null || echo 0) + 1023) / 1024 ))
+        cfg_backup_list
+        cfg_backup_write_result ok=1 op=save "file=$_bn" "size_kb=$_kb" "ts=$(date +%s)"
+        t "cfgbackup: saved $_out (${_kb} KB)"
+    else
+        rm -f "$_out.tmp" 2>/dev/null || true
+        cfg_backup_write_result ok=0 op=save "error=保存配置备份失败（检查存储空间）"
+        t "cfgbackup: failed to write $_out"
+    fi
+    rm -rf "$_st" 2>/dev/null || true
+}
+
+cfg_backup_name_ok() {
+    printf '%s\n' "$1" | grep -qE '^veradroid-cfg-[0-9]{8}-[0-9]{6}\.tar\.gz$'
+}
+
+cfg_backup_restore() {
+    _bn=$1
+    if ! cfg_backup_name_ok "$_bn" || [ ! -f "$VD/backup/$_bn" ]; then
+        cfg_backup_write_result ok=0 op=restore "error=备份文件不存在或名称无效"
+        return 1
+    fi
+    _st="/tmp/vd-cfg-restore.$$"
+    rm -rf "$_st" && mkdir -p "$_st"
+    if ! tar -xzf "$VD/backup/$_bn" -C "$_st" 2>/dev/null; then
+        rm -rf "$_st"
+        cfg_backup_write_result ok=0 op=restore "error=解压备份失败（文件已损坏）"
+        return 1
+    fi
+    [ -f "$_st/settings.conf" ] && cp -f "$_st/settings.conf" "$SYS/settings.conf" 2>/dev/null || true
+    [ -f "$_st/settings.apps" ] && cp -f "$_st/settings.apps" "$SYS/settings.apps" 2>/dev/null || true
+    if [ -f "$_st/vd-saver" ]; then
+        mkdir -p "$SYS/data/media/0/Screensaver" 2>/dev/null || true
+        cp -f "$_st/vd-saver" "$SYS/data/media/0/Screensaver/.vd-saver" 2>/dev/null || true
+        chmod 644 "$SYS/data/media/0/Screensaver/.vd-saver" 2>/dev/null || true
+    fi
+    _sp="$SYS/data/data/com.veradroid.home/shared_prefs"
+    if [ -d "$_st/prefs" ] && [ -d "$_sp" ]; then
+        _own=$(stat -c '%u:%g' "$_sp" 2>/dev/null || true)
+        for _xml in "$_st/prefs"/*.xml; do
+            [ -f "$_xml" ] || continue
+            case "${_xml##*/}" in *token*|*lock*|*pin*|*/*) continue ;; esac
+            cp -f "$_xml" "$_sp/${_xml##*/}" 2>/dev/null || true
+            [ -n "$_own" ] && chown "$_own" "$_sp/${_xml##*/}" 2>/dev/null || true
+            chmod 660 "$_sp/${_xml##*/}" 2>/dev/null || true
+        done
+    fi
+    rm -rf "$_st" 2>/dev/null || true
+    # Apply restored host settings immediately
+    settings_load 2>/dev/null || true
+    settings_publish 2>/dev/null || true
+    type appprof_publish >/dev/null 2>&1 && appprof_publish
+    epd_send ANIM "$KFB_ANIM_MODE" "$KFB_ANIM_DIR" "$KFB_ANIM_STEPS" "$KFB_ANIM_MIN" 2>/dev/null || true
+    epd_send SET "$KFB_CONTRAST" "$KFB_DITHER" "$KFB_FLASH" "$KFB_INVERT" "$KFB_MODE" "$KFB_SETTLE" "${KFB_LIGHTF:-0}" "${KFB_DARKEN:-0}" 2>/dev/null || true
+    epd_send HOLD "${KFB_HOLD:-70}" 2>/dev/null || true
+    epd_send_scroll 2>/dev/null || true
+    skia_opt_sync 2>/dev/null || true
+    gestures_write 2>/dev/null || true
+    status_write 2>/dev/null || true
+    cfg_backup_write_result ok=1 op=restore "file=$_bn" "ts=$(date +%s)"
+    t "cfgbackup: restored $_bn"
+}
+
+cfg_backup_delete() {
+    _bn=$1
+    if ! cfg_backup_name_ok "$_bn" || [ ! -f "$VD/backup/$_bn" ]; then
+        cfg_backup_write_result ok=0 op=delete "error=备份文件不存在"
+        return 1
+    fi
+    rm -f "$VD/backup/$_bn" 2>/dev/null || true
+    cfg_backup_list
+    cfg_backup_write_result ok=1 op=delete "file=$_bn" "ts=$(date +%s)"
+    t "cfgbackup: deleted $_bn"
+}
+
+cfg_backup_cmd() {
+    set -- $1
+    case "$1" in
+        save)    cfg_backup_save ;;
+        list)    cfg_backup_list ;;
+        restore) cfg_backup_restore "$2" ;;
+        delete)  cfg_backup_delete "$2" ;;
+        *)       cfg_backup_list ;;
     esac
 }

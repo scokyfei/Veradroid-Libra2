@@ -46,7 +46,7 @@ final class BlocksHome {
     private final FrameLayout body;
     private final Blocks.Nav nav;
     private final TextView stLeft, stRight;
-    private final Icons.IconView stWifi;
+    private final Icons.IconView stBt, stWifi;
     private final SparseArray<View> pages = new SparseArray<View>();
     private final SparseArray<String> sigs = new SparseArray<String>();
     private int cur = -1;
@@ -76,6 +76,11 @@ final class BlocksHome {
         stLeft.setEllipsize(android.text.TextUtils.TruncateAt.END);
         stLeft.setPadding(dp(6), 0, dp(8), 0);
         st.addView(stLeft, Blocks.weight(1));
+        stBt = new Icons.IconView(a, Icons.Kind.BLUETOOTH);
+        LinearLayout.LayoutParams btp = Blocks.lp(dp(15), dp(15));
+        btp.rightMargin = dp(6);
+        stBt.setVisibility(View.GONE);
+        st.addView(stBt, btp);
         stWifi = new Icons.IconView(a, Icons.Kind.WIFI);
         LinearLayout.LayoutParams wp = Blocks.lp(dp(15), dp(15));
         wp.rightMargin = dp(6);
@@ -239,10 +244,12 @@ final class BlocksHome {
         return true;
     }
 
-    void refreshStatus(String clock, String state, boolean wifiConnected) {
+    void refreshStatus(String clock, String state, boolean wifiConnected, boolean btOn) {
         String name = prefs.getString("name", "VeraDroid");
         if (name.length() == 0) name = "VeraDroid";
         if (!name.contentEquals(stLeft.getText())) stLeft.setText(name);
+        int bvis = btOn ? View.VISIBLE : View.GONE;
+        if (stBt.getVisibility() != bvis) stBt.setVisibility(bvis);
         int wvis = wifiConnected ? View.VISIBLE : View.GONE;
         if (stWifi.getVisibility() != wvis) stWifi.setVisibility(wvis);
         String r = state.length() == 0 ? clock : clock + "    " + state;

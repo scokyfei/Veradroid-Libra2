@@ -183,27 +183,9 @@ diag_export() {
     rm -rf "$_stage" 2>/dev/null || true
 }
 
-# 返回 Kobo：Kobo Libra 2 默认完整停止以释放挂载供 USB 存储使用。
+# 返回 Kobo：始终完整退出并释放全部挂载，确保 Nickel 与 USB 存储正常工作。
 do_exit() {
-    settings_load
     t "return to kobo requested"
-    if [ "$RETURN_MODE" = freeze ] && [ -d $FZ ]; then
-        touch $X/ctl/sleep
-        type appprof_density_reset >/dev/null 2>&1 && appprof_density_reset
-        if android_freeze; then
-            touch $W/frozen
-            cpu_gov_restore 2>/dev/null || true
-            input_release
-            wifi_ps_restore 2>/dev/null || true
-            for f in sleep lipc guard watchdog; do kill $(cat $W/$f.pid 2>/dev/null) 2>/dev/null; done
-            type usb_watch_stop >/dev/null 2>&1 && usb_watch_stop
-            framework_start
-            userstore_check freeze
-            t "frozen, kobo ui back"
-            exit 0
-        fi
-        t "freeze failed, stopping"
-    fi
     log_release; sh $VD/boot/stop.sh >/dev/null 2>&1
     exit 0
 }
@@ -239,8 +221,6 @@ log_cap() {   # log_cap <文件> <字节>
     [ "$sz" -gt "$2" ] 2>/dev/null || return 0
     tail -c $(($2 / 2)) "$1" > "$1.tmp" 2>/dev/null && cat "$1.tmp" > "$1"; rm -f "$1.tmp"
 }
-# Kobo 无 Kindle fastmetrics 遥测目录，保留空钩子兼容看门狗调用
-var_guard() { return 0; }
 
 helpers_supervise() {
     if [ -x "$VD/bin/veradroid-epd" ] && [ -f $W/epd.pid ] && ! alive $W/epd.pid; then
@@ -327,7 +307,6 @@ watchdog() {
         kill -0 $P 2>/dev/null || { t "system exited"; log_release; sh $VD/boot/stop.sh >/dev/null 2>&1; break; }
         lmk_kernel_tune 2>/dev/null || true
         host_oom_protect
-        var_guard
         log_cap $W/epd.log 262144; log_cap $W/input.log 131072; log_cap $W/input.err 65536; log_cap $W/umtprd.log 131072; log_cap $W/bt.log 65536; log_cap $W/bt-audio.log 65536; log_cap $W/bluealsa.log 65536
         if [ ! -f $W/saver_frozen ] && [ ! -f $W/frozen ]; then
             # 命令监听没了（FIFO 建不起来、被杀）：桌面的“返回 Kindle”、设置、手势全都没反应，只能重启 Kindle。重新起一个。

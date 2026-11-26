@@ -70,8 +70,6 @@ status_write() {
         echo "lanip=$lan"
         echo "ssh=${sshp:-0}"
         lowmem && echo "lowmem=1" || echo "lowmem=0"
-        echo "lowmem_setting=${LOWMEM:-auto}"
-        echo "kindleui=$(kindle_ui_mode)"
         echo "sysversion=${sver}"
         echo "imageclass=kobo-libra2"
         echo "autoupdate=0"

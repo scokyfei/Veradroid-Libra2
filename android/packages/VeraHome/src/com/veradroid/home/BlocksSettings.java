@@ -96,7 +96,7 @@ final class BlocksSettings {
         case BlocksHome.S_STORAGE: return cfg + "|" + st.get("wifi") + "|" + st.get("lanip") + "|" + st.get("ssh") + "|" + st.get("usbmtp") + "|" + st.get("usbconn") + "|" + Transfer.get(a).running() + "|" + prefs.getInt("xfer_idle", 30) + "|" + AdbWifi.on() + "|" + BlocksHome.storageUsed();
         case BlocksHome.S_UI: return prefs.getString("name", "VeraDroid") + "|" + prefs.getString("quick", "") + "|" + prefs.getString("panelname", "") + "|" + Fonts.weight(a) + "|" + Blocks.caps(a) + "|" + Blocks.anim(a) + "|" + Blocks.on(a);
         case BlocksHome.S_CARDS: return prefs.getString(BlocksCards.KEY, BlocksCards.DEFAULT) + prefs.getString("blk_quick", "") + prefs.getString("wx_city", "") + prefs.getString("blk_readers", "") + a.appsVersion();
-        default: return prefs.getString("name", "VeraDroid") + "|" + Token.bound(a) + "|" + Token.user(a) + "|" + a.appsVersion()
+        default: return cfg + "|" + prefs.getString("name", "VeraDroid") + "|" + Token.bound(a) + "|" + Token.user(a) + "|" + a.appsVersion()
             + "|" + st.get("sysversion") + "|" + st.get("offline_upd") + "|" + st.get("offline_upd_file") + "|" + st.get("offline_upd_newer")
             + "|" + (System.currentTimeMillis() / 60000);
         }
@@ -609,8 +609,9 @@ final class BlocksSettings {
 
     private View about() {
         LinearLayout c = content();
-        LinearLayout m = group(c, "维护与性能");
+        LinearLayout m = group(c, "维护与系统");
         boolean kobo = HostLink.isKobo();
+        final Map<String, String> cfg = HostLink.kv(HostLink.KFB + "settings");
         if (kobo) {
             String accSub = Token.bound(a)
                 ? "已绑定" + (Token.user(a).length() > 0 ? "（" + Token.user(a) + "）" : "") + " · 点击更换或退出绑定"
@@ -640,18 +641,21 @@ final class BlocksSettings {
             add(m, Blocks.navRow(a, "离线系统升级", updSub, new View.OnClickListener() {
                 @Override public void onClick(View v) { offlineUpgradeDialog(curVer, updVer, updFile, updSrc, updNewer); }
             }));
+            add(m, Blocks.navRow(a, "配置备份与还原", "备份显示、手势与桌面布局到 Kobo 盘，随时一键还原", new View.OnClickListener() {
+                @Override public void onClick(View v) { cfgBackupDialog(); }
+            }));
             add(m, Blocks.navRow(a, "导出诊断日志包", "一键打包日志到 Kobo 盘根目录（插 USB 线可直接拷出）", new View.OnClickListener() {
                 @Override public void onClick(View v) { diagExportDialog(); }
             }));
         }
         String[][] rows = {
-            { "系统与性能", kobo ? "应用预编译 · 立即优化" : "Wi-Fi 省电 · 低内存 · Kobo 界面 · 应用编译" },
+            { "系统与性能", "Wi-Fi 省电 · 低内存 · Kobo 界面 · 应用编译" },
             { "检查系统更新", "有新版本优先下载增量补丁" },
             { "使用统计", "电量和阅读时长，只在本机" },
             { "问题反馈", "连同系统日志一起上传" },
-            { "设备与管理", "导出完整系统日志 · 恢复默认设置" } };
+            { kobo ? "恢复默认与底层日志" : "设备与管理", kobo ? "恢复默认设置 · 底层完整日志存档" : "导出完整系统日志 · 恢复默认设置" } };
         for (int i = 0; i < rows.length; i++) {
-            if (kobo && (i == 1 || i == 3)) continue;
+            if (kobo && (i == 0 || i == 1 || i == 3)) continue;
             final int k = i;
             add(m, Blocks.navRow(a, rows[i][0], rows[i][1], new View.OnClickListener() { @Override public void onClick(View v) {
                 switch (k) {
@@ -662,6 +666,24 @@ final class BlocksSettings {
                 default: h.openCat(5); break;
                 }
             } }));
+        }
+        if (kobo) {
+            LinearLayout cp = group(c, "应用预编译");
+            boolean autoComp = !"off".equals(cfg.get("APP_COMPILE"));
+            add(cp, Blocks.row(a, "自动预编译新装应用", "Auto AOT compile", toggle(autoComp, new Icons.Toggle.Listener() {
+                @Override public void onToggle(boolean on) { host("APP_COMPILE=" + (on ? "auto" : "off")); } })));
+            final TextView compBtn = Blocks.button(a, "立即优化", false, null);
+            final TextView compNote = Ui.text(a, compileSummary(), 13, false);
+            compNote.setPadding(dp(12), dp(4), dp(12), dp(10));
+            compBtn.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    HostLink.cmd("compile all");
+                    compNote.setText("已提交后台编译，正在检查待优化的应用…");
+                    VeraToast.show(a, "已开始后台应用预编译");
+                }
+            });
+            add(cp, Blocks.row(a, "立即优化全部应用", "Compile apps now", compBtn));
+            cp.addView(compNote);
         }
         // 系统更新的进度（宿主写 ctl/update.status；没有在更新时不占地方）
         c.addView(new TaskCards.Update(a, false), Blocks.gap(a, 14));
@@ -854,6 +876,150 @@ final class BlocksSettings {
             }
         };
         hd.postDelayed(poll, 1200);
+    }
+
+    private static String compileSummary() {
+        Map<String, String> m = HostLink.kv(HostLink.CTL + "compile.status");
+        String st = m.get("state");
+        if ("running".equals(st)) {
+            String pkg = m.get("pkg") != null ? m.get("pkg") : "";
+            String idx = m.get("index"), tot = m.get("total");
+            return "正在后台预编译：" + pkg + (idx != null && tot != null ? "（" + idx + "/" + tot + "）" : "");
+        }
+        if ("waiting".equals(st) || "paused".equals(st)) {
+            String msg = m.get("msg");
+            return "等待预编译：" + (msg != null && msg.length() > 0 ? msg : "电量或内存条件满足后自动开始");
+        }
+        String last = m.get("last");
+        if (last != null && last.length() > 0) return "空闲 · 上次：" + last + "（装新应用 5 分钟静止后自动优化）";
+        return "空闲 · 新装应用会在静止 5 分钟后自动编译成机器码，启动更流畅。";
+    }
+
+    private static List<String[]> readCfgBackups() {
+        List<String[]> out = new ArrayList<String[]>();
+        try {
+            java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(HostLink.CTL + "cfgbackup.list"));
+            String ln;
+            while ((ln = r.readLine()) != null) {
+                String[] f = ln.split("\t", -1);
+                if (f.length >= 3 && f[0].endsWith(".tar.gz")) out.add(f);
+            }
+            r.close();
+        } catch (Throwable ignored) { }
+        return out;
+    }
+
+    private void cfgBackupDialog() {
+        HostLink.cmd("cfgbackup list");
+        final android.os.Handler hd = new android.os.Handler(android.os.Looper.getMainLooper());
+        final LinearLayout box = new LinearLayout(a);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(0, dp(4), 0, 0);
+        TextView tip = Ui.text(a, "备份保存在 Kobo 盘 .adds/Veradroid-Libra2/backup/，包含显示/手势/应用优化设置、屏保选择与桌面布局（不含锁屏密码与账号凭证）。", 13, false);
+        tip.setPadding(0, 0, 0, dp(8));
+        box.addView(tip);
+        final TextView msg = Ui.text(a, "正在读取备份列表…", 14, true);
+        msg.setPadding(0, 0, 0, dp(8));
+        box.addView(msg);
+        final LinearLayout listBox = new LinearLayout(a);
+        listBox.setOrientation(LinearLayout.VERTICAL);
+        PageScrollView sv = new PageScrollView(a);
+        sv.addView(listBox);
+        sv.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.min(dp(280), a.getResources().getDisplayMetrics().heightPixels / 3)));
+        box.addView(sv);
+
+        final android.app.Dialog[] dlgRef = { null };
+        final Runnable[] renderRef = { null };
+        final Runnable render = new Runnable() {
+            @Override public void run() {
+                if (a.isFinishing()) return;
+                List<String[]> items = readCfgBackups();
+                listBox.removeAllViews();
+                if (items.isEmpty()) {
+                    msg.setText("还没有配置备份，点下方按钮立即创建。");
+                    return;
+                }
+                msg.setText("已有 " + items.size() + " 份配置备份（点击可还原或删除）：");
+                for (int i = 0; i < items.size(); i++) {
+                    final String[] it = items.get(i);
+                    if (i > 0) listBox.addView(Blocks.hair(a));
+                    LinearLayout row = Blocks.navRow(a, it[2], it[0] + " · " + it[1] + " KB", new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            new VeraDialog.Builder(a)
+                                .title(it[2])
+                                .message("文件：" + it[0] + "（" + it[1] + " KB）\n\n还原后将覆盖当前的显示、手势、应用优化和桌面布局配置。")
+                                .negative("删除", new Runnable() {
+                                    @Override public void run() {
+                                        HostLink.cmd("cfgbackup delete " + it[0]);
+                                        VeraToast.show(a, "已删除备份");
+                                        hd.postDelayed(renderRef[0], 700);
+                                    }
+                                })
+                                .positive("还原此备份", new Runnable() {
+                                    @Override public void run() {
+                                        new java.io.File(HostLink.CTL + "cfgbackup.result").delete();
+                                        HostLink.cmd("cfgbackup restore " + it[0]);
+                                        VeraToast.show(a, "正在还原配置…");
+                                        hd.postDelayed(new Runnable() {
+                                            @Override public void run() {
+                                                Map<String, String> r = HostLink.kv(HostLink.CTL + "cfgbackup.result");
+                                                if ("1".equals(r.get("ok")) && "restore".equals(r.get("op"))) {
+                                                    if (dlgRef[0] != null) dlgRef[0].dismiss();
+                                                    new VeraDialog.Builder(a)
+                                                        .title("配置已还原")
+                                                        .message("宿主显示与手势配置已立即生效；建议重启安卓以加载还原后的桌面卡片与快捷面板偏好。")
+                                                        .negative("稍后", null)
+                                                        .positive("立即重启安卓", new Runnable() {
+                                                            @Override public void run() { HostLink.cmd("restart"); }
+                                                        }).show();
+                                                } else {
+                                                    String err = r.get("error");
+                                                    VeraToast.show(a, err != null && err.length() > 0 ? "还原失败：" + err : "还原未完成，请重试");
+                                                }
+                                            }
+                                        }, 1500);
+                                    }
+                                }).show();
+                        }
+                    });
+                    listBox.addView(row, Blocks.match());
+                }
+            }
+        };
+        renderRef[0] = render;
+
+        LinearLayout actRow = new LinearLayout(a);
+        actRow.setPadding(0, dp(10), 0, 0);
+        actRow.addView(Blocks.button(a, "立即备份当前配置", true, new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                new java.io.File(HostLink.CTL + "cfgbackup.result").delete();
+                msg.setText("正在备份配置到 Kobo 盘…");
+                HostLink.cmd("cfgbackup save");
+                hd.postDelayed(new Runnable() {
+                    @Override public void run() {
+                        Map<String, String> r = HostLink.kv(HostLink.CTL + "cfgbackup.result");
+                        if ("1".equals(r.get("ok")) && "save".equals(r.get("op"))) {
+                            VeraToast.show(a, "已备份：" + r.get("file"));
+                        } else if (r.get("error") != null) {
+                            VeraToast.show(a, "备份失败：" + r.get("error"));
+                        }
+                        render.run();
+                    }
+                }, 1200);
+            }
+        }), Blocks.weight(1));
+        box.addView(actRow, Blocks.match());
+
+        dlgRef[0] = new VeraDialog.Builder(a)
+            .title("配置备份与还原")
+            .view(box)
+            .positive("关闭", null)
+            .show();
+        dlgRef[0].setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
+            @Override public void onDismiss(android.content.DialogInterface dialog) { hd.removeCallbacksAndMessages(null); }
+        });
+        hd.postDelayed(render, 500);
+        hd.postDelayed(render, 1200);
     }
 
     // ------------------------------------------------------------------ 首页卡片

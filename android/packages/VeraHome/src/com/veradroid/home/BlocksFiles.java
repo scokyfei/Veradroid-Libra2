@@ -82,8 +82,13 @@ final class BlocksFiles {
         return true;
     }
 
+    private static String koboBooksDir() {
+        File kb = new File("/data/media/0/KoboBooks");
+        return kb.isDirectory() ? kb.getPath() : Transfer.KINDLE;
+    }
+
     private static String[][] roots() {
-        return new String[][] { { "Books（内部存储）", Transfer.BOOKS }, { "下载", "/data/media/0/Download" }, { "Kobo 书库", Transfer.KINDLE } };
+        return new String[][] { { "Books（内部存储）", Transfer.BOOKS }, { "下载", "/data/media/0/Download" }, { "Kobo 书库", koboBooksDir() } };
     }
 
     View build() {
@@ -189,7 +194,7 @@ final class BlocksFiles {
         pager.set(page + 1, pages);
     }
 
-    private boolean loading() { return (seg == 2 && findingImages) || (seg == 1 && !ROOT.equals(path) && path.startsWith(Transfer.KINDLE) && !dirCache.containsKey(path)); }
+    private boolean loading() { return (seg == 2 && findingImages) || (seg == 1 && !ROOT.equals(path) && (path.startsWith(Transfer.KINDLE) || path.startsWith("/data/media/0/KoboBooks")) && !dirCache.containsKey(path)); }
 
     private String empty() {
         if (loading()) return seg == 2 ? "正在查找图片" : "正在读取文件夹";
@@ -202,7 +207,7 @@ final class BlocksFiles {
     }
 
     private String emptyHint() {
-        if (loading()) return "Kobo 书库在另一个文件系统上，第一次要读一会儿";
+        if (loading()) return "正在读取 Kobo 书库…";
         switch (seg) {
         case 0: return a.libOn() ? "用传书网页传进来，或者放进 Books 文件夹" : "我的 → 桌面与外观 → 更多桌面与输入法设置 → 书库";
         case 2: return "放进 Pictures、Download 或 VeraDroid/wallpaper";
@@ -233,6 +238,7 @@ final class BlocksFiles {
     }
 
     private static String shortPath(String p) {
+        if (p.startsWith("/data/media/0/KoboBooks")) return "/Kobo 书库" + p.substring("/data/media/0/KoboBooks".length());
         if (p.startsWith(Transfer.KINDLE)) return "/Kobo 书库" + p.substring(Transfer.KINDLE.length());
         if (p.startsWith("/data/media/0")) return p.substring("/data/media/0".length());
         return p;

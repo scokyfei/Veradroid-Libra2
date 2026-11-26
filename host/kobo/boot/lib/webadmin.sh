@@ -47,6 +47,7 @@ wa_do() {
     storageauto)   case "$arg" in 0|1) type st_cmd >/dev/null 2>&1 && st_cmd auto "$arg" >/dev/null 2>&1; echo "ok=1"; type st_info >/dev/null 2>&1 && st_info ;; *) echo "error=bad value" ;; esac | wa_put "$n" "$u" ;;
     wifipsk)       wa_wifipsk "$arg" "$data" | wa_put "$n" "$u" ;;
     libput)        wa_libput "$arg" "$u" "$data" | wa_put "$n" "$u" ;;
+    diagget)       wa_diagget "$n" "$u" ;;
     adbstart)      echo "adb.error=noipv6" | wa_put "$n" "$u" ;;
     adbstop|adbstate) echo "ok=1" | wa_put "$n" "$u" ;;
     *)             wa_log "wa: unsupported request '$verb'"; echo "error=unsupported" | wa_put "$n" "$u" ;;
@@ -64,6 +65,7 @@ wa_df() {
 
 wa_sysinfo() {
     echo "ok=1"
+    echo "kobo=1"
     echo "model=Kobo Libra 2 (N418)"
     echo "firmware=$(kobo_firmware 2>/dev/null | wa_clean 80)"
     echo "vdversion=$(cat "$VD/VERSION" 2>/dev/null | wa_clean 32)"
@@ -87,7 +89,7 @@ wa_sysinfo() {
     type st_info >/dev/null 2>&1 && st_info
     [ -f "$W/wa.du" ] && cat "$W/wa.du"
     cat /proc/[0-9]*/status 2>/dev/null | awk '
-        function out() { if (n ~ /^(veradroid-.*|pivot_init|dropbear|luajit|nickel|sickel|wpa_supplicant|vdloopdio)$/ && p != "") {
+        function out() { if (n ~ /^(veradroid-.*|pivot_init|dropbear|luajit|nickel|sickel|hindenburg|wpa_supplicant|vdloopdio|umtprd|vdbtkeys|bluetoothd|bluealsa|rtk_hciattach)$/ && p != "") {
                              gsub(/[^A-Za-z0-9._-]/, "", n); printf "hp=%s|%s|%s|%d\n", p, substr(n, 1, 24), st, r } }
         /^Name:/ { out(); n = $2; st = "?"; r = 0; p = "" }
         /^State:/ { st = $2 } /^Pid:/ { p = $2 } /^VmRSS:/ { r = $2 }
@@ -111,7 +113,7 @@ wa_du() {
         m=0
         for d in "$SYS"/data/media/0/* "$SYS"/data/media/0/.[!.]*; do
             [ -e "$d" ] || continue
-            case "${d##*/}" in KindleLibrary|KindleFonts|Fonts) continue ;; esac
+            case "${d##*/}" in KindleLibrary|KindleFonts|KoboBooks|Fonts) continue ;; esac
             m=$((m + $(wa_dusum "$d")))
         done
         echo "du.media=$m"
@@ -128,12 +130,40 @@ wa_logtail() {
     case "$nl" in ''|*[!0-9]*) nl=200 ;; esac
     [ "$nl" -ge 1 ] && [ "$nl" -le 2000 ] || nl=200
     case "$w" in
-        main) lf=$LOG ;;
-        fsck) lf=$VD/logs/resize.log ;;
-        *)    lf=$LOG ;;
+        main)        lf=$LOG ;;
+        localupdate|update) lf=$VD/logs/localupdate.log ;;
+        fsck)        lf=$VD/logs/fsck.log ;;
+        resize)      lf=$VD/logs/resize.log ;;
+        usb)         lf=$W/umtprd.log ;;
+        epd)         lf=$W/epd.log ;;
+        stop)        [ -s /tmp/veradroid-stop.log ] && lf=/tmp/veradroid-stop.log || lf=$VD/logs/last-stop.log ;;
+        bt)
+            {
+                for _bf in "$W/bt.log" "$W/bt-hci.log" "$W/bluetoothd.log" "$W/bluealsa.log" "$W/bt-audio.log"; do
+                    [ -s "$_bf" ] || continue
+                    echo "=== ${_bf##*/} ==="
+                    tail -n "$nl" "$_bf" 2>/dev/null
+                done
+            } | tr -d '\000' | tail -c 524288
+            return 0 ;;
+        *)           lf=$LOG ;;
     esac
     [ -f "$lf" ] && [ ! -L "$lf" ] || { echo "(暂无日志)"; return; }
     tail -n "$nl" "$lf" 2>/dev/null | tr -d '\000' | tail -c 524288
+}
+
+wa_diagget() {
+    o=$WA_OUT/$1
+    df=$(sed -n 's/^path=//p' "$X/ctl/diag.export" 2>/dev/null)
+    case "$df" in
+        /mnt/onboard/veradroid-diag-*.tar.gz) ;;
+        *) df=$(ls -1t /mnt/onboard/veradroid-diag-*.tar.gz 2>/dev/null | head -1) ;;
+    esac
+    if [ -n "$df" ] && [ -f "$df" ] && [ ! -L "$df" ]; then
+        head -c 4194304 "$df" > "$o.tmp" && chown "$2" "$o.tmp" && chmod 400 "$o.tmp" && mv -f "$o.tmp" "$o.out" || rm -f "$o.tmp"
+    else
+        echo "error=notfound" | wa_put "$1" "$2"
+    fi
 }
 
 wa_shot() {
@@ -155,15 +185,16 @@ wa_shot() {
 
 wa_sshstate() {
     echo "ok=1"
+    echo "ssh.kobo=1"
     dp=$(pidof dropbear 2>/dev/null | awk '{print $1}')
     if [ -n "$dp" ]; then
-        echo "running=1"
-        echo "port=2222"
+        echo "ssh.running=1"
+        echo "ssh.port=2222"
     else
-        echo "running=0"
+        echo "ssh.running=0"
     fi
-    echo "script=1"
-    echo "ip=$(kobo_wifi_ip)"
+    echo "ssh.script=1"
+    echo "ssh.ip=$(kobo_wifi_ip)"
 }
 
 # Store Wi-Fi hex SSID + hex PSK securely in root-only $W/wifi.psk for immediate wificonnect

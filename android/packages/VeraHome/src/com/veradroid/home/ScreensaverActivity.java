@@ -45,9 +45,9 @@ public class ScreensaverActivity extends Activity {
     private TextView modeText, foundText, pageLabel;
     /** 三个放图的地方，和宿主写进两个文件夹的“把屏保图片放这里.txt”说的一样。 */
     static final String WHERE =
-            "图片（jpg / png / webp / bmp / gif，大小写都行，竖图最好）放在这三个地方都行：\n"
-          + "· USB 连电脑：Kobo 盘 → veradroid → screensaver 文件夹\n"
-          + "· Android 里：内部存储 → Screensaver 文件夹（下面的“从内部存储导入…”也放到这里）\n"
+            "图片（jpg / png / webp / bmp / gif，大小写都行，竖图最好）放在下面任一目录都行：\n"
+          + "· USB MTP 电脑直连：VeraDroid/Screensaver 或 Kobo Onboard/.adds/Veradroid-Libra2/screensaver\n"
+          + "· Android 内部存储：Screensaver 文件夹（下面的“从内部存储导入…”也会拷到这里）\n"
           + "· 传书网页：“文件” → Screensaver 文件夹 → 上传\n"
           + "放好后回到这一页就能看到（打开这一页时会把图转成适合这块屏的灰度图）。手机的 HEIC 照片请先转成 JPG。";
     private Blocks.Pager pager;
@@ -173,7 +173,7 @@ public class ScreensaverActivity extends Activity {
             if (l.length < 2 || !isImage(l[0])) continue;
             Item it = new Item("vd/" + l[0], null, l[0] + "（USB）");
             long mb = 0; try { mb = Long.parseLong(l[1]) >> 20; } catch (NumberFormatException e) { }
-            it.why = "太大（" + mb + " MB）：请缩小到 32 MB 以内再放进 veradroid/screensaver";
+            it.why = "太大（" + mb + " MB）：请缩小到 32 MB 以内再放进 .adds/Veradroid-Libra2/screensaver";
             items.add(it); nVd++;
         }
         elsewhere = elsewhere();
@@ -261,7 +261,7 @@ public class ScreensaverActivity extends Activity {
     /** “找到 N 张你的图片”：分开说两个文件夹各几张，一张都没有时说下一步做什么。 */
     static String found(int nSd, int nVd) {
         if (nSd + nVd == 0) return "还没有找到你的图片：按下面任一种方法放进去（现在用 Kobo 自带的屏保）。";
-        return "找到 " + (nSd + nVd) + " 张你的图片（Android 的 Screensaver " + nSd + " 张，USB 的 veradroid/screensaver " + nVd + " 张）。";
+        return "找到 " + (nSd + nVd) + " 张你的图片（内部存储 Screensaver " + nSd + " 张，Kobo 盘 screensaver " + nVd + " 张）。";
     }
 
     private void readChoice() {
@@ -427,7 +427,7 @@ public class ScreensaverActivity extends Activity {
                         if (isFinishing()) return;
                         if (imgs.isEmpty()) {
                             new VeraDialog.Builder(ScreensaverActivity.this).title("导入屏保图片")
-                                .message("没有找到 jpg / png / webp / bmp / gif 图片。用传书网页上传到内部存储，或用 USB 把图片放进 Kobo 的 veradroid/screensaver 文件夹。")
+                                .message("没有找到 jpg / png / webp / bmp / gif 图片。可通过 USB MTP 放入 VeraDroid/Screensaver，或放入 Kobo Onboard/.adds/Veradroid-Libra2/screensaver。")
                                 .positive("知道了", null).show();
                             return;
                         }

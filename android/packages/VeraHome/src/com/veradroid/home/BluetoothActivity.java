@@ -385,7 +385,7 @@ public class BluetoothActivity extends Activity {
         if ("busy".equals(e)) { msg = "宿主正在做另一项蓝牙操作，请稍等再试。"; busy = wasBusy; }
         else if ("off".equals(e)) msg = "蓝牙没有打开：先点上面的“打开蓝牙”。";
         else if ("unsupported".equals(e)) msg = "这台 Kobo 没有蓝牙。";
-        else if ("lipc".equals(e)) msg = "Kobo 的蓝牙服务没有响应，请稍后再试；一直不行就回 Kobo 的设置里关开一次蓝牙。";
+        else if ("lipc".equals(e)) msg = "蓝牙服务启动未响应，请稍后重试；如仍异常可重启系统后再试。";
         else if ("badmac".equals(e)) msg = "设备地址不对。";
         else if ("scan".equals(op)) msg = ok ? "扫描完成：找到 " + devices.size() + " 个设备。没看到设备就让它重新进入配对模式再扫一次。" : "扫描失败。";
         else if ("bond".equals(op)) {
@@ -397,7 +397,7 @@ public class BluetoothActivity extends Activity {
         else if ("connect".equals(op)) msg = ok ? "已连接：" + name : "notpaired".equals(e) ? "还没配对，先点它配对。" : "没连上 " + name + "：按一下翻页器的键唤醒它，再点一次。";
         else if ("disconnect".equals(op)) msg = ok ? "已断开：" + name : "断开超时。";
         else if ("unbond".equals(op)) msg = ok ? "已取消配对：" + name : "取消配对超时，请再试一次。";
-        else if ("power".equals(op)) msg = ok ? ("1".equals(r.get("on")) ? "蓝牙已打开。" : "蓝牙已关闭。") : "蓝牙开关没有响应，请回 Kobo 的设置里试试。";
+        else if ("power".equals(op)) msg = ok ? ("1".equals(r.get("on")) ? "蓝牙已打开。" : "蓝牙已关闭。") : "蓝牙开关没有响应，请稍后再试。";
         else msg = "";
         status.setText(msg);
         HostLink.cmd("status");

@@ -35,7 +35,7 @@ public class StatusBarService extends Service {
     private WindowManager wm;
     private View bar;
     private TextView clock, batt;
-    private Icons.IconView wifiIcon;
+    private Icons.IconView btIcon, wifiIcon;
     private CtlWatch.Listener statusWatch;
     private final Handler handler = new Handler();
     private final Runnable tick = new Runnable() {
@@ -127,6 +127,11 @@ public class StatusBarService extends Service {
             if (!clockText.equals(String.valueOf(clock.getText()))) clock.setText(clockText);
         }
         java.util.Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
+        if (btIcon != null) {
+            boolean btOn = "1".equals(st.get("bton"));
+            int bvis = btOn ? View.VISIBLE : View.GONE;
+            if (btIcon.getVisibility() != bvis) btIcon.setVisibility(bvis);
+        }
         if (wifiIcon != null) {
             String lanip = st.get("lanip");
             boolean wifiOn = "1".equals(st.get("wifi")) && lanip != null && lanip.trim().length() > 0;
@@ -152,7 +157,9 @@ public class StatusBarService extends Service {
             }
             if (p > 100) p = 100;
             boolean usbConn = "1".equals(st.get("usbconn"));
-            String battText = (usbConn ? "USB  " : "") + (p >= 0 ? (charging ? "充电中 " + p + "%" : p + "%") : "");
+            String btAudio = st.get("btaudio");
+            boolean hasAudio = btAudio != null && btAudio.trim().length() > 0;
+            String battText = (hasAudio ? "♪ " : "") + (usbConn ? "USB  " : "") + (p >= 0 ? (charging ? "充电中 " + p + "%" : p + "%") : "");
             if (!battText.equals(String.valueOf(batt.getText()))) batt.setText(battText);
             Stats.sampleBattery(this, p, charging);
         }
@@ -177,6 +184,11 @@ public class StatusBarService extends Service {
         // 每分钟换一次图案，看起来就是“左上角斜着闪”（PW6 真机：每 60 s 一次 24x22 的 DU，就是分钟那一位）。纯黑白的字 DU 刷出来和原图一样。
         for (TextView tv : new TextView[] { clock, batt }) { tv.getPaint().setAntiAlias(false); tv.getPaint().setSubpixelText(false); }
         row.addView(clock, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
+        btIcon = new Icons.IconView(this, Icons.Kind.BLUETOOTH);
+        LinearLayout.LayoutParams btp = new LinearLayout.LayoutParams(dp(13), dp(13));
+        btp.rightMargin = dp(5);
+        btIcon.setVisibility(View.GONE);
+        row.addView(btIcon, btp);
         wifiIcon = new Icons.IconView(this, Icons.Kind.WIFI);
         LinearLayout.LayoutParams wp = new LinearLayout.LayoutParams(dp(13), dp(13));
         wp.rightMargin = dp(6);

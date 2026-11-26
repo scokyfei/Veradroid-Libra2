@@ -34,21 +34,6 @@ ns_pids() {
 # slirp4netns（namespace 模式才有；chroot 模式走宿主网络）在 Android 冻结期间也停下：容器里开着的 TCP 连接让它每 0.5 秒醒一次。
 net_pause()  { sp=$(cat $W/slirp.pid 2>/dev/null); [ -n "$sp" ] && kill -STOP "$sp" 2>/dev/null; return 0; }
 net_resume() { sp=$(cat $W/slirp.pid 2>/dev/null); [ -n "$sp" ] && kill -CONT "$sp" 2>/dev/null; return 0; }
-# 锁屏超过 SAVER_EXIT_H 小时（默认 0 = 不退出）：醒来时不解冻，直接停掉 Android 回到 Kindle。只在醒来那一刻看（sleep.sh 记的墙上时间），不为此定时唤醒。
-saver_exit_check() {
-    settings_load 2>/dev/null
-    h=${SAVER_EXIT_H:-0}
-    case "$h" in ''|*[!0-9]*) return 0 ;; esac
-    [ "$h" -gt 0 ] && [ -f $W/saver_frozen ] || return 0
-    s0=$(cat $W/saver.t0 2>/dev/null); now=$(date +%s)
-    case "$s0" in ''|*[!0-9]*) return 0 ;; esac
-    [ $((now - s0)) -ge $((h * 3600)) ] || return 0
-    t "screensaver: android was frozen for $(((now - s0) / 60)) min (SAVER_EXIT_H=$h): exiting android instead of thawing"
-    rm -f $W/saver.t0
-    type log_release >/dev/null 2>&1 && log_release
-    VD_STOP_REASON=saver-exit sh $VD/boot/stop.sh >/dev/null 2>&1
-    exit 0
-}
 # 触摸前端（veradroid-input）：Android 里所有按下的触点都抬起。冻结前 / 解冻前各发一次：冻结期间或之前
 # 被手势吞掉的触摸不会在解冻后变成永远按着的触点。写 inject FIFO 用 1<>：没人读也不会阻塞；veradroid-input 没在跑就不写。
 vinput_reset() {
@@ -91,41 +76,6 @@ android_thaw() {
     echo THAWED > $FZ/freezer.state
     wd_release_later
 }
-# 屏保醒来（KINDLE_UI=freeze）：先放应用、过 $1 秒再放 system_server。冻结时 Kindle 的框架也留在内存里，换出去的多，应用解冻后要
-# 好几秒才把页面换回来；system_server 一起醒的话，冻结前就在路上（或冻结期间到点）的 TIME_TICK 前台广播 10 秒超时，
-# 微信读书被判 ANR、hide_error_dialogs 下直接杀掉（PW4 模拟器 3/3，docs/legacy-perf.md）。system_server 晚几秒醒，
-# 这段时间应用自己把冻结前收到的广播处理完、页换回来，它的超时检查也还没跑。
-android_thaw_staged() {
-    dl=${1:-3}
-    vinput_reset thaw
-    cpu_gov_restore 2>/dev/null || true
-    net_resume
-    freezer_setup || return 1
-    ss=$(for p in $(ns_pids); do [ "$(cat /proc/$p/comm 2>/dev/null)" = system_server ] && { echo $p; break; }; done)
-    [ -n "$ss" ] || { android_thaw; return; }
-    if fz_signal; then
-        kill -CONT $(ns_pids | grep -vx "$ss") 2>/dev/null
-        sleep $dl
-        kill -CONT $ss 2>/dev/null
-        echo THAWED > $FZ/state
-        t "thaw: apps first, system_server ${dl}s later"
-        return 0
-    fi
-    case "$(cat $FZ/freezer.state 2>/dev/null)" in FROZEN|FREEZING) ;; *) android_thaw; return ;; esac
-    wd_hold
-    mkdir $FZ/ss 2>/dev/null && echo FROZEN > $FZ/ss/freezer.state 2>/dev/null || { rmdir $FZ/ss 2>/dev/null; android_thaw; return; }
-    held=" $(cat $FZ/wd/tasks 2>/dev/null | tr '\n' ' ') "
-    for d in /proc/$ss/task/*; do
-        case "$held" in *" ${d##*/} "*) continue ;; esac
-        echo ${d##*/} > $FZ/ss/tasks 2>/dev/null
-    done
-    echo THAWED > $FZ/freezer.state
-    sleep $dl
-    for x in $(cat $FZ/ss/tasks 2>/dev/null); do echo $x > $FZ/tasks 2>/dev/null; done
-    echo THAWED > $FZ/ss/freezer.state 2>/dev/null; rmdir $FZ/ss 2>/dev/null
-    t "thaw: apps first, system_server ${dl}s later"
-    wd_release_later
-}
 # BH081-5：冻结期间 CLOCK_MONOTONIC 照走。system_server 的 Watchdog 线程一解冻就看到“检查已发出 >60 秒还没完成”，
 # 判 OVERDUE 直接杀 system_server（“WATCHDOG KILLING SYSTEM PROCESS: Blocked in handler on ActivityManager”），
 # Android 软重启：返回 Kindle 超过 1 分钟再打开，应用全没了、要重新开机 2–6 分钟。
@@ -165,7 +115,6 @@ wd_release_later() {
 }
 freezer_cleanup() {
     wd_release 2>/dev/null
-    [ -d $FZ/ss ] && { for x in $(cat $FZ/ss/tasks 2>/dev/null); do echo $x > $FZ/tasks 2>/dev/null; done; echo THAWED > $FZ/ss/freezer.state 2>/dev/null; rmdir $FZ/ss 2>/dev/null; }
     if fz_signal; then
         [ -d $FZ ] && { android_thaw 2>/dev/null; rm -f $FZ/state; rmdir $FZ 2>/dev/null; }
     else

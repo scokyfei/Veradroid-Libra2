@@ -1065,7 +1065,7 @@ public class HomeActivity extends Activity {
         }
         if (row != null) for (int k = (to - from) % c; k != 0 && k < c; k++) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
         if (apps.isEmpty() && gridPage == 0) {
-            TextView empty = text("还没有安装其他应用。\n\n点右上角菜单里的“传书”，或把 APK 放进 veradroid/apps。\n\n软件商店在左上角。", 16, false);
+            TextView empty = text("还没有安装其他应用。\n\n通过 USB MTP 或网页传书把 APK 放进 Download 或 .adds/Veradroid-Libra2/apps。\n\n软件商店在左上角。", 16, false);
             empty.setGravity(Gravity.CENTER);
             empty.setPadding(dp(32), dp(24), dp(32), 0);
             gridHolder.addView(empty);
@@ -1344,16 +1344,20 @@ public class HomeActivity extends Activity {
         boolean chg = live != null ? (live[1] == 1) : "1".equals(st.get("charging"));
         String lanip = st.get("lanip");
         boolean wifiConnected = "1".equals(st.get("wifi")) && lanip != null && lanip.trim().length() > 0;
+        boolean btOn = "1".equals(st.get("bton"));
+        String btAudio = st.get("btaudio");
+        boolean hasBtAudio = btAudio != null && btAudio.trim().length() > 0;
         boolean usbConn = "1".equals(st.get("usbconn"));
         StringBuilder batSb = new StringBuilder();
+        if (hasBtAudio) batSb.append("♪  ");
         if (usbConn) batSb.append("USB  ");
         if (batStr != null) {
             if (chg) batSb.append("充电中 ");
             batSb.append(batStr).append("%");
         }
         String batOnly = batSb.toString();
-        String state = (!wifiConnected ? "Wi-Fi 关   " : "") + batOnly;
-        if (blocks != null) blocks.refreshStatus(Ui.clock(this), batOnly, wifiConnected);
+        String state = (btOn ? "蓝牙  " : "") + (!wifiConnected ? "Wi-Fi 关   " : "") + batOnly;
+        if (blocks != null) blocks.refreshStatus(Ui.clock(this), batOnly, wifiConnected, btOn);
         for (int i = 0; i < 2; i++) {
             if (clockViews[i] != null && !clock.equals(String.valueOf(clockViews[i].getText()))) clockViews[i].setText(clock);
             if (stateViews[i] != null && !state.equals(String.valueOf(stateViews[i].getText()))) stateViews[i].setText(state);
@@ -2133,9 +2137,11 @@ public class HomeActivity extends Activity {
                 @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, TransferActivity.class)); }
             });
             localChoice(list, "文字与图标大小", "桌面和设置页的大小，不影响其他应用。", "size", SIZES, 0, 1);
-            action(list, "显示与刷新", "显示档位（流畅 / 均衡 / 画质），局部刷新、整页刷新、夜间与残影。", "打开", new View.OnClickListener() {
-                @Override public void onClick(View v) { HostSettingsActivity.open(HomeActivity.this, "display"); }
-            });
+            if (!HostLink.isKobo()) {
+                action(list, "显示与刷新", "显示档位（流畅 / 均衡 / 画质），局部刷新、整页刷新、夜间与残影。", "打开", new View.OnClickListener() {
+                    @Override public void onClick(View v) { HostSettingsActivity.open(HomeActivity.this, "display"); }
+                });
+            }
             section(list, "刷新");
             hostChoice(list, host, "刷新方式", "屏幕上只有一小块变化时（点按钮、翻列表）用的刷新方式。均衡：反应快，残影少；灰度最准：颜色最准，稍慢；最快：只有黑白，最灵敏，残影多。",
                 "KFB_MODE", MODE_L, MODE_V, "0");
@@ -2313,12 +2319,10 @@ public class HomeActivity extends Activity {
                     hostChoice(list, host, "插上 USB 线时询问", "Android 在前台时插上数据线：问要不要切到 USB 传输（退回 Kobo，电脑上就能看到 Kobo 盘）。"
                         + "只用充电器充电、不想被问就选“不询问”。", "USB_ASK", new String[] { "询问", "不询问" }, new String[] { "1", "0" }, "1");
                     hostChoice(list, host, "回到 Kobo 的方式", "挂起：系统暂停在后台，再打开几秒就回到现在的界面，但 Kobo 可用内存会少一些。关闭：系统完全退出，内存全部还给 Kobo。", "RETURN_MODE", RETURN_L, RETURN_V, "freeze");
+                    action(list, "系统与性能", "Wi-Fi 省电、小内存模式、Kobo 界面怎么处置、应用预编译（进度和“全部优化”）。", "打开", new View.OnClickListener() {
+                        @Override public void onClick(View v) { HostSettingsActivity.open(HomeActivity.this, "system"); }
+                    });
                 }
-                action(list, "系统与性能", kobo
-                        ? "应用预编译（进度和“立即优化”）。"
-                        : "Wi-Fi 省电、小内存模式、Kobo 界面怎么处置、应用预编译（进度和“全部优化”）。", "打开", new View.OnClickListener() {
-                    @Override public void onClick(View v) { HostSettingsActivity.open(HomeActivity.this, "system"); }
-                });
                 action(list, "锁屏密码", "开机和从 Kobo 屏保醒来时要输入 4–6 位数字密码。忘了可以用 USB 重置。", "设置", new View.OnClickListener() {
                     @Override public void onClick(View v) { startActivity(new Intent(HomeActivity.this, LockSettingsActivity.class)); }
                 });
@@ -2424,8 +2428,21 @@ public class HomeActivity extends Activity {
         list.addView(Ui.rule(this, 1, Color.BLACK));
     }
 
-    /** 设置页右上角的菜单（Kobo 设置页的三点菜单：更新、设备信息、重启）。 */
+    /** 设置页右上角的菜单（Kobo 设置页的三点菜单：设备信息、重启）。 */
     private void settingsMenu() {
+        if (HostLink.isKobo()) {
+            new VeraDialog.Builder(this).items(new String[] { "设备信息", "重启系统", "回到 Kobo", "关机…" }, new VeraDialog.OnPick() {
+                @Override public void onPick(int which) {
+                    switch (which) {
+                    case 0: tab = CAT_ABOUT; showSettings(); changed(); break;
+                    case 1: confirm("重启系统？", "正在运行的应用会被关闭。", new Runnable() { @Override public void run() { HostLink.cmd("restart"); } }); break;
+                    case 2: HostLink.cmd("exit"); break;
+                    default: powerMenu(); break;
+                    }
+                }
+            }).show();
+            return;
+        }
         new VeraDialog.Builder(this).items(new String[] { "检查系统更新", "设备信息", "重启系统", "回到 Kobo", "关机…" }, new VeraDialog.OnPick() {
             @Override public void onPick(int which) {
                 switch (which) {

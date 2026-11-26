@@ -309,7 +309,7 @@ img.shot{max-width:100%;max-height:75vh;border-radius:10px;border:1px solid var(
   <div class="scroll"><table class="t" id="ptab"></table></div></div>
  <div class="card"><div class="h"><svg class="i" data-i="tablet"></svg>Kobo 这边<span class="badge">只读</span><span class="sp"></span><span id="hostSum"></span></div>
   <div class="scroll"><table class="t" id="htab"></table></div>
-  <p class="sub">“已暂停”是正常的：Android 在前台时 Kobo 界面的窗口管理器被暂停，回到 Kobo 时恢复。</p></div>
+  <p class="sub">Android 运行期间 Kobo 原系统界面会暂停或退出以释放内存，返回 Kobo 时自动恢复。</p></div>
 </section>
 
 <!-- ================================================================ 日志 -->
@@ -330,15 +330,15 @@ img.shot{max-width:100%;max-height:75vh;border-radius:10px;border:1px solid var(
  <div class="grid">
   <div class="card"><div class="h"><svg class="i" data-i="terminal"></svg>SSH 诊断<span class="sp"></span><span id="sshBadge"></span></div>
    <div id="sshState"><div class="skel"></div><div class="skel"></div></div>
-   <div class="btns" style="margin-top:12px"><button class="btn pri" id="sshStart">打开 SSH</button><button class="btn" id="sshStop">关闭 SSH</button></div>
-   <div class="note">SSH 登录进去就是 Kobo 的 root。<b>只认你自己的公钥</b>，没有密码登录；用完请关（开着时 Kobo 不进屏保）；重启 Kobo 后自动关闭。需要先把 SSH 诊断包（VeraDroid-SSH 文件夹）拷进 Kobo 的 documents。</div></div>
-  <div class="card"><div class="h"><svg class="i" data-i="key"></svg>允许登录的公钥</div><div id="sshKeys" class="list"></div>
+   <div class="btns" id="sshBtns" style="margin-top:12px"><button class="btn pri" id="sshStart">打开 SSH</button><button class="btn" id="sshStop">关闭 SSH</button></div>
+   <div class="note" id="sshNote">SSH 登录进去就是 Kobo 的 root。<b>只认你自己的公钥</b>，没有密码登录；用完请关（开着时 Kobo 不进屏保）；重启 Kobo 后自动关闭。需要先把 SSH 诊断包（VeraDroid-SSH 文件夹）拷进 Kobo 的 documents。</div></div>
+  <div class="card" id="sshKeyCard"><div class="h"><svg class="i" data-i="key"></svg>允许登录的公钥</div><div id="sshKeys" class="list"></div>
    <p class="sub">添加你自己的公钥：电脑上 <code>~/.ssh/id_ed25519.pub</code> 那一整行。<b>不要</b>贴私钥。改了公钥要关掉 SSH 再打开才生效。</p>
    <textarea id="sshKey" rows="3" placeholder="ssh-ed25519 AAAAC3Nza… you@computer"></textarea>
    <div class="btns" style="margin-top:8px"><button class="btn sm" id="sshKeyPick">从 .pub 文件读取</button><input type="file" id="sshKeyFile" accept=".pub,text/plain" hidden>
     <input type="password" id="sshPin" inputmode="numeric" maxlength="4" placeholder="再输一次 PIN" style="width:130px"><button class="btn sm pri" id="sshAdd">添加公钥</button></div></div>
  </div>
- <div class="grid">
+ <div class="grid" id="adbGrid">
   <div class="card"><div class="h"><svg class="i" data-i="terminal"></svg>无线调试（adb）<span class="sp"></span><span id="adbBadge"></span></div>
    <div id="adbState"><div class="skel"></div></div>
    <div class="btns" style="margin-top:12px"><select id="adbMin"><option value="15">15 分钟</option><option value="30" selected>30 分钟</option><option value="60">1 小时</option><option value="120">2 小时</option></select>
@@ -350,7 +350,7 @@ img.shot{max-width:100%;max-height:75vh;border-radius:10px;border:1px solid var(
    <div class="btns" style="margin-top:8px"><button class="btn sm" id="adbKeyPick">从 adbkey.pub 读取</button><input type="file" id="adbKeyFile" accept=".pub,text/plain" hidden>
     <input type="password" id="adbKeyPin" inputmode="numeric" maxlength="4" placeholder="再输一次 PIN" style="width:130px"><button class="btn sm pri" id="adbAdd">添加公钥</button></div></div>
  </div>
- <div class="card"><div class="h"><svg class="i" data-i="send"></svg>诊断日志</div><p class="sub">把 VeraDroid 的日志和系统状态打包上传到 VeraDroid 服务器，反馈问题时告诉我们编号。不含书和账号密码。</p>
+ <div class="card"><div class="h"><svg class="i" data-i="send"></svg>诊断日志</div><p class="sub" id="diagDesc">把 VeraDroid 的日志和系统状态打包上传到 VeraDroid 服务器，反馈问题时告诉我们编号。不含书和账号密码。</p>
   <div class="btns"><button class="btn pri" id="diagBtn">上传诊断日志</button><span id="diagSt" class="sub"></span><span class="sp" style="flex:1"></span><button class="btn sm" data-go="log">查看日志</button></div></div>
 </section>
 
@@ -362,9 +362,9 @@ img.shot{max-width:100%;max-height:75vh;border-radius:10px;border:1px solid var(
    <button class="btn sm pri" id="shotBtn">截取当前屏幕</button><button class="btn sm" id="clearBtn">清除残影</button><a class="btn sm" id="shotSave" hidden download="kobo-screen.png"><svg class="i" data-i="download"></svg>PNG</a></div>
    <div id="shotBox" class="empty"><svg class="i" data-i="camera"></svg>点“截取当前屏幕”看看 Kobo 上现在显示的是什么</div></div>
   <div class="card"><div class="h"><svg class="i" data-i="sun"></svg>显示<span class="sp"></span><span class="sub">和下拉面板同步，立即生效</span></div><div id="dispSets"><div class="skel"></div><div class="skel"></div></div></div>
-  <div class="card"><div class="h"><svg class="i" data-i="refresh"></svg>更新</div><div id="updSets"></div>
-   <div class="btns" style="margin-top:10px"><button class="btn sm" id="updBtn">检查更新</button></div><div id="updInfo" class="sub" style="margin-top:8px"></div>
-   <p class="sub">这里只查看服务器上的版本，不会下载安装。</p></div>
+  <div class="card"><div class="h"><svg class="i" data-i="refresh"></svg><span id="updTitle">更新</span></div><div id="updSets"></div>
+   <div class="btns" id="updBtns" style="margin-top:10px"><button class="btn sm" id="updBtn">检查更新</button></div><div id="updInfo" class="sub" style="margin-top:8px"></div>
+   <p class="sub" id="updNote">这里只查看服务器上的版本，不会下载安装。</p></div>
   <div class="card" id="lightCard" hidden><div class="h"><svg class="i" data-i="sun"></svg>前光</div><div id="lightSets"></div></div>
   <div class="card"><div class="h"><svg class="i" data-i="clipboard"></svg>发送文字到 Kobo</div><p class="sub">放进 Android 的剪贴板，在应用里长按输入框“粘贴”。</p>
    <textarea id="clip" rows="3" placeholder="网址、验证码、一段话…"></textarea><div class="btns" style="margin-top:8px"><button class="btn pri sm" id="clipBtn">发送</button></div></div>
@@ -513,8 +513,17 @@ function show(t){if(!$('s-'+t))t='ov';cur=t;var secs=document.querySelectorAll('
  try{history.replaceState(null,'','#'+t)}catch(e){}
  stopTimers();every('tasks',3000,pollTasks);
  ({ov:function(){loadOv();every('ov',8000,loadOv)},files:function(){fsOpen(FS.root,FS.path)},apps:function(){loadApps();loadCompile();every('comp',4000,loadCompile)},
-   run:function(){loadRun();every('run',5000,function(){if($('runAuto').checked)loadRun()})},log:function(){loadLog()},ssh:function(){loadSsh();loadAdb()},bt:loadBt,storage:loadStorage,sys:loadSys,theme:loadTheme,up:pollTasks}[t]||function(){})();
+   run:function(){loadRun();every('run',5000,function(){if($('runAuto').checked)loadRun()})},log:function(){loadLog()},ssh:function(){loadSsh();if(!IS_KOBO)loadAdb()},bt:loadBt,storage:loadStorage,sys:loadSys,theme:loadTheme,up:pollTasks}[t]||function(){})();
  window.scrollTo(0,0)}
+var IS_KOBO=false,KOBO_APPLIED=false;
+function setKobo(v){if(!v)return;IS_KOBO=true;if(KOBO_APPLIED)return;KOBO_APPLIED=true;
+ var ag=$('adbGrid');if(ag)ag.hidden=true;
+ var sk=$('sshKeyCard');if(sk)sk.hidden=true;
+ var sb=$('sshBtns');if(sb)sb.hidden=true;
+ var sn=$('sshNote');if(sn)sn.innerHTML='Kobo Libra 2 由系统内置 Dropbear 提供 SSH（端口 <code>2222</code>），无需额外安装诊断包；有 SSH 会话或充电期间会自动关闭 Wi-Fi 省电防止断线。';
+ var dd=$('diagDesc');if(dd)dd.textContent='将系统日志、Wi-Fi 省电、蓝牙、音频、内核及 Android logcat 打包为 .tar.gz（同时保存到 Kobo 盘根目录），可直接下载到电脑排查问题。不含书和账号密码。';
+ var db=$('diagBtn');if(db)db.textContent='导出并下载诊断包';
+ var lw=$('logWhich');if(lw){var curW=lw.value;lw.innerHTML='<option value="main">VeraDroid 运行日志</option><option value="localupdate">离线升级日志</option><option value="bt">蓝牙与音频日志</option><option value="usb">USB MTP 日志</option><option value="epd">显示桥日志</option><option value="fsck">系统盘检查日志</option><option value="resize">存储扩容日志</option><option value="stop">退出与卸载日志</option>';if(lw.querySelector('option[value="'+curW+'"]'))lw.value=curW}}
 function applyTheme(){var m=localStorage.getItem('vd-theme')||'';if(m)document.documentElement.setAttribute('data-theme',m);else document.documentElement.removeAttribute('data-theme');
  var dark=m==='dark'||(!m&&matchMedia('(prefers-color-scheme: dark)').matches);$('themeBtn').innerHTML=svg(dark?'sun':'moon')+'<span>'+(m?(dark?'深色（手动）':'浅色（手动）'):'跟随系统')+'</span>'}
 $('themeBtn').onclick=function(){var m=localStorage.getItem('vd-theme')||'';try{localStorage.setItem('vd-theme',m===''?'dark':m==='dark'?'light':'')}catch(e){}applyTheme()};
@@ -535,18 +544,27 @@ function chip(cls,icon,text,title){return '<span class="badge '+cls+'"'+(title?'
 /* =================================================================== 概览 */
 var OV={};
 function loadOv(){api('/api/overview').then(function(j){OV=j;var h=j.hostinfo||{},st=j.status||{},m=j.mem||{};
+ setKobo(j.kobo||h.kobo==='1'||st.imageclass==='kobo-libra2');
  $('ovUpd').textContent=!j.hostBusy?'刚刚更新':j.host?'宿主正忙，先显示 '+(j.hostAge||0)+' 秒前的信息，稍后自动刷新':'宿主正忙（可能刚开机），稍后自动刷新…';
  setHTML('ovDev',kv([['机型',h.model||''],['Kobo 固件',(h.firmware||'').replace(/\s*\(.*\)$/,'')],['VeraDroid',h.vdversion||''],['桌面应用',j.home||''],['Android',j.android?j.android+' · '+j.abi:''],['内核',h.kernel||'']]));
  var s='';s+=chip(h.frozen==='1'?'warn':'ok','',h.frozen==='1'?'Android 已冻结':'Android 运行中');
  s+=chip(h.fwpaused==='1'?'acc':'','',h.fwpaused==='1'?'Kobo 界面已暂停':'Kobo 界面运行中');
- s+=chip(j.sshRunning?'warn':'','terminal',j.sshRunning?'SSH 开着':'SSH 关闭');
- s+=chip(h.autoupdate==='0'?'':'ok','refresh',h.autoupdate==='0'?'自动更新关':'自动更新开');
+ s+=chip(j.sshRunning?'warn':'','terminal',j.sshRunning?'SSH 运行中':'SSH 关闭');
+ if(IS_KOBO){
+  s+=chip(st.usbconn==='1'?'ok':st.usbmtp==='1'?'acc':'','drive',st.usbconn==='1'?'USB MTP 已连电脑':st.usbmtp==='1'?'USB MTP 就绪':'USB MTP 关');
+  if(st.btaudio)s+=chip('ok','bluetooth','蓝牙音频：'+st.btaudio);
+  else if(st.bton==='1')s+=chip('acc','bluetooth','蓝牙开');
+ }else{
+  s+=chip(h.autoupdate==='0'?'':'ok','refresh',h.autoupdate==='0'?'自动更新关':'自动更新开');
+ }
  if(h.mode==='chroot')s+=chip('','', 'chroot 模式');
  setHTML('ovState',s);
  setHTML('ovTimes',kv([['Kobo 已开机',dur(h.uptime||j.uptime)],['Android 已运行',h.androidup?dur(h.androidup):'']]));
  var bat=+st.battery;donut($('dBat'),bat,isNaN(bat)?'—':bat+'%',bat<15?'var(--err)':bat<30?'var(--warn)':'var(--ok)');
  var ssid='';(j.wifiList||'').split('\n').forEach(function(l){if(l.charAt(0)==='*')ssid=l.slice(1)});
- setHTML('ovNet',kv([['电量',isNaN(bat)?'—':bat+'%'+(st.charging==='1'?'（充电中）':'')],['Wi-Fi',st.wifi==='0'?'关闭':'开启'+(ssid?' · '+ssid:'')],['IP 地址',st.lanip||location.hostname],['前光',st.haslight==='1'?st.light+' / '+st.lightmax:''],['自动休眠',st.hassleeptime==='1'&&st.sleep?Math.round(st.sleep/60)+' 分钟':'']]));
+ var netRows=[['电量',isNaN(bat)?'—':bat+'%'+(st.charging==='1'?'（充电中）':'')],['Wi-Fi',st.wifi==='0'?'关闭':'开启'+(ssid?' · '+ssid:'')],['IP 地址',st.lanip||location.hostname],['前光',st.haslight==='1'?st.light+' / '+st.lightmax:''],['自动休眠',st.hassleeptime==='1'?(st.sleep==='0'?'永不':st.sleep?Math.round(st.sleep/60)+' 分钟':''):'']];
+ if(IS_KOBO){netRows.push(['USB MTP',st.usbconn==='1'?'已连接电脑':st.usbmtp==='1'?'已就绪':'已关闭']);netRows.push(['蓝牙',st.btaudio?'已连音频：'+st.btaudio:st.bton==='1'?'已打开':'已关闭'])}
+ setHTML('ovNet',kv(netRows));
  var mt=m.MemTotal||0,ma=m.MemAvailable||0,su=(m.SwapTotal||0)-(m.SwapFree||0);donut($('dMem'),pct(mt-ma,mt));
  setHTML('lgMem','<span class="t">已用 '+fmtK(mt-ma)+'</span><span class="sub">共 '+fmtK(mt)+' · 可用 '+fmtK(ma)+'</span>'+(m.SwapTotal?'<span class="sub">交换区 '+fmtK(su)+' / '+fmtK(m.SwapTotal)+'</span>':''));
  setHTML('ovCpu','<div class="btns" style="justify-content:space-between"><span>CPU（'+j.ncpu+' 核）</span><span class="sub">'+(j.cpu!=null?j.cpu+'%':'')+' · 负载 '+esc((j.load||'').split(' ').slice(0,3).join(' '))+'</span></div>'+meter(j.cpu||0));
@@ -915,7 +933,7 @@ function renderRun(){var j=PROCS;if(!j)return;var mt=j.memTotal||0,ma=j.memAvail
  $('ptab').innerHTML=h+'</tbody>';
  setHTML('hostSum',j.host?chip(j.frozen?'warn':'ok','',j.frozen?'Android 已冻结':'Android 运行中'+(j.androidup?' '+dur(j.androidup):''))+' '+chip(j.fwpaused?'acc':'','',j.fwpaused?'Kobo 界面已暂停':'Kobo 界面运行中'):chip('err','','宿主没有回应'));
  var hh='<thead><tr><th>进程</th><th class="r">PID</th><th class="r">内存 (RSS)</th><th>状态</th></tr></thead><tbody>';
- var NM={'veradroid-epd':'显示桥（把 Android 画面送到墨水屏）','veradroid-input':'触摸 / 手势','slirp4netns':'Android 的网络',vdshutwatch:'关机保护',cmd:'命令监听（脚本）',watchdog:'看门狗（脚本）',sleep:'休眠监视（脚本）',autoupdate:'自动更新（脚本）',boot:'开机进度（脚本）',shutw:'关机钩子',awesome:'Kobo 窗口管理器',cvm:'Kobo 界面（Java）',dropbear:'SSH 服务'};
+ var NM={'veradroid-epd':'显示桥（把 Android 画面送到墨水屏）','veradroid-input':'触摸 / 实体翻页键 / 手势','umtprd':'USB MTP 存储直连服务','vdbtkeys':'蓝牙翻页器按键桥','bluetoothd':'BlueZ 蓝牙协议栈','bluealsa':'蓝牙 A2DP 音频桥','rtk_hciattach':'RTL8723DS 蓝牙串口驱动','vdloopdio':'系统镜像页缓存去重','pivot_init':'容器 init 引导','wpa_supplicant':'Wi-Fi 无线连接服务','nickel':'Kobo 原生系统界面','sickel':'Kobo 看门狗','hindenburg':'Kobo 后台服务','luajit':'KOReader 阅读器','slirp4netns':'Android 的网络',vdshutwatch:'关机保护',cmd:'命令监听（脚本）',watchdog:'看门狗（脚本）',sleep:'休眠与深睡监视（脚本）',dedup:'缓存去重循环（脚本）',autoupdate:'自动更新（脚本）',boot:'开机进度（脚本）',shutw:'关机钩子',awesome:'窗口管理器',cvm:'系统框架',dropbear:'SSH 服务 (:2222)'};
  (j.hostprocs||[]).forEach(function(p){hh+='<tr><td>'+esc(p.name)+(NM[p.name]?'<div class="sub">'+NM[p.name]+'</div>':'')+'</td><td class="r">'+esc(p.pid)+'</td><td class="r">'+fmtK(+p.rss)+'</td><td>'+stBadge(p.state)+'</td></tr>'});
  $('htab').innerHTML=hh+'</tbody>'}
 $('ptab').onclick=function(e){var th=e.target.closest('th[data-k]');if(th){var k=th.getAttribute('data-k');if(PSORT.k===k)PSORT.asc=!PSORT.asc;else{PSORT.k=k;PSORT.asc=k==='name'}renderRun();return}
@@ -938,9 +956,12 @@ function renderLog(){var pre=$('logText'),atBottom=pre.scrollHeight-pre.scrollTo
 
 /* =================================================================== SSH */
 function sshRender(j){var on=j.running==='1';
+ if(j.kobo==='1')setKobo(true);
  setHTML('sshBadge',j.ok===false&&!j.running?chip('err','',j.msg||'失败'):on?chip('warn','','运行中'):chip('','','关闭'));
- var s='<dl class="kv">'+kv([['地址',j.ip?j.ip+' : '+(j.port||2222):'（没有 Wi-Fi 地址）'],['连接命令',on&&j.ip?'<code>ssh -p '+esc(j.port||2222)+' root@'+esc(j.ip)+'</code> <button class="btn sm ghost" data-copy="ssh -p '+esc(j.port||2222)+' root@'+esc(j.ip)+'">'+svg('copy')+'</button>':'',1],
-  ['主机密钥',j.hostkeytype?esc(j.hostkeytype)+(j.fingerprint?'<br><code>'+esc(j.fingerprint)+'</code>':''):'（第一次打开时在 Kobo 上生成）',1],['诊断包',j.script==='1'?chip('ok','check','已在 Kobo 上'):chip('err','x','没找到 documents/VeraDroid-SSH'),1],['最近一条记录',j.last||'']])+'</dl>';
+ var rows=[['地址',j.ip?j.ip+' : '+(j.port||2222):'（没有 Wi-Fi 地址）'],['连接命令',on&&j.ip?'<code>ssh -p '+esc(j.port||2222)+' root@'+esc(j.ip)+'</code> <button class="btn sm ghost" data-copy="ssh -p '+esc(j.port||2222)+' root@'+esc(j.ip)+'">'+svg('copy')+'</button>':'',1]];
+ if(!IS_KOBO){rows.push(['主机密钥',j.hostkeytype?esc(j.hostkeytype)+(j.fingerprint?'<br><code>'+esc(j.fingerprint)+'</code>':''):'（第一次打开时在 Kobo 上生成）',1]);rows.push(['诊断包',j.script==='1'?chip('ok','check','已在 Kobo 上'):chip('err','x','没找到 documents/VeraDroid-SSH'),1])}
+ rows.push(['最近一条记录',j.last||'']);
+ var s='<dl class="kv">'+kv(rows)+'</dl>';
  if(j.ok===false&&j.msg)s='<div class="note err">'+esc(j.msg)+'</div>'+s;
  if(j.out)s+='<pre class="pre" style="margin-top:10px;max-height:140px;overflow:auto">'+esc(j.out)+'</pre>';
  setHTML('sshState',s);$('sshStart').disabled=on||j.script!=='1';$('sshStop').disabled=!on;
@@ -981,7 +1002,16 @@ $('adbAdd').onclick=function(){var k=$('adbKey').value.trim();if(!k){toast('先�
  if(!$('adbKeyPin').value){toast('为了安全，添加公钥前要再输一次 Kobo 上的 PIN','err');$('adbKeyPin').focus();return}
  post('/api/adb/key',{key:k,pin:$('adbKeyPin').value}).then(function(j){$('adbKeyPin').value='';if(j.ok){$('adbKey').value='';toast(j.msg==='exists'?'这把公钥已经在里面了':'公钥已添加','ok');adbRender(j)}else toast(j.msg||'失败','err')})};
 $('adbKeys').onclick=function(e){var n=e.target.getAttribute('data-adel');if(!n)return;confirmBox('删除这把公钥？','这台电脑以后就连不上无线调试了。','删除',true).then(function(ok){if(ok)post('/api/adb/keydel',{n:+n}).then(function(j){if(!j.ok)toast(j.msg||'失败','err');adbRender(j)})})};
-$('diagBtn').onclick=function(){confirmBox('上传诊断日志？','把 VeraDroid 的日志和系统状态上传到 VeraDroid 服务器（不含你的书和账号密码）。','上传').then(function(ok){if(!ok)return;var b=$('diagBtn');b.disabled=true;$('diagSt').innerHTML='<span class="spin"></span> 正在收集并上传，要一两分钟…';
+$('diagBtn').onclick=function(){
+ if(IS_KOBO){
+  var b=$('diagBtn');b.disabled=true;$('diagSt').innerHTML='<span class="spin"></span> 正在打包诊断日志…';
+  post('/api/diag/export',{}).then(function(){var n=0;every('diag',1000,function(){if(++n>35){clearInterval(timers.diag);b.disabled=false;$('diagSt').textContent='打包超时，请稍后重试';return}
+   api('/api/diag/export').then(function(r){if(r.ready){clearInterval(timers.diag);b.disabled=false;
+    if(r.ok==='1'){var dl='/api/diag/download?t='+Date.now();$('diagSt').innerHTML=chip('ok','check','已打包')+' <code>'+esc(r.file||'veradroid-diag.tar.gz')+'</code>（'+esc(r.size_kb||'?')+' KB） <a class="btn sm pri" href="'+dl+'">'+svg('download')+'下载</a>';location.href=dl}
+    else $('diagSt').innerHTML=chip('err','x','导出失败')+' '+esc(r.error||'')}})})}).catch(function(){b.disabled=false;$('diagSt').textContent='请求失败'});
+  return;
+ }
+ confirmBox('上传诊断日志？','把 VeraDroid 的日志和系统状态上传到 VeraDroid 服务器（不含你的书和账号密码）。','上传').then(function(ok){if(!ok)return;var b=$('diagBtn');b.disabled=true;$('diagSt').innerHTML='<span class="spin"></span> 正在收集并上传，要一两分钟…';
  post('/api/diag/upload').then(function(j){var since=j.since||Date.now(),n=0;every('diag',2000,function(){if(++n>90){clearInterval(timers.diag);b.disabled=false;$('diagSt').textContent='超时了，稍后再看看';return}
   api('/api/diag/result').then(function(r){if(r.time>=since-2000&&r.r_ok!=null){clearInterval(timers.diag);b.disabled=false;
    $('diagSt').innerHTML=r.r_ok==='1'?chip('ok','check','已上传')+' 编号 <code>'+esc(r.r_id)+'</code> <button class="btn sm ghost" data-copy="'+esc(r.r_id)+'">'+svg('copy')+'</button>':chip('err','x','上传失败')+' '+esc(r.r_error||'')}})})})})};
@@ -991,10 +1021,26 @@ var DISP=[['KFB_MODE','刷新方式','画面变化时的刷新波形',[['0','均
  ['KFB_FLASH','整屏刷新','每翻几页闪一下清残影',[['0','不按页数'],['1','每页'],['3','3 页'],['6','6 页'],['8','8 页']]],['KFB_ANIM_MODE','翻页动画','',[['0','关'],['1','开']]],['KFB_INVERT','反色','黑底白字',[['0','关'],['1','开']]]];
 var SETS={};
 function loadSys(){api('/api/sys/settings').then(function(j){SETS=j.settings||{};var st=j.status||{};
+ setKobo(j.kobo||st.imageclass==='kobo-libra2');
  $('dispSets').innerHTML=DISP.map(function(d){var v=SETS[d[0]];return'<div class="set"><span class="lbl">'+d[1]+(d[2]?'<span class="sub">'+d[2]+'</span>':'')+'</span><span class="seg" data-k="'+d[0]+'">'+d[3].map(function(o){return'<button data-v="'+o[0]+'" class="'+(String(v)===o[0]||(d[0]==='KFB_ANIM_MODE'&&o[0]==='1'&&+v>0)?'on':'')+'">'+o[1]+'</button>'}).join('')+'</span></div>'}).join('');
  var l='';if(st.haslight==='1')l+=slider('light','亮度',st.light,st.lightmax);if(st.haswarmth==='1')l+=slider('warmth','色温',st.warmth,24);$('lightCard').hidden=!l;$('lightSets').innerHTML=l;
- $('updSets').innerHTML='<div class="set"><span class="lbl">自动更新 VeraDroid<span class="sub">整包；每 6 小时看一次，只在回到 Kobo 时安装'+(j.vdversion?' · 当前 '+esc(j.vdversion):'')+'</span></span><label class="switch"><input type="checkbox" data-au="host"'+(j.hostAutoUpdate!==false?' checked':'')+'><span></span></label></div>'
-  +'<div class="set"><span class="lbl">自动更新桌面应用<span class="sub">'+(j.home?'当前 '+esc(j.home):'')+'</span></span><label class="switch"><input type="checkbox" data-au="app"'+(j.appAutoUpdate?' checked':'')+'><span></span></label></div>'}).catch(function(){})}
+ if(IS_KOBO){
+  $('updTitle').textContent='离线系统升级';$('updBtns').hidden=true;$('updNote').hidden=true;
+  var cv=st.sysversion||j.vdversion||j.home||'?',ov=st.offline_upd||'',of=st.offline_upd_file||'',on=st.offline_upd_newer==='1';
+  var uh='<div class="sub" style="margin-bottom:8px">当前版本：<b>v'+esc(cv)+'</b> · 桌面 '+esc(j.home||'?')+'</div>';
+  if(ov){uh+='<div class="note info">检测到离线升级包：<b>v'+esc(ov)+'</b>（<code>'+esc(of)+'</code>）'+(on?' · 可直接升级':' · 不高于当前版本')+'</div>'
+   +'<div class="btns" style="margin-top:10px"><button class="btn sm pri" id="koboUpdApply">'+(on?'立即重启升级':'强制覆盖重装')+'</button><button class="btn sm" id="koboUpdScan">重新扫描</button></div>';}
+  else{uh+='<p class="sub">未检测到离线升级包。可将 <code>Veradroid-Libra2-x.y.z-upgrade.zip</code> 通过本页“文件”上传到 <code>Download</code> 目录，或通过 USB MTP 放入 <code>.adds/Veradroid-Libra2/update/</code> 后重新扫描。</p>'
+   +'<div class="btns" style="margin-top:8px"><button class="btn sm" id="koboUpdScan">重新扫描</button></div>';}
+  $('updSets').innerHTML=uh;
+  var sc=$('koboUpdScan');if(sc)sc.onclick=function(){post('/api/sys/offlineupd',{action:'check'}).then(function(){toast('已重新扫描','ok');loadSys()})};
+  var ap=$('koboUpdApply');if(ap)ap.onclick=function(){confirmBox('应用离线升级？','系统将重启并自动校验安装 <b>'+esc(of)+'</b>，保留全部已安装应用、书籍与设置（约 30 秒）。','立即升级',true).then(function(ok){if(ok)post('/api/sys/offlineupd',{action:on?'apply':'force'}).then(function(){toast('正在准备离线升级并重启…','ok',8000)})})};
+ }else{
+  $('updTitle').textContent='更新';$('updBtns').hidden=false;$('updNote').hidden=false;
+  $('updSets').innerHTML='<div class="set"><span class="lbl">自动更新 VeraDroid<span class="sub">整包；每 6 小时看一次，只在回到 Kobo 时安装'+(j.vdversion?' · 当前 '+esc(j.vdversion):'')+'</span></span><label class="switch"><input type="checkbox" data-au="host"'+(j.hostAutoUpdate!==false?' checked':'')+'><span></span></label></div>'
+   +'<div class="set"><span class="lbl">自动更新桌面应用<span class="sub">'+(j.home?'当前 '+esc(j.home):'')+'</span></span><label class="switch"><input type="checkbox" data-au="app"'+(j.appAutoUpdate?' checked':'')+'><span></span></label></div>';
+ }
+}).catch(function(){})}
 function slider(w,l,v,mx){return'<div class="set"><span class="lbl">'+l+' <b id="v-'+w+'">'+esc(v)+'</b><span class="sub">0 – '+esc(mx)+'</span></span><input type="range" min="0" max="'+esc(mx)+'" value="'+esc(v)+'" data-l="'+w+'" style="flex:1;max-width:260px"></div>'}
 $('dispSets').onclick=function(e){var b=e.target.closest('button[data-v]');if(!b)return;var s=b.parentNode,k=s.getAttribute('data-k'),v=b.getAttribute('data-v');if(b.classList.contains('on'))return;
  var prev=s.querySelector('.on');var bs=s.querySelectorAll('button');for(var i=0;i<bs.length;i++)bs[i].classList.remove('on');b.classList.add('on','pending');
@@ -1018,7 +1064,7 @@ $('updBtn').onclick=function(){$('updInfo').innerHTML='<span class="spin"></span
  s.push(j.homeError?'桌面：'+esc(j.homeError):'桌面应用：当前 '+esc(j.home||'?')+' '+(j.homeUpdate?chip('acc','','有新版本 '+(j.homeLatest||'')):chip('ok','check','已是最新')));$('updInfo').innerHTML=s.join('<br>')})};
 function power(w,msg){confirmBox(w==='restart'?'重启 Android？':'返回 Kobo？',msg,w==='restart'?'重启':'返回 Kobo',true).then(function(ok){if(ok)post('/api/sys/'+w).then(function(){toast(w==='restart'?'正在重启 Android，大约半分钟…':'正在返回 Kobo…')})})}
 $('rebootBtn').onclick=function(){power('restart','大约半分钟后重新开机。这个网页会断开，传输要在 Kobo 上重新打开。')};
-$('exitBtn').onclick=function(){power('exit','Android 会被冻结，这个网页也会断开，直到再次打开 VeraDroid。')};
+$('exitBtn').onclick=function(){power('exit',IS_KOBO?'Android 将完全退出并卸载系统镜像，回到 Kobo 原系统，本网页将断开。':'Android 会被冻结，这个网页也会断开，直到再次打开 VeraDroid。')};
 
 /* =================================================================== 壁纸与图标 */
 var THEME=null;
@@ -1075,10 +1121,10 @@ function btMsg(r){var op=r.op,e=r.error||'',ok=r.ok==='1',n=btName(r.mac);
  if(e==='busy')return['宿主正在做另一项蓝牙操作，请稍等再试。','err'];
  if(e==='off')return['蓝牙没有打开：先打开蓝牙。','err'];
  if(e==='unsupported')return['这台 Kobo 没有蓝牙。','err'];
- if(e==='lipc')return['Kobo 的蓝牙服务没有响应，请稍后再试；一直不行就回 Kobo 的设置里关开一次蓝牙。','err'];
+ if(e==='lipc')return['蓝牙服务启动未响应，请稍后重试。','err'];
  if(e==='badmac')return['设备地址不对。','err'];
- if(op==='scan')return[ok?'扫描完成：找到 '+(BT.devices||[]).length+' 个设备。没看到翻页器就让它重新进入配对模式再扫一次。':'扫描失败。',ok?'ok':'err'];
- if(op==='bond'){if(ok)return['已配对并连接：'+n+'。打开阅读应用按翻页器试试。','ok'];
+ if(op==='scan')return[ok?'扫描完成：找到 '+(BT.devices||[]).length+' 个设备。没看到设备就让它重新进入配对模式再扫一次。':'扫描失败。',ok?'ok':'err'];
+ if(op==='bond'){if(ok)return['已配对并连接：'+n+'。翻页器可直接按键，耳机/音箱可直接听书播放。','ok'];
   if(e==='notconnected')return['已配对：'+n+'。按一下翻页器的键让它连上。','ok'];
   if(e==='failed')return['配对失败：'+n+' 拒绝了配对。让它重新进入配对模式再试一次。','err'];
   return['配对超时：确认 '+n+' 在配对模式（指示灯快闪），再试一次。','err']}
@@ -1097,12 +1143,13 @@ function btDev(d,busy){var h='<div class="dev"><div class="grow"><div class="nm 
  else{h+=d.connected?'<button class="btn sm" data-bt="disconnect"'+a+'>断开</button>':'<button class="btn sm pri" data-bt="connect"'+a+'>连接</button>';h+='<button class="btn sm dan" data-bt="unbond"'+a+'>取消配对</button>'}
  return h+'</div></div>'}
 function renderBt(){var b=$('btBody');if(!b)return;
- if(BT.supported==='old'){b.innerHTML='<div class="card">'+empty('bluetooth','宿主程序太旧，不支持在这里配对。请先更新 VeraDroid；或回到 Kobo，在“设置 → 蓝牙设备”里配对。')+'</div>';return}
+ setKobo(BT.kobo);
+ if(BT.supported==='old'){b.innerHTML='<div class="card">'+empty('bluetooth','宿主程序太旧，不支持在这里配对。请先更新 VeraDroid。')+'</div>';return}
  if(BT.supported==='no'){b.innerHTML='<div class="card">'+empty('bluetooth','这台 Kobo 没有蓝牙。')+'</div>';return}
  var run=btRunning(),busy=!!run,devs=BT.devices||[],on=!!BT.on;
  var paired=devs.filter(function(d){return d.paired}),near=devs.filter(function(d){return !d.paired});
- var h='<div class="card"><div class="h">'+svg('bluetooth')+'蓝牙'+chip(on?'ok':'','',on?'已打开':'已关闭')+'<span class="sp"></span><label class="switch" title="打开 / 关闭蓝牙"><input type="checkbox" id="btPower"'+(on?' checked':'')+(busy?' disabled':'')+'><span></span></label></div>'
-  +'<p class="sub" style="margin:0">蓝牙芯片和协议栈由 Kobo 管，这里和 Kobo 设置里的蓝牙开关是同一个。支持翻页器和蓝牙键盘。</p></div>';
+ var h='<div class="card"><div class="h">'+svg('bluetooth')+'蓝牙'+chip(on?'ok':'','',on?'已打开':'已关闭')+(BT.audio?' '+chip('acc','','A2DP 音频：'+BT.audio):'')+'<span class="sp"></span><label class="switch" title="打开 / 关闭蓝牙"><input type="checkbox" id="btPower"'+(on?' checked':'')+(busy?' disabled':'')+'><span></span></label></div>'
+  +'<p class="sub" style="margin:0">支持蓝牙翻页器、蓝牙键盘以及蓝牙耳机 / 音箱（A2DP 听书音频直连输出）。</p></div>';
  h+='<div class="card"><div class="h">'+svg('search')+'设备<span class="sp"></span><button class="btn sm pri" data-bt="scan"'+(busy||!on?' disabled':'')+'>'+(run&&run.op==='scan'?'<span class="spin"></span>扫描中…':'扫描')+'</button></div>';
  if(run){var el=Math.max(0,(BT.now-run.start)/1000),p=Math.min(95,el/run.secs*100);
   h+='<div class="note info"><b>'+esc(btOpName(run.op))+(run.mac?' '+esc(btName(run.mac)):'')+'中…</b>（已等 '+Math.round(el)+' 秒，最多 '+run.secs+' 秒）'

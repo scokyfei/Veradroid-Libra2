@@ -50,8 +50,8 @@ public class LockSettingsActivity extends Activity {
         line(on ? "已开启" : "未开启", 22, true);
         line("开启后，VeraDroid 开机和每次从 Kobo 屏保醒来时先要输入 4–6 位数字密码。"
             + "连续输错 5 次要等 30 秒。锁屏上的“回到 Kobo”、四角长按回 Kobo 和电源键不需要密码。", 16, false);
-        line("忘了密码：用 USB 连电脑，在 Kobo 存储的 veradroid 文件夹里新建一个名为 reset-pin.txt 的文件（内容随意），"
-            + "拔线后再打开 VeraDroid（或从屏保醒来），密码就被清除，文件自动删掉。", 16, false);
+        line("忘了密码：用 USB 连电脑，在 Kobo 盘根目录（或 .adds/Veradroid-Libra2/）里新建一个名为 reset-pin.txt 的文件（内容随意），"
+            + "拔线后唤醒或重启 VeraDroid，密码就会被清除，文件自动删掉。", 16, false);
         line("密码只以加盐哈希存在本机 VeraDroid 桌面自己的私有目录里，不上传。", 15, false);
         LinearLayout actions = new LinearLayout(this);
         actions.setPadding(0, dp(16), 0, 0);

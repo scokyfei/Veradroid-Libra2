@@ -84,6 +84,8 @@ final class WebAdmin {
             if (p.equals("/api/sys/update")) { Transfer.json(out, 200, updateInfo()); return true; }
             if (p.equals("/api/bt")) { Transfer.json(out, 200, btState("1".equals(r.q.get("refresh")))); return true; }
             if (p.equals("/api/diag/result")) { Transfer.json(out, 200, diagResult()); return true; }
+            if (p.equals("/api/diag/export")) { Transfer.json(out, 200, diagExportState()); return true; }
+            if (p.equals("/api/diag/download")) { diagExportDownload(out); return true; }
             if (p.equals("/api/du")) { Transfer.json(out, 200, kvJson(HostReq.run(ctx, "du", null, null, 180000))); return true; }
             return false;
         }
@@ -139,6 +141,29 @@ final class WebAdmin {
             Transfer.json(out, 200, Transfer.obj("ok", true, "since", System.currentTimeMillis()));
             return true;
         }
+        if (p.equals("/api/diag/export")) {
+            new File(HostLink.CTL + "diag.export").delete();
+            HostLink.cmd("diagexport");
+            Transfer.json(out, 200, Transfer.obj("ok", true, "since", System.currentTimeMillis()));
+            return true;
+        }
+        if (p.equals("/api/sys/offlineupd")) {
+            String act = b.optString("action", "check");
+            if (!("check".equals(act) || "apply".equals(act) || "force".equals(act))) {
+                Transfer.json(out, 200, Transfer.obj("ok", false, "msg", "不支持的操作"));
+                return true;
+            }
+            if ("check".equals(act)) {
+                HostLink.cmd("offlineupd check");
+                try { Thread.sleep(500); } catch (InterruptedException ignored) { }
+                Transfer.json(out, 200, updateInfo());
+            } else {
+                Transfer.json(out, 200, Transfer.obj("ok", true));
+                final String cmd = "offlineupd " + act;
+                main.postDelayed(new Runnable() { @Override public void run() { HostLink.cmd(cmd); } }, 800);
+            }
+            return true;
+        }
         if (p.equals("/api/sys/display")) { Transfer.json(out, 200, setDisplay(b.optString("key"), b.optString("value"))); return true; }
         if (p.equals("/api/sys/light")) { Transfer.json(out, 200, setLight(b.optString("what"), b.optInt("value", -1))); return true; }
         if (p.equals("/api/sys/autoupdate")) { Transfer.json(out, 200, setAutoUpdate(b.optString("which"), b.optBoolean("on", true))); return true; }
@@ -182,7 +207,9 @@ final class WebAdmin {
         JSONObject o = Transfer.obj("ok", true);
         String sup = st.get("btsupported");
         o.put("supported", sup == null ? "old" : "1".equals(sup) ? "yes" : "no");   // old = 宿主太旧没有这个键
+        o.put("kobo", HostLink.isKobo());
         o.put("on", "1".equals(st.get("bton")));
+        o.put("audio", st.get("btaudio") == null ? "" : st.get("btaudio"));
         o.put("bridgeRunning", "1".equals(st.get("bt")));
         o.put("bridge", st.get("btbridge") == null ? "" : st.get("btbridge"));
         o.put("map", st.get("btmap") == null ? "volume" : st.get("btmap"));
@@ -245,6 +272,7 @@ final class WebAdmin {
         if (!fresh) o.put("hostBusy", true);   // 网页过几秒自己再要一次
         Map<String, String> h = HostReq.kv(host);
         o.put("host", host != null);
+        o.put("kobo", HostLink.isKobo());
         JSONObject hj = new JSONObject();
         for (Map.Entry<String, String> e : h.entrySet()) if (!e.getKey().startsWith("hp") && !e.getKey().startsWith("hs") && !e.getKey().startsWith("ssh.")) hj.put(e.getKey(), e.getValue());
         o.put("hostinfo", hj);
@@ -436,7 +464,7 @@ final class WebAdmin {
         String rel = relOf(which, dir);
         if (!"kindle".equals(which)) {
             if (rel.equals("KindleFonts") || rel.startsWith("KindleFonts/")) return "Kobo 自带字体，只读";
-            if (rel.equals("KindleLibrary") || rel.startsWith("KindleLibrary/")) return "Kobo 书库请在“Kobo 书库”里管理";
+            if (rel.equals("KindleLibrary") || rel.startsWith("KindleLibrary/") || rel.equals("KoboBooks") || rel.startsWith("KoboBooks/")) return "Kobo 书库请在“Kobo 书库”里管理";
             return null;
         }
         if (rel.length() > 0 && hasScriptChild(dir)) return dir.list() == null ? "这个文件夹 Android 这边读不了，网页里只读" : "这个文件夹里有 Kobo 脚本，网页里只读";
@@ -478,7 +506,7 @@ final class WebAdmin {
             JSONObject e = Transfer.obj("name", n, "dir", dir, "size", dir || link ? -1 : f.length(), "time", f.lastModified());
             if (link) e.put("link", true);
             if (ro != null || link || isProtected(n) || (dir && readOnlyWhy(which, f) != null)) e.put("locked", true);
-            if (!"kindle".equals(which) && d.equals(rootDir(which)) && (n.equals("KindleLibrary") || n.equals("KindleFonts"))) e.put("locked", true);
+            if (!"kindle".equals(which) && d.equals(rootDir(which)) && (n.equals("KindleLibrary") || n.equals("KindleFonts") || n.equals("KoboBooks"))) e.put("locked", true);
             a.put(e);
         }
         JSONObject o = Transfer.obj("ok", true, "root", "kindle".equals(which) ? "kindle" : "sdcard", "path", relOf(which, d), "items", a, "free", d.getUsableSpace());
@@ -556,7 +584,7 @@ final class WebAdmin {
         File f = resolve(which, (path == null ? "" : path) + "/" + name);
         if (f == null || !f.exists() || isLink(f)) return Transfer.obj("ok", false, "msg", "文件不存在");
         if (f.isDirectory() && (readOnlyWhy(which, f) != null || containsLocked(f, 0, new int[] { 50000 }))) return Transfer.obj("ok", false, "msg", "这个文件夹里有 Kobo 脚本，不能改名");
-        if (!"kindle".equals(which) && d.equals(rootDir(which)) && (name.equals("KindleLibrary") || name.equals("KindleFonts") || name.equals("Fonts"))) return Transfer.obj("ok", false, "msg", "这个文件夹不能改名");
+        if (!"kindle".equals(which) && d.equals(rootDir(which)) && (name.equals("KindleLibrary") || name.equals("KindleFonts") || name.equals("KoboBooks") || name.equals("Fonts"))) return Transfer.obj("ok", false, "msg", "这个文件夹不能改名");
         String n = checkName(to);
         if (n == null) return Transfer.obj("ok", false, "msg", "新名字不能用（不能以点开头、不能含 / \\ : * ? \" < > |，也不能是脚本）");
         File g = new File(d, n);
@@ -588,7 +616,7 @@ final class WebAdmin {
         for (int i = 0; i < names.length(); i++) {
             String n = names.optString(i);
             if (n.length() == 0 || n.indexOf('/') >= 0 || n.startsWith(".") || isProtected(n)) { failed.put(n + "（受保护）"); continue; }
-            if (!"kindle".equals(which) && d.equals(rootDir(which)) && (n.equals("KindleLibrary") || n.equals("KindleFonts") || n.equals("Fonts"))) { failed.put(n + "（受保护）"); continue; }
+            if (!"kindle".equals(which) && d.equals(rootDir(which)) && (n.equals("KindleLibrary") || n.equals("KindleFonts") || n.equals("KoboBooks") || n.equals("Fonts"))) { failed.put(n + "（受保护）"); continue; }
             File f = new File(d, n);
             if (isLink(f)) { if (f.delete()) done++; else failed.put(n); continue; }   // 只删链接本身
             File rf = resolve(which, (path == null ? "" : path) + "/" + n);
@@ -965,7 +993,9 @@ final class WebAdmin {
     private JSONObject log(String n, String which) throws Exception {
         int lines = 200;
         try { lines = Math.max(1, Math.min(2000, Integer.parseInt(n))); } catch (Exception ignored) { }
-        if (which == null || !(which.equals("main") || which.equals("update") || which.equals("ssh") || which.equals("fsck"))) which = "main";
+        if (which == null || !(which.equals("main") || which.equals("localupdate") || which.equals("update") || which.equals("ssh")
+                || which.equals("fsck") || which.equals("resize") || which.equals("bt") || which.equals("usb")
+                || which.equals("epd") || which.equals("stop"))) which = "main";
         byte[] raw = HostReq.run(ctx, "logtail", lines + " " + which, null, 30000);
         if (raw == null) return Transfer.obj("ok", false, "msg", "宿主没有回应");
         return Transfer.obj("ok", true, "text", new String(raw, "UTF-8"));
@@ -1009,14 +1039,34 @@ final class WebAdmin {
         return o;
     }
 
+    private JSONObject diagExportState() throws Exception {
+        File f = new File(HostLink.CTL + "diag.export");
+        JSONObject o = Transfer.obj("ok", true, "ready", f.isFile() && f.length() > 0, "time", f.isFile() ? f.lastModified() : 0);
+        for (Map.Entry<String, String> e : HostLink.kv(f.getPath()).entrySet()) o.put(e.getKey(), e.getValue());
+        return o;
+    }
+
+    private void diagExportDownload(OutputStream out) throws Exception {
+        byte[] raw = HostReq.run(ctx, "diagget", null, null, 30000);
+        if (raw == null || raw.length < 32 || ((raw[0] & 0xff) != 0x1f || (raw[1] & 0xff) != 0x8b)) {
+            Transfer.send(out, 404, "text/plain; charset=utf-8", "未找到已导出的诊断日志包，请先点击导出".getBytes("UTF-8"), null);
+            return;
+        }
+        Map<String, String> m = HostLink.kv(HostLink.CTL + "diag.export");
+        String fn = m.get("file");
+        if (fn == null || !fn.matches("veradroid-diag-[0-9-]+\\.tar\\.gz")) fn = "veradroid-diag.tar.gz";
+        Transfer.send(out, 200, "application/gzip", raw, "Content-Disposition: attachment; filename=\"" + fn + "\"\r\n");
+    }
+
     // ================================================================== system
 
     private JSONObject sysSettings() throws Exception {
         JSONObject o = Transfer.obj("ok", true);
+        boolean kobo = HostLink.isKobo();
+        o.put("kobo", kobo);
         o.put("settings", new JSONObject(HostLink.kv(HostLink.KFB + "settings")));
         o.put("status", new JSONObject(HostLink.kv(HostLink.CTL + "status")));
         SharedPreferences p = Store.prefs(ctx, "home");
-        boolean kobo = HostLink.isKobo();
         o.put("appAutoUpdate", !kobo && p.getBoolean("autoupdate", true));
         Map<String, String> h = HostReq.kv(sysinfoOrLast());
         if (h.containsKey("autoupdate")) o.put("hostAutoUpdate", !kobo && "1".equals(h.get("autoupdate")));
@@ -1080,9 +1130,20 @@ final class WebAdmin {
         return Transfer.obj("ok", true);
     }
 
-    /** Read-only: what the official server offers (whole package and the home app). Installs nothing. */
+    /** Read-only: what the official server offers (whole package and the home app). On Kobo, reports offline package status. */
     private JSONObject updateInfo() throws Exception {
         JSONObject o = Transfer.obj("ok", true);
+        if (HostLink.isKobo()) {
+            Map<String, String> st = HostLink.kv(HostLink.CTL + "status");
+            o.put("kobo", true);
+            o.put("current", st.get("sysversion") != null ? st.get("sysversion") : "");
+            o.put("offlineVer", st.get("offline_upd") != null ? st.get("offline_upd") : "");
+            o.put("offlineFile", st.get("offline_upd_file") != null ? st.get("offline_upd_file") : "");
+            o.put("offlineSrc", st.get("offline_upd_src") != null ? st.get("offline_upd_src") : "");
+            o.put("offlineNewer", "1".equals(st.get("offline_upd_newer")));
+            try { o.put("home", ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0).versionName); } catch (Exception ignored) { }
+            return o;
+        }
         String base = "https://veradroid.wenjin.jp";
         String kernel = System.getProperty("os.version", "");
         String meta = kernel.startsWith("4.") || kernel.startsWith("3.") ? base + "/static/bootstrap-k49.json" : base + "/api/bootstrap";
